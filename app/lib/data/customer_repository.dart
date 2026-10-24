@@ -92,8 +92,7 @@ class CustomerRepository {
         0 AS is_credit, srr.created_at AS created_at,
         COALESCE(srr.note, srr.payment_method) AS note
       FROM sale_return_refunds srr
-      JOIN sale_returns sr ON sr.id = srr.return_id
-      JOIN sales s ON s.id = sr.sale_id
+      JOIN sales s ON s.id = srr.sale_id
       WHERE s.customer_id = ?
       ORDER BY created_at ASC
     ''', [customerId, customerId, customerId, customerId]);
