@@ -178,7 +178,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
     int supplierId = _suppliers.first.id;
     final drafts = <_PurchaseDraftLine>[
-      _PurchaseDraftLine(productId: _products.first.id!),
+      _PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString()),
     ];
     final discount = TextEditingController(text: '0');
     final paid = TextEditingController(text: '0');
@@ -207,7 +207,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             Row(children: [
               const Expanded(child: Text('أصناف الفاتورة', style: TextStyle(fontWeight: FontWeight.w800))),
               TextButton.icon(
-                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!))),
+                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString()))),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('إضافة صنف'),
               ),
@@ -375,9 +375,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 }
 
 class _PurchaseDraftLine {
-  _PurchaseDraftLine({required this.productId, String quantity = '1', String? cost})
+  _PurchaseDraftLine({required this.productId, String quantity = '1', String cost = '0'})
       : quantity = TextEditingController(text: quantity),
-        cost = TextEditingController(text: cost ?? '0');
+        cost = TextEditingController(text: cost);
 
   int productId;
   final TextEditingController quantity;
