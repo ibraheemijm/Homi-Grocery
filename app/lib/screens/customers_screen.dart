@@ -122,6 +122,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   ]),
                                   const SizedBox(width: 8),
                                   IconButton(
+                                    tooltip: 'كشف الحساب',
+                                    onPressed: () => _showLedger(customer),
+                                    icon: const Icon(Icons.receipt_long_outlined),
+                                  ),
+                                  IconButton(
                                     tooltip: 'تسجيل تحصيل',
                                     onPressed: customer.balance > 0 ? () => _collect(customer) : null,
                                     icon: const Icon(Icons.payments_outlined),
@@ -135,6 +140,78 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ),
       ),
     );
+  }
+
+  Future<void> _showLedger(CustomerBalance customer) async {
+    try {
+      final entries = await _repository!.ledger(customer.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('كشف حساب ${customer.name}'),
+          content: SizedBox(
+            width: 560,
+            child: entries.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text('لا توجد حركات مالية مسجلة لهذا الزبون.'),
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final entry in entries)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              entry.isCredit
+                                  ? Icons.south_west_rounded
+                                  : Icons.north_east_rounded,
+                              color: entry.isCredit
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700,
+                            ),
+                            title: Text(entry.title),
+                            subtitle: Text(
+                              [
+                                _formatDate(entry.createdAt),
+                                if (entry.note?.trim().isNotEmpty == true) entry.note!.trim(),
+                              ].join(' • '),
+                            ),
+                            trailing: Text(
+                              '${entry.isCredit ? '−' : '+'}${entry.amount} ج.س',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: entry.isCredit
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل كشف الحساب: $error');
+    }
+  }
+
+  String _formatDate(String value) {
+    final date = DateTime.tryParse(value)?.toLocal();
+    if (date == null) return value;
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    return '${date.year}-${twoDigits(date.month)}-${twoDigits(date.day)} '
+        '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
   }
 
   Future<void> _addCustomer() async {
