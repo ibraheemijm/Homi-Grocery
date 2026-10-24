@@ -129,6 +129,52 @@ void main() {
     expect((await customers.balances()).single.balance, 0);
   });
 
+  test('مرتجع فاتورة مدفوعة بالكامل لا يمحو دين فاتورة أخرى', () async {
+    final paidProductId = await products.add(const GroceryProduct(
+      name: 'جهاز مدفوع', sellingPrice: 2000, stockQuantity: 3,
+    ));
+    final debtProductId = await products.add(const GroceryProduct(
+      name: 'صنف آجل', sellingPrice: 500, stockQuantity: 3,
+    ));
+    final customerName = 'عميل متعدد الفواتير';
+    final paidProduct = (await products.getById(paidProductId))!;
+    final debtProduct = (await products.getById(debtProductId))!;
+
+    final paidSale = await sales.createSale(
+      lines: [SaleLine(product: paidProduct, quantity: 1)],
+      discount: 0,
+      paidAmount: 2000,
+      paymentMethod: 'نقدي',
+      customerName: customerName,
+    );
+    await sales.createSale(
+      lines: [SaleLine(product: debtProduct, quantity: 1)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: customerName,
+    );
+    final customer = (await customers.balances()).single;
+    final paidItemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [paidSale.id],
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: paidSale.id,
+      quantitiesBySaleItemId: {paidItemId: 1},
+      note: 'إرجاع فاتورة مدفوعة',
+    );
+
+    final afterReturn = (await customers.balances()).single;
+    expect(afterReturn.totalDebt, 500);
+    expect(afterReturn.balance, 500);
+    await customers.recordPayment(customerId: customer.id, amount: 500);
+    expect((await customers.balances()).single.balance, 0);
+  });
+
   test('يرفض التحصيل الذي يتجاوز الرصيد دون تسجيله', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'دقيق', sellingPrice: 200, stockQuantity: 4,
