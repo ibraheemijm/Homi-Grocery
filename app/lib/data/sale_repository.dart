@@ -218,23 +218,29 @@ class SaleRepository {
     return _database.transaction((txn) async {
       final sales = await txn.query(
         'sales',
-        columns: ['id'],
+        columns: ['id', 'subtotal', 'total'],
         where: 'id = ?',
         whereArgs: [saleId],
         limit: 1,
       );
       if (sales.isEmpty) throw StateError('الفاتورة غير موجودة.');
+      final subtotal = (sales.single['subtotal'] as num).toInt();
+      final saleTotal = (sales.single['total'] as num).toInt();
 
       final returnLines = <Map<String, Object?>>[];
       var totalAmount = 0;
       for (final entry in quantitiesBySaleItemId.entries) {
         final rows = await txn.rawQuery('''
           SELECT si.id, si.sale_id, si.product_id, si.product_name,
-            si.quantity, si.unit_price,
+            si.quantity, si.line_total,
             COALESCE((SELECT SUM(sri.quantity)
               FROM sale_return_items sri
               JOIN sale_returns sr ON sr.id = sri.return_id
               WHERE sri.sale_item_id = si.id), 0) AS returned_quantity,
+            COALESCE((SELECT SUM(sri.amount)
+              FROM sale_return_items sri
+              JOIN sale_returns sr ON sr.id = sri.return_id
+              WHERE sri.sale_item_id = si.id), 0) AS returned_amount,
             p.stock_quantity
           FROM sale_items si
           JOIN products p ON p.id = si.product_id
@@ -253,8 +259,19 @@ class SaleRepository {
             'الكمية المطلوبة تتجاوز الكمية المتبقية للإرجاع للصنف ${row['product_name']}.',
           );
         }
-        final unitPrice = (row['unit_price'] as num).toInt();
-        final amount = (unitPrice * requested).round();
+
+        // خصم الفاتورة يُوزّع نسبيًا على البنود. استخدام المجموع التراكمي
+        // يمنع اختلاف المبلغ عند تقسيم إرجاع الكمية نفسها إلى عمليات متعددة.
+        final lineTotal = (row['line_total'] as num).toInt();
+        final previouslyReturnedAmount = (row['returned_amount'] as num).toInt();
+        final cumulativeQuantity = returned + requested;
+        final cumulativeAmount = subtotal == 0
+            ? 0
+            : (lineTotal * saleTotal * cumulativeQuantity / (subtotal * sold))
+                .round();
+        final amount = (cumulativeAmount - previouslyReturnedAmount)
+            .clamp(0, lineTotal)
+            .toInt();
         totalAmount += amount;
         returnLines.add({
           'sale_item_id': row['id'] as int,
