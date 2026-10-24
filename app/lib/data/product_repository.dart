@@ -132,9 +132,7 @@ class ProductRepository {
     if (product.purchasePrice < 0 || product.sellingPrice < 0) {
       throw ArgumentError('لا يُسمح بأن تكون الأسعار سالبة.');
     }
-    if (product.stockQuantity < 0 && product.stockQuantity.isNaN) {
-      throw ArgumentError('كمية المخزون غير صالحة.');
-    }
+    // المخزون السالب مسموح وفق متطلبات المشروع، لكن يجب أن تكون الكمية رقمًا صالحًا.
     if (!product.stockQuantity.isFinite ||
         !product.minimumQuantity.isFinite ||
         product.minimumQuantity < 0) {
