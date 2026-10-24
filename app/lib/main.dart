@@ -148,12 +148,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             bottomNavigationBar: isDesktop
                 ? null
                 : NavigationBar(
-                    selectedIndex: _selectedIndex > 3 ? 3 : _selectedIndex,
+                    selectedIndex: _selectedIndex == 0
+                        ? 0
+                        : _selectedIndex == 1
+                            ? 1
+                            : _selectedIndex == 3
+                                ? 2
+                                : 3,
                     onDestinationSelected: (index) {
                       if (index == 3) {
                         _showMoreMenu(context);
                       } else {
-                        setState(() => _selectedIndex = index);
+                        setState(() => _selectedIndex = index == 2 ? 3 : index);
                       }
                     },
                     destinations: const [
@@ -191,7 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           shrinkWrap: true,
           children: [
             const ListTile(title: Text('الأقسام الأخرى', style: TextStyle(fontWeight: FontWeight.w800))),
-            for (var index = 3; index < _navigationItems.length; index++)
+            for (var index = 2; index < _navigationItems.length; index++)
               ListTile(
                 leading: Icon(_navigationItems[index].icon),
                 title: Text(_navigationItems[index].label),
