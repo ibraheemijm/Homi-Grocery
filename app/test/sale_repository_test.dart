@@ -52,6 +52,10 @@ void main() {
     expect(sale.customerName, 'زبون اختبار');
     expect((await products.getById(productId))!.stockQuantity, 8);
     expect((await sales.recentSales()).length, 1);
+    final cashEntries = await database.query('cash_transactions', where: "reference_type = 'sale'");
+    expect(cashEntries, hasLength(1));
+    expect(cashEntries.single['direction'], 'in');
+    expect(cashEntries.single['amount'], 1000);
   });
 
   test('يرفض الخصم الزائد دون حفظ فاتورة أو تعديل المخزون', () async {
