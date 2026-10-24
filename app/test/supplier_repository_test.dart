@@ -51,6 +51,57 @@ void main() {
     expect((await suppliers.balances()).single.balance, 240);
   });
 
+  test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
+    final riceId = await products.add(const GroceryProduct(
+      name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 2,
+    ));
+    final oilId = await products.add(const GroceryProduct(
+      name: 'زيت', purchasePrice: 200, sellingPrice: 280, stockQuantity: 5,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد متعدد الأصناف');
+
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [
+        PurchaseLine(productId: riceId, productName: 'أرز', unit: 'كيلوجرام', quantity: 3, unitCost: 110),
+        PurchaseLine(productId: oilId, productName: 'زيت', unit: 'عبوة', quantity: 2, unitCost: 210),
+      ],
+      discount: 20,
+      paidAmount: 100,
+    );
+
+    expect(purchase.subtotal, 750);
+    expect(purchase.total, 730);
+    expect((await products.getById(riceId))!.stockQuantity, 5);
+    expect((await products.getById(oilId))!.stockQuantity, 7);
+    expect(await database.query('purchase_items'), hasLength(2));
+    expect(await database.query('stock_movements', where: "reference_type = 'purchase'"), hasLength(2));
+  });
+
+  test('أي صنف غير موجود يلغي فاتورة الشراء وكل تغييرات المخزون', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'طحين', purchasePrice: 100, sellingPrice: 150, stockQuantity: 3,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الطحين');
+
+    await expectLater(
+      suppliers.createPurchase(
+        supplierId: supplierId,
+        lines: [
+          PurchaseLine(productId: productId, productName: 'طحين', unit: 'كيلوجرام', quantity: 2, unitCost: 100),
+          const PurchaseLine(productId: 999999, productName: 'غير موجود', unit: 'حبة', quantity: 1, unitCost: 50),
+        ],
+        paidAmount: 0,
+      ),
+      throwsArgumentError,
+    );
+
+    expect((await products.getById(productId))!.stockQuantity, 3);
+    expect(await database.query('purchases'), isEmpty);
+    expect(await database.query('purchase_items'), isEmpty);
+    expect(await database.query('stock_movements', where: "reference_type = 'purchase'"), isEmpty);
+  });
+
   test('يرفض الخصم أو المدفوع الزائد دون تعديل المخزون', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 2,
