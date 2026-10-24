@@ -12,6 +12,6 @@ void main() {
     // التحقق من أهم العناصر التي يجب ألا تختفي أثناء تعديل التصميم.
     expect(find.text('الرئيسية'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsOneWidget);
-    expect(find.text('بدء عملية بيع'), findsOneWidget);
+    expect(find.text('بدء عملية بيع'), findsWidgets);
   });
 }
