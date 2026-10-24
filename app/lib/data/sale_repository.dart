@@ -384,7 +384,7 @@ class SaleRepository {
         throw ArgumentError('مبلغ الرد يتجاوز المبلغ المتاح للرد النقدي ($available ج.س).');
       }
       return txn.insert('sale_return_refunds', {
-        'return_id': returnId,
+        'sale_id': saleId,
         'amount': amount,
         'payment_method': paymentMethod.trim(),
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
