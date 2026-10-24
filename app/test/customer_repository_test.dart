@@ -49,11 +49,12 @@ void main() {
     expect(before.totalDebt, 800);
     expect(before.balance, 800);
 
-    await customers.recordPayment(customerId: before.id, amount: 300, note: 'تحصيل نقدي');
+    await customers.recordPayment(customerId: before.id, amount: 300, paymentMethod: 'تحويل بنكي', note: 'تحصيل بنكي');
     final cashEntries = await database.query('cash_transactions', where: "reference_type = 'customer_payment'");
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['amount'], 300);
     expect(cashEntries.single['direction'], 'in');
+    expect(cashEntries.single['payment_method'], 'تحويل بنكي');
     final after = (await customers.balances()).single;
     expect(after.totalPaid, 300);
     expect(after.balance, 500);
