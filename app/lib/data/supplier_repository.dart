@@ -8,7 +8,8 @@ class SupplierBalance {
   final int purchaseCount;
   final int totalDebt;
   final int totalPaid;
-  int get balance => (totalDebt - totalPaid).clamp(0, 1 << 62).toInt();
+  int get balance => totalDebt - totalPaid;
+  int get credit => (-balance).clamp(0, 1 << 62).toInt();
 }
 
 class PurchaseLine {
@@ -102,11 +103,13 @@ class SupplierRepository {
       SELECT s.id, s.name,
         (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) AS purchase_count,
         COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0) AS total_debt,
-        COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) + COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0) AS total_paid
+        COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) + COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+          - COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0) AS total_paid
       FROM suppliers s WHERE s.name LIKE ?
       ORDER BY (COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0)
         - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0)
-        - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)) DESC,
+        - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+        + COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)) DESC,
         s.name COLLATE NOCASE ASC
     ''', ['%${query.trim()}%']);
     return rows.map((r) => SupplierBalance(
@@ -254,13 +257,6 @@ class SupplierRepository {
       if (purchases.isEmpty) throw StateError('فاتورة الشراء غير موجودة.');
       final purchase = purchases.single;
       final supplierId = purchase['supplier_id'] as int;
-      final balanceRows = await txn.rawQuery('''
-        SELECT
-          COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0)
-          - COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0)
-          - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS outstanding
-      ''', [supplierId, supplierId, supplierId]);
-      final outstanding = (balanceRows.single['outstanding'] as num).toInt();
       final now = DateTime.now().toUtc().toIso8601String();
       final selectedLines = <Map<String, Object?>>[];
       var total = 0;
@@ -299,9 +295,6 @@ class SupplierRepository {
         });
       }
       if (total <= 0) throw ArgumentError('قيمة المرتجع يجب أن تكون أكبر من صفر.');
-      if (total > outstanding) {
-        throw ArgumentError('قيمة المرتجع تتجاوز المستحق الحالي للمورد ($outstanding ج.س).');
-      }
       final returnId = await txn.insert('supplier_returns', {
         'purchase_id': purchaseId,
         'amount': total,
@@ -352,6 +345,70 @@ class SupplierRepository {
     ''', [purchaseId]);
   }
 
+  /// أقصى مبلغ لم يُسترد نقديًا بعد من مرتجع مورد.
+  Future<int> maximumRefundableSupplierReturnAmount(int returnId) async {
+    final rows = await _database.rawQuery('''
+      SELECT MAX(0, sr.amount - COALESCE((
+        SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+        WHERE srr.supplier_return_id = sr.id
+      ), 0)) AS refundable
+      FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+    ''', [returnId]);
+    if (rows.isEmpty) throw StateError('مرتجع المورد غير موجود.');
+    return (rows.single['refundable'] as num).toInt();
+  }
+
+  /// تسجيل رد نقدي/بنكي وصل فعليًا من المورد؛ يظل الرصيد الدائن منفصلًا عن الخزينة.
+  Future<int> recordSupplierReturnRefund({
+    required int returnId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+  }) async {
+    if (returnId <= 0 || amount <= 0) {
+      throw ArgumentError('حدد مرتجعًا ومبلغ رد صالحين.');
+    }
+    if (paymentMethod.trim().isEmpty) {
+      throw ArgumentError('حدد طريقة استلام المبلغ.');
+    }
+    return _database.transaction((txn) async {
+      final rows = await txn.rawQuery('''
+        SELECT sr.id, sr.amount FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+      ''', [returnId]);
+      if (rows.isEmpty) throw StateError('مرتجع المورد غير موجود.');
+      final availableRows = await txn.rawQuery('''
+        SELECT MAX(0, sr.amount - COALESCE((
+          SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+          WHERE srr.supplier_return_id = sr.id
+        ), 0)) AS refundable
+        FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+      ''', [returnId]);
+      final available = (availableRows.single['refundable'] as num).toInt();
+      if (amount > available) {
+        throw ArgumentError('المبلغ أكبر من رصيد المرتجع المتاح للاسترداد ($available ج.س).');
+      }
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final refundId = await txn.insert('supplier_return_refunds', {
+        'supplier_return_id': returnId,
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'in',
+        'category': 'استرداد نقدي من مورد',
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'reference_type': 'supplier_return_refund',
+        'reference_id': refundId,
+        'note': note?.trim().isEmpty == true ? 'استرداد مرتجع المورد #$returnId' : note?.trim(),
+        'created_at': createdAt,
+      });
+      return refundId;
+    });
+  }
+
   Future<void> recordPayment({required int supplierId, required int amount, String? note}) async {
     if (amount <= 0) throw ArgumentError('قيمة الدفع يجب أن تكون أكبر من صفر.');
     await _database.transaction((txn) async {
@@ -360,8 +417,9 @@ class SupplierRepository {
       final result = await txn.rawQuery('''
         SELECT COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0) AS debt,
           COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) +
-          COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid
-      ''', [supplierId, supplierId, supplierId]);
+          COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) -
+          COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid
+      ''', [supplierId, supplierId, supplierId, supplierId]);
       final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt()).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) throw ArgumentError('الدفع يتجاوز المستحق للمورد ($outstanding ج.س).');
       final createdAt = DateTime.now().toUtc().toIso8601String();
