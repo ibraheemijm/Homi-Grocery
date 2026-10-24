@@ -133,6 +133,32 @@ class GroceryDatabase {
         'ALTER TABLE sales ADD COLUMN customer_id INTEGER REFERENCES customers(id)',
       );
     }
+    // ترحيل أسماء الزبائن القديمة إلى السجل الجديد مع الحفاظ على الفواتير.
+    final oldSales = await db.query(
+      'sales',
+      columns: ['customer_name'],
+      where: "customer_name IS NOT NULL AND TRIM(customer_name) <> ''",
+      distinct: true,
+    );
+    for (final row in oldSales) {
+      final name = (row['customer_name'] as String).trim();
+      await db.insert(
+        'customers',
+        {'name': name, 'created_at': DateTime.now().toUtc().toIso8601String()},
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await db.rawUpdate('''
+      UPDATE sales
+      SET customer_id = (
+        SELECT customers.id FROM customers
+        WHERE customers.name = sales.customer_name COLLATE NOCASE
+        LIMIT 1
+      )
+      WHERE customer_id IS NULL
+        AND customer_name IS NOT NULL
+        AND TRIM(customer_name) <> ''
+    ''');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS customer_payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
