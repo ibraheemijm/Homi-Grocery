@@ -126,10 +126,14 @@ class SupplierRepository {
     int discount = 0,
     required int paidAmount,
     String paymentMethod = 'آجل',
+    String paymentChannel = 'نقدي',
     String? note,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
     if (discount < 0 || paidAmount < 0) throw ArgumentError('الخصم والمدفوع لا يمكن أن يكونا سالبين.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
+      throw ArgumentError('طريقة دفع فاتورة الشراء غير مدعومة.');
+    }
     for (final line in lines) {
       if (line.productId <= 0 || !line.quantity.isFinite || line.quantity <= 0 || line.unitCost < 0) {
         throw ArgumentError('تحقق من كميات وأسعار أصناف الشراء.');
@@ -155,7 +159,7 @@ class SupplierRepository {
           'direction': 'out',
           'category': 'شراء مدفوع',
           'amount': paidAmount,
-          'payment_method': paymentMethod,
+          'payment_method': paymentChannel,
           'reference_type': 'purchase',
           'reference_id': purchaseId,
           'note': 'فاتورة شراء $invoiceNumber',
