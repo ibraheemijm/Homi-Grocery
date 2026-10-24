@@ -301,7 +301,7 @@ class SaleRepository {
           whereArgs: [line['product_id']],
         );
         await txn.insert('sale_return_items', {
-          'sale_id': saleId,
+          'return_id': returnId,
           'sale_item_id': line['sale_item_id'],
           'quantity': quantity,
           'amount': line['amount'],
