@@ -78,7 +78,7 @@ class SaleRepository {
     }
 
     final now = DateTime.now().toUtc();
-    final invoice = 'HG-\${now.microsecondsSinceEpoch}';
+    final invoice = 'HG-${now.microsecondsSinceEpoch}';
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
