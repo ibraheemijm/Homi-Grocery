@@ -26,13 +26,28 @@ void main() {
       direction: 'out', category: 'كهرباء', amount: 400,
     );
 
+    await cashbox.recordManualMovement(
+      direction: 'in', category: 'تحويل وارد', amount: 700, paymentMethod: 'تحويل بنكي',
+    );
+    await cashbox.recordManualMovement(
+      direction: 'out', category: 'تحويل صادر', amount: 100, paymentMethod: 'تحويل بنكي',
+    );
+
     final summary = await cashbox.summary();
-    expect(summary.todayIncome, 1500);
-    expect(summary.todayExpense, 400);
-    expect(summary.todayNet, 1100);
-    expect(summary.currentBalance, 1100);
-    expect(summary.todayCount, 2);
-    expect(await cashbox.recent(), hasLength(2));
+    expect(summary.todayIncome, 2200);
+    expect(summary.todayExpense, 500);
+    expect(summary.todayNet, 1700);
+    expect(summary.currentBalance, 1700);
+    expect(summary.todayCount, 4);
+    expect(summary.todayCashIncome, 1500);
+    expect(summary.todayCashExpense, 400);
+    expect(summary.todayBankIncome, 700);
+    expect(summary.todayBankExpense, 100);
+    expect(summary.todayCashNet, 1100);
+    expect(summary.todayBankNet, 600);
+    expect(await cashbox.recent(), hasLength(4));
+    expect(await cashbox.recent(paymentMethod: 'نقدي'), hasLength(2));
+    expect(await cashbox.recent(paymentMethod: 'تحويل بنكي'), hasLength(2));
   });
 
   test('يرفض المبالغ غير الصالحة واتجاه الحركة غير المعروف', () async {
