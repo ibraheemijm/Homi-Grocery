@@ -335,6 +335,7 @@ class _SalesScreenState extends State<SalesScreen> {
           item['id'] as int: TextEditingController(text: '0'),
       };
       final noteController = TextEditingController();
+      if (!mounted) return;
       final quantities = await showDialog<Map<int, double>>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
