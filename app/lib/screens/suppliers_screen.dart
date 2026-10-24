@@ -82,6 +82,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             Text('الموردون والمشتريات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                             Wrap(spacing: 8, children: [
                               OutlinedButton.icon(onPressed: _addSupplier, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة مورد')),
+                              OutlinedButton.icon(onPressed: _showPurchaseHistory, icon: const Icon(Icons.receipt_long_rounded), label: const Text('سجل المشتريات')),
                               FilledButton.icon(onPressed: _createPurchase, icon: const Icon(Icons.add_shopping_cart_rounded), label: const Text('فاتورة شراء')),
                             ]),
                           ],
@@ -337,6 +338,98 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     discount.dispose();
     paid.dispose();
     note.dispose();
+  }
+
+  Future<void> _showPurchaseHistory() async {
+    try {
+      final purchases = await _repository!.purchaseHistory();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('سجل فواتير الشراء'),
+          content: SizedBox(
+            width: 620,
+            child: purchases.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('لا توجد فواتير شراء مسجلة بعد.', textAlign: TextAlign.center),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: purchases.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final purchase = purchases[index];
+                      final date = DateTime.tryParse(purchase.createdAt)?.toLocal();
+                      final dateLabel = date == null
+                          ? purchase.createdAt
+                          : '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
+                        title: Text('${purchase.invoiceNumber} • ${purchase.supplierName}'),
+                        subtitle: Text('$dateLabel\nالإجمالي: ${purchase.total} ج.س • المدفوع: ${purchase.paidAmount} ج.س • المتبقي: ${purchase.remainingAmount} ج.س'),
+                        isThreeLine: true,
+                        trailing: const Icon(Icons.chevron_left_rounded),
+                        onTap: () => _showPurchaseDetails(purchase),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+          ],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل سجل المشتريات: $error');
+    }
+  }
+
+  Future<void> _showPurchaseDetails(PurchaseHistoryRecord purchase) async {
+    try {
+      final items = await _repository!.purchaseItems(purchase.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('تفاصيل ${purchase.invoiceNumber}'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('المورد: ${purchase.supplierName}'),
+                  Text('التاريخ: ${purchase.createdAt}'),
+                  const Divider(height: 24),
+                  ...items.map((item) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(item.productName),
+                    subtitle: Text('${item.quantity} ${item.unit} × ${item.unitCost} ج.س'),
+                    trailing: Text('${item.lineTotal} ج.س', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  )),
+                  const Divider(height: 24),
+                  Text('الإجمالي قبل الخصم: ${purchase.subtotal} ج.س'),
+                  Text('الخصم: ${purchase.discount} ج.س'),
+                  Text('الإجمالي النهائي: ${purchase.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text('المدفوع: ${purchase.paidAmount} ج.س'),
+                  Text('المتبقي: ${purchase.remainingAmount} ج.س'),
+                  if (purchase.note?.trim().isNotEmpty == true) Text('ملاحظة: ${purchase.note}'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+          ],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل تفاصيل فاتورة الشراء: $error');
+    }
   }
 
   Future<void> _recordPayment(SupplierBalance supplier) async {
