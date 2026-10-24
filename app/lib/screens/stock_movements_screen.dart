@@ -37,7 +37,9 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
         _selectedProductId = _products.first.id;
         await _loadHistory();
       }
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     } catch (error) {
       if (mounted) setState(() {
         _loading = false;
@@ -76,7 +78,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                 key: formKey,
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   DropdownButtonFormField<int>(
-                    value: productId,
+                    initialValue: productId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'الصنف'),
                     items: _products.map((product) => DropdownMenuItem(
@@ -89,7 +91,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: type,
+                    initialValue: type,
                     decoration: const InputDecoration(labelText: 'نوع الحركة'),
                     items: const [
                       DropdownMenuItem(value: 'إضافة', child: Text('إضافة مخزون')),
@@ -200,7 +202,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
             const SizedBox(height: 18),
             if (_products.isNotEmpty)
               DropdownButtonFormField<int>(
-                value: _selectedProductId,
+                initialValue: _selectedProductId,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'اختر الصنف لعرض سجل حركاته',
