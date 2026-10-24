@@ -150,7 +150,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : NavigationBar(
                     selectedIndex: _selectedIndex > 3 ? 3 : _selectedIndex,
                     onDestinationSelected: (index) {
-                      setState(() => _selectedIndex = index);
+                      if (index == 3) {
+                        _showMoreMenu(context);
+                      } else {
+                        setState(() => _selectedIndex = index);
+                      }
                     },
                     destinations: const [
                       NavigationDestination(
@@ -175,6 +179,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
       ),
     );
+  }
+
+  // قائمة أقسام إضافية للهواتف حتى تبقى جميع الشاشات قابلة للوصول.
+  Future<void> _showMoreMenu(BuildContext context) async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('الأقسام الأخرى', style: TextStyle(fontWeight: FontWeight.w800))),
+            for (var index = 3; index < _navigationItems.length; index++)
+              ListTile(
+                leading: Icon(_navigationItems[index].icon),
+                title: Text(_navigationItems[index].label),
+                onTap: () => Navigator.pop(sheetContext, index),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) setState(() => _selectedIndex = selected);
   }
 
   // قائمة التنقل الجانبية الخاصة بالشاشات الواسعة.
