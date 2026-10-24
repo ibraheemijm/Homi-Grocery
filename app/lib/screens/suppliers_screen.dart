@@ -214,7 +214,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             ]),
             ...List.generate(drafts.length, (index) {
               final draft = drafts[index];
-              final product = _products.firstWhere((p) => p.id == draft.productId);
               return Card(
                 key: ValueKey(draft),
                 margin: const EdgeInsets.only(bottom: 10),
