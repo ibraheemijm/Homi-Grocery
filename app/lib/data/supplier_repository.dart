@@ -102,10 +102,11 @@ class SupplierRepository {
       SELECT s.id, s.name,
         (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) AS purchase_count,
         COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0) AS total_debt,
-        COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) AS total_paid
+        COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) + COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0) AS total_paid
       FROM suppliers s WHERE s.name LIKE ?
       ORDER BY (COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0)
-        - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0)) DESC,
+        - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0)
+        - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)) DESC,
         s.name COLLATE NOCASE ASC
     ''', ['%${query.trim()}%']);
     return rows.map((r) => SupplierBalance(
@@ -229,6 +230,126 @@ class SupplierRepository {
       unitCost: (row['unit_cost'] as num).toInt(),
       lineTotal: (row['line_total'] as num).toInt(),
     )).toList(growable: false);
+  }
+
+  /// يعيد أصنافًا من فاتورة شراء، ويحدّث المخزون والمستحق وسجل الحركة ذريًا.
+  /// لتجنب رصيد دائن غير ممثل بعد، لا يسمح بإرجاع قيمة أكبر من المستحق الحالي للمورد.
+  Future<int> createSupplierReturn({
+    required int purchaseId,
+    required Map<int, double> quantitiesByPurchaseItemId,
+    String? note,
+  }) async {
+    if (quantitiesByPurchaseItemId.isEmpty ||
+        quantitiesByPurchaseItemId.values.any((q) => !q.isFinite || q <= 0)) {
+      throw ArgumentError('حدد كميات مرتجع صالحة.');
+    }
+    return _database.transaction((txn) async {
+      final purchases = await txn.query(
+        'purchases',
+        columns: ['id', 'supplier_id', 'invoice_number'],
+        where: 'id = ?',
+        whereArgs: [purchaseId],
+        limit: 1,
+      );
+      if (purchases.isEmpty) throw StateError('فاتورة الشراء غير موجودة.');
+      final purchase = purchases.single;
+      final supplierId = purchase['supplier_id'] as int;
+      final balanceRows = await txn.rawQuery('''
+        SELECT
+          COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0)
+          - COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0)
+          - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS outstanding
+      ''', [supplierId, supplierId, supplierId]);
+      final outstanding = (balanceRows.single['outstanding'] as num).toInt();
+      final now = DateTime.now().toUtc().toIso8601String();
+      final selectedLines = <Map<String, Object?>>[];
+      var total = 0;
+      for (final entry in quantitiesByPurchaseItemId.entries) {
+        final rows = await txn.rawQuery('''
+          SELECT pi.id, pi.product_id, pi.product_name, pi.quantity, pi.unit_cost,
+            pr.stock_quantity,
+            COALESCE((SELECT SUM(sri.quantity) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_quantity
+          FROM purchase_items pi
+          JOIN products pr ON pr.id = pi.product_id
+          WHERE pi.id = ? AND pi.purchase_id = ?
+        ''', [entry.key, purchaseId]);
+        if (rows.isEmpty) throw ArgumentError('أحد أصناف المرتجع لا يتبع فاتورة الشراء المحددة.');
+        final row = rows.single;
+        final original = (row['quantity'] as num).toDouble();
+        final alreadyReturned = (row['returned_quantity'] as num).toDouble();
+        final stock = (row['stock_quantity'] as num).toDouble();
+        final quantity = entry.value;
+        if (quantity > original - alreadyReturned + 0.0000001) {
+          throw ArgumentError('كمية المرتجع تتجاوز الكمية المتبقية من فاتورة الشراء.');
+        }
+        if (quantity > stock + 0.0000001) {
+          throw ArgumentError('المخزون الحالي لا يكفي لإرجاع هذه الكمية.');
+        }
+        final unitCost = (row['unit_cost'] as num).toInt();
+        final lineTotal = (quantity * unitCost).round();
+        total += lineTotal;
+        selectedLines.add({
+          'purchase_item_id': entry.key,
+          'product_id': row['product_id'] as int,
+          'product_name': row['product_name'] as String,
+          'quantity': quantity,
+          'unit_cost': unitCost,
+          'line_total': lineTotal,
+          'stock_before': stock,
+        });
+      }
+      if (total <= 0) throw ArgumentError('قيمة المرتجع يجب أن تكون أكبر من صفر.');
+      if (total > outstanding) {
+        throw ArgumentError('قيمة المرتجع تتجاوز المستحق الحالي للمورد ($outstanding ج.س).');
+      }
+      final returnId = await txn.insert('supplier_returns', {
+        'purchase_id': purchaseId,
+        'amount': total,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': now,
+      });
+      for (final line in selectedLines) {
+        final before = line['stock_before'] as double;
+        final quantity = line['quantity'] as double;
+        final after = before - quantity;
+        await txn.update('products', {'stock_quantity': after}, where: 'id = ?', whereArgs: [line['product_id']]);
+        await txn.insert('supplier_return_items', {
+          'return_id': returnId,
+          'purchase_item_id': line['purchase_item_id'],
+          'product_id': line['product_id'],
+          'product_name': line['product_name'],
+          'quantity': quantity,
+          'unit_cost': line['unit_cost'],
+          'line_total': line['line_total'],
+        });
+        await txn.insert('stock_movements', {
+          'product_id': line['product_id'],
+          'movement_type': 'مرتجع شراء',
+          'quantity_delta': -quantity,
+          'stock_before': before,
+          'stock_after': after,
+          'note': note?.trim().isEmpty == true ? 'مرتجع فاتورة ${purchase['invoice_number']}' : note?.trim(),
+          'reference_type': 'supplier_return',
+          'reference_id': returnId,
+          'created_at': now,
+        });
+      }
+      return returnId;
+    });
+  }
+
+  /// بنود فاتورة الشراء مع الكميات المتبقية القابلة للإرجاع.
+  Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId) async {
+    return _database.rawQuery('''
+      SELECT pi.id, pi.product_id, pi.product_name, pi.unit, pi.quantity,
+        pi.unit_cost, pi.line_total, pr.stock_quantity,
+        MAX(0, pi.quantity - COALESCE((SELECT SUM(sri.quantity)
+          FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0)) AS returnable_quantity
+      FROM purchase_items pi
+      JOIN products pr ON pr.id = pi.product_id
+      WHERE pi.purchase_id = ?
+      ORDER BY pi.id ASC
+    ''', [purchaseId]);
   }
 
   Future<void> recordPayment({required int supplierId, required int amount, String? note}) async {
