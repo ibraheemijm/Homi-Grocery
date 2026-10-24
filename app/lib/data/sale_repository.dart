@@ -132,7 +132,7 @@ class SaleRepository {
         final productId = line.product.id!;
         final rows = await txn.query(
           'products',
-          columns: ['id', 'name', 'unit', 'selling_price', 'is_active'],
+          columns: ['id', 'name', 'unit', 'selling_price', 'stock_quantity', 'is_active'],
           where: 'id = ?',
           whereArgs: [productId],
           limit: 1,
@@ -154,10 +154,22 @@ class SaleRepository {
           'line_total': line.lineTotal,
         });
         // المخزون السالب مسموح حسب سياسة المشروع؛ كل حركة بيع تسجل هنا.
+        final stockBefore = (current['stock_quantity'] as num).toDouble();
+        final stockAfter = stockBefore - line.quantity;
         await txn.rawUpdate(
-          'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-          [line.quantity, productId],
+          'UPDATE products SET stock_quantity = ? WHERE id = ?',
+          [stockAfter, productId],
         );
+        await txn.insert('stock_movements', {
+          'product_id': productId,
+          'movement_type': 'بيع',
+          'quantity_delta': -line.quantity,
+          'stock_before': stockBefore,
+          'stock_after': stockAfter,
+          'reference_type': 'sale',
+          'reference_id': saleId,
+          'created_at': createdAt,
+        });
       }
 
       return SaleRecord(
