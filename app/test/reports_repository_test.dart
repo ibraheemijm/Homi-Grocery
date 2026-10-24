@@ -17,6 +17,8 @@ void main() {
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
     await GroceryDatabase.createPurchasesSchema(database);
+    await GroceryDatabase.createSupplierReturnsSchema(database);
+    await GroceryDatabase.createSupplierReturnRefundsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
   });
@@ -45,7 +47,7 @@ void main() {
       'payment_method': 'جزئي',
       'created_at': createdAt,
     });
-    await database.insert('purchases', {
+    final purchaseId = await database.insert('purchases', {
       'invoice_number': 'REPORT-PURCHASE-1',
       'supplier_id': supplierId,
       'subtotal': 250,
@@ -60,6 +62,13 @@ void main() {
     });
     await database.insert('supplier_payments', {
       'supplier_id': supplierId, 'amount': 50, 'created_at': createdAt,
+    });
+    final supplierReturnId = await database.insert('supplier_returns', {
+      'purchase_id': purchaseId, 'amount': 25, 'created_at': createdAt,
+    });
+    await database.insert('supplier_return_refunds', {
+      'supplier_return_id': supplierReturnId, 'amount': 10,
+      'payment_method': 'نقدي', 'created_at': createdAt,
     });
     await database.insert('sale_return_refunds', {
       'sale_id': saleId, 'amount': 20, 'payment_method': 'نقدي', 'created_at': createdAt,
@@ -108,6 +117,7 @@ void main() {
     expect(report.purchaseCount, 1);
     expect(report.customerCollections, 100);
     expect(report.supplierPayments, 50);
+    expect(report.supplierRefunds, 10);
     expect(report.returnRefunds, 20);
     expect(report.cashIncome, 400);
     expect(report.cashExpense, 200);
