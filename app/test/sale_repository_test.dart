@@ -170,14 +170,14 @@ void main() {
     expect(await sales.maximumRefundableAmount(sale.id), 100);
 
     await expectLater(
-      sales.recordReturnRefund(returnId: returned.id, amount: 101),
+      sales.recordReturnRefund(saleId: sale.id, amount: 101),
       throwsArgumentError,
     );
     await sales.recordReturnRefund(
-      returnId: returned.id, amount: 80, paymentMethod: 'نقدي', note: 'رد فعلي',
+      saleId: sale.id, amount: 80, paymentMethod: 'نقدي', note: 'رد فعلي',
     );
     expect(await sales.maximumRefundableAmount(sale.id), 20);
-    await sales.recordReturnRefund(returnId: returned.id, amount: 20);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 20);
     expect(await sales.maximumRefundableAmount(sale.id), 0);
     expect(await database.query('sale_return_refunds'), hasLength(2));
   });
@@ -202,10 +202,10 @@ void main() {
     );
 
     expect(await sales.maximumRefundableAmount(sale.id), 75);
-    await sales.recordReturnRefund(returnId: returned.id, amount: 75);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 75);
     expect(await sales.maximumRefundableAmount(sale.id), 0);
     await expectLater(
-      sales.recordReturnRefund(returnId: returned.id, amount: 1),
+      sales.recordReturnRefund(saleId: sale.id, amount: 1),
       throwsArgumentError,
     );
   });
