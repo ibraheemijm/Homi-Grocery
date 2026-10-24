@@ -1,6 +1,7 @@
 // المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
 import 'package:flutter/material.dart';
 
+import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/sales_screen.dart';
 
@@ -141,8 +142,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? _buildDashboard(context, isDesktop)
                         : _selectedIndex == 1
                             ? const SalesScreen()
-                            : _selectedIndex == 4
-                                ? const ProductsScreen()
+                            : _selectedIndex == 3
+                                ? const CustomersScreen()
+                                : _selectedIndex == 4
+                                    ? const ProductsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
                 ],
