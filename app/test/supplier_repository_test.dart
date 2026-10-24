@@ -148,6 +148,47 @@ void main() {
     expect(await database.query('supplier_payments'), hasLength(1));
   });
 
+  test('يعرض سجل فواتير الشراء وبنودها كما حُفظت', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [
+        PurchaseLine(productId: productId, productName: 'سكر وقت الشراء', unit: 'كيلوجرام', quantity: 2, unitCost: 125),
+      ],
+      discount: 10,
+      paidAmount: 100,
+      note: 'اختبار السجل',
+    );
+
+    final history = await suppliers.purchaseHistory();
+    expect(history, hasLength(1));
+    expect(history.single.id, purchase.id);
+    expect(history.single.invoiceNumber, purchase.invoiceNumber);
+    expect(history.single.supplierName, 'مورد السكر');
+    expect(history.single.subtotal, 250);
+    expect(history.single.discount, 10);
+    expect(history.single.total, 240);
+    expect(history.single.paidAmount, 100);
+    expect(history.single.remainingAmount, 140);
+    expect(history.single.note, 'اختبار السجل');
+
+    final items = await suppliers.purchaseItems(purchase.id);
+    expect(items, hasLength(1));
+    expect(items.single.productName, 'سكر وقت الشراء');
+    expect(items.single.unitCost, 125);
+    expect(items.single.lineTotal, 250);
+    expect(await suppliers.purchaseHistory(supplierId: supplierId), hasLength(1));
+    expect(await suppliers.purchaseHistory(supplierId: supplierId + 1), isEmpty);
+  });
+
+  test('يرفض حد سجل مشتريات غير صالح', () async {
+    await expectLater(suppliers.purchaseHistory(limit: 0), throwsArgumentError);
+    await expectLater(suppliers.purchaseHistory(limit: 1001), throwsArgumentError);
+  });
+
   test('يرفض اسم المورد الفارغ', () async {
     await expectLater(suppliers.addSupplier(name: '  '), throwsArgumentError);
   });
