@@ -91,6 +91,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 Text('حركة البيع والشراء', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 _ReportTile(title: 'إجمالي المبيعات', amount: report.salesTotal, note: '${report.salesCount} فاتورة', icon: Icons.point_of_sale_rounded, money: _money),
+                _ReportTile(title: 'مرتجعات المبيعات', amount: report.saleReturns, note: 'قيمة البضاعة المرتجعة في هذا اليوم', icon: Icons.assignment_return_outlined, money: _money),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.trending_up_rounded),
+                    title: const Text('مجمل الربح التقديري'),
+                    subtitle: Text(report.grossProfit == null
+                        ? 'غير متاح: توجد فواتير قديمة لا تحتوي على تكلفة محفوظة وقت البيع.'
+                        : 'المبيعات ناقص المرتجعات وتكلفة البضاعة المباعة بعد المرتجعات'),
+                    trailing: Text(
+                      report.grossProfit == null ? '—' : _money(report.grossProfit!),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: report.grossProfit != null && report.grossProfit! < 0 ? Colors.red : Colors.green,
+                      ),
+                    ),
+                  ),
+                ),
                 _ReportTile(title: 'إجمالي المشتريات', amount: report.purchaseTotal, note: '${report.purchaseCount} فاتورة شراء', icon: Icons.local_shipping_rounded, money: _money),
                 const SizedBox(height: 18),
                 Text('التحصيلات والمرتجعات', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
@@ -121,7 +138,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'التقرير يعتمد على السجلات المحفوظة. لا يعرض الربح حتى تُحفظ تكلفة كل صنف وقت البيع؛ سعر الشراء الحالي وحده لا يكفي لحساب ربح تاريخي دقيق.',
+                  'مجمل الربح يعتمد على تكلفة الصنف المحفوظة عند البيع، ويستبعد الفواتير القديمة التي لا يمكن معرفة تكلفتها بدقة. هذا ليس صافي الربح بعد المصروفات التشغيلية.',
                   style: theme.textTheme.bodySmall,
                 ),
               ],
