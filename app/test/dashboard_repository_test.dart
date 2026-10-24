@@ -53,4 +53,32 @@ void main() {
     expect(stats.customerDebt, 200);
     expect(stats.lowStockCount, 1);
   });
+
+  test('تخصم مرتجعات اليوم وردود النقد الفعلية من صافي لوحة التحكم', () async {
+    final products = ProductRepository(database);
+    final sales = SaleRepository(database);
+    final productId = await products.add(const GroceryProduct(
+      name: 'صابون', sellingPrice: 250, stockQuantity: 4,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 500,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await database.query(
+      'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+    await sales.recordReturnRefund(saleId: sale.id, amount: 250);
+
+    final stats = await DashboardRepository(database).load(now: DateTime.now());
+    expect(stats.todaySales, 250);
+    expect(stats.todayPaid, 250);
+  });
 }
