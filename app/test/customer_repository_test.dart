@@ -87,6 +87,39 @@ void main() {
     );
   });
 
+  test('يعرض رد النقد الفعلي كحركة مستقلة في كشف الحساب', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'صابون', sellingPrice: 90, stockQuantity: 3,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 180,
+      paymentMethod: 'نقدي',
+      customerName: 'عميل الرد النقدي',
+    );
+    final customer = (await customers.balances()).single;
+    final itemId = (await database.query(
+      'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single['id'] as int;
+    final returned = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+      note: 'مرتجع مدفوع',
+    );
+    await sales.recordReturnRefund(
+      returnId: returned.id, amount: 90, note: 'تم تسليم النقد',
+    );
+
+    final ledger = await customers.ledger(customer.id);
+    final refund = ledger.singleWhere((entry) => entry.title == 'رد نقدي للزبون');
+    expect(refund.amount, 90);
+    expect(refund.isCredit, isFalse);
+    expect(refund.note, 'تم تسليم النقد');
+    expect((await customers.balances()).single.balance, 0);
+  });
+
   test('يعرض كشف الحساب الفواتير والمرتجعات والتحصيلات بترتيب زمني', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', sellingPrice: 100, stockQuantity: 5,
