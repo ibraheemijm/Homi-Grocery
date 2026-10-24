@@ -87,8 +87,16 @@ class CustomerRepository {
         1 AS is_credit, cp.created_at AS created_at, cp.note AS note
       FROM customer_payments cp
       WHERE cp.customer_id = ?
+      UNION ALL
+      SELECT 'رد نقدي للزبون' AS title, srr.amount AS amount,
+        0 AS is_credit, srr.created_at AS created_at,
+        COALESCE(srr.note, srr.payment_method) AS note
+      FROM sale_return_refunds srr
+      JOIN sale_returns sr ON sr.id = srr.return_id
+      JOIN sales s ON s.id = sr.sale_id
+      WHERE s.customer_id = ?
       ORDER BY created_at ASC
-    ''', [customerId, customerId, customerId]);
+    ''', [customerId, customerId, customerId, customerId]);
     return rows.map((row) => CustomerLedgerEntry(
       title: row['title'] as String,
       amount: (row['amount'] as num).toInt(),
