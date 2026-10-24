@@ -106,6 +106,9 @@ class SaleRepository {
           throw StateError('أحد الأصناف لم يعد متاحًا للبيع.');
         }
         final current = rows.first;
+        if (current['selling_price'] != line.product.sellingPrice) {
+          throw StateError('تغير سعر أحد الأصناف بعد إضافته إلى الفاتورة. أعد المحاولة بالسعر الحالي.');
+        }
         await txn.insert('sale_items', {
           'sale_id': saleId,
           'product_id': productId,
