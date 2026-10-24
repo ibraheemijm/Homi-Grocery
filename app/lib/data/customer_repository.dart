@@ -144,11 +144,22 @@ class CustomerRepository {
       if (amount > outstanding) {
         throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق ($outstanding ج.س).');
       }
-      await txn.insert('customer_payments', {
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final paymentId = await txn.insert('customer_payments', {
         'customer_id': customerId,
         'amount': amount,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'in',
+        'category': 'تحصيل من زبون',
+        'amount': amount,
+        'payment_method': 'نقدي',
+        'reference_type': 'customer_payment',
+        'reference_id': paymentId,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
       });
     });
   }
