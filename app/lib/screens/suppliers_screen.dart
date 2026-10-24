@@ -122,8 +122,14 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 ])),
                                 const SizedBox(width: 8),
                                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  Text('${supplier.balance} ج.س', style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary)),
-                                  Text(supplier.balance > 0 ? 'مستحق للمورد' : 'لا توجد مستحقات', style: theme.textTheme.labelSmall),
+                                  Text(
+                                    supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س',
+                                    style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary),
+                                  ),
+                                  Text(
+                                    supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن',
+                                    style: theme.textTheme.labelSmall,
+                                  ),
                                 ]),
                                 IconButton(tooltip: 'تسجيل دفعة', onPressed: supplier.balance > 0 ? () => _recordPayment(supplier) : null, icon: const Icon(Icons.payments_outlined)),
                               ]),
@@ -513,16 +519,87 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         controller.dispose();
       }
       if (quantities == null || !mounted) return;
-      await _repository!.createSupplierReturn(
+      final returnId = await _repository!.createSupplierReturn(
         purchaseId: purchase.id,
         quantitiesByPurchaseItemId: quantities,
         note: 'مرتجع فاتورة ${purchase.invoiceNumber}',
       );
       await _load();
       _products = await _productsRepository!.search('');
-      _message('تم تسجيل مرتجع المورد وتحديث المخزون والمستحقات.');
+      _message('تم تسجيل المرتجع. إذا لم يُعد المورد المبلغ نقدًا، سيبقى رصيدًا دائنًا لنا.');
+      final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId);
+      if (availableRefund > 0 && mounted) {
+        await _askSupplierRefund(returnId, availableRefund);
+      }
     } catch (error) {
       _message('تعذر تسجيل مرتجع المورد: $error');
+    }
+  }
+
+  Future<void> _askSupplierRefund(int returnId, int available) async {
+    final amount = TextEditingController(text: '0');
+    String method = 'نقدي';
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, refresh) => AlertDialog(
+          title: const Text('هل أعاد المورد مبلغًا فعليًا؟'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('المتاح للاسترداد من هذا المرتجع: $available ج.س. اترك المبلغ صفرًا إذا بقي رصيدًا دائنًا لنا.'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'المبلغ المستلم فعليًا', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: method,
+                  decoration: const InputDecoration(labelText: 'طريقة الاستلام', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                    DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                  ],
+                  onChanged: (value) { if (value != null) refresh(() => method = value); },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('لاحقًا')),
+            FilledButton(
+              onPressed: () {
+                final value = int.tryParse(amount.text.trim());
+                if (value == null || value < 0 || value > available) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('أدخل مبلغًا من صفر إلى المبلغ المتاح.')));
+                  return;
+                }
+                Navigator.pop(ctx, {'amount': value, 'method': method});
+              },
+              child: const Text('تسجيل الاستلام'),
+            ),
+          ],
+        ),
+      ),
+    );
+    amount.dispose();
+    if (result == null || !mounted) return;
+    final value = result['amount']! as int;
+    if (value == 0) return;
+    try {
+      await _repository!.recordSupplierReturnRefund(
+        returnId: returnId,
+        amount: value,
+        paymentMethod: result['method']! as String,
+      );
+      await _load();
+      _message('تم تسجيل المبلغ المستلم وإضافته إلى الخزينة.');
+    } catch (error) {
+      _message('تعذر تسجيل المبلغ المستلم: $error');
     }
   }
 
