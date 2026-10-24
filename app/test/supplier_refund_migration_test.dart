@@ -90,15 +90,14 @@ void main() {
     """);
     final indexes = await database.rawQuery("""
       SELECT name FROM sqlite_master
-      WHERE type = 'index' AND name = 'idx_supplier_return_refund_return'
+      WHERE type = 'index' AND name = 'idx_supplier_return_refunds_return'
     """);
     final costColumn = await database.rawQuery('PRAGMA table_info(sale_items)');
 
     expect(savedReturn['amount'], 50);
     expect(savedReturn['note'], 'مرتجع محفوظ قبل v11');
     expect(tables, hasLength(1));
-    // يثبت وجود فهرس المخطط v11 بالاسم الفعلي المعرّف في قاعدة البيانات.
-    expect(indexes, isEmpty);
+    expect(indexes, hasLength(1));
     expect(costColumn.any((column) => column['name'] == 'cost_price'), isTrue);
     expect(await database.query('supplier_return_items'), hasLength(1));
   });
