@@ -224,7 +224,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // اختيار طريقة الدفع والمبلغ المستلم، مع السماح بالبيع الآجل والجزئي.
   Future<void> _checkout() async {
-    final paidController = TextEditingController(text: '$1');
+    final paidController = TextEditingController(text: '$_total');
     String method = 'نقدي';
     final result = await showDialog<Map<String, Object?>>(
       context: context,
@@ -245,7 +245,7 @@ class _SalesScreenState extends State<SalesScreen> {
               if (value == null) return;
               refreshDialog(() {
                 method = value;
-                if (method == 'نقدي') paidController.text = '$1';
+                if (method == 'نقدي') paidController.text = '$_total';
                 if (method == 'آجل') paidController.text = '0';
               });
             },
