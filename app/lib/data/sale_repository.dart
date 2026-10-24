@@ -69,6 +69,7 @@ class SaleRepository {
     required int discount,
     required int paidAmount,
     required String paymentMethod,
+    String paymentChannel = 'نقدي',
     String? customerName,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
@@ -92,6 +93,9 @@ class SaleRepository {
     }
     if (!const ['نقدي', 'جزئي', 'آجل'].contains(paymentMethod)) {
       throw ArgumentError('طريقة السداد غير معروفة.');
+    }
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
+      throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
     }
     if (paymentMethod == 'نقدي' && paidAmount != total) {
       throw ArgumentError('الفاتورة النقدية يجب أن تُدفع بالكامل.');
@@ -146,7 +150,7 @@ class SaleRepository {
           'direction': 'in',
           'category': 'مبيعات',
           'amount': paidAmount,
-          'payment_method': paymentMethod,
+          'payment_method': paymentChannel,
           'reference_type': 'sale',
           'reference_id': saleId,
           'note': 'فاتورة $invoice',
