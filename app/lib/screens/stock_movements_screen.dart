@@ -41,10 +41,12 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
         setState(() => _loading = false);
       }
     } catch (error) {
-      if (mounted) setState(() {
-        _loading = false;
-        _error = 'تعذر تحميل حركات المخزون: $error';
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'تعذر تحميل حركات المخزون: $error';
+        });
+      }
     }
   }
 
