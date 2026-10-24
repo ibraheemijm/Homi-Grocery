@@ -328,6 +328,74 @@ class SaleRepository {
     });
   }
 
+  /// الحد المتبقي من النقد الذي يمكن رده فعليًا بعد أن غطت المرتجعات دين الفاتورة الأصلي.
+  Future<int> maximumRefundableAmount(int saleId) async {
+    final rows = await _database.rawQuery('''
+      SELECT MAX(0,
+        COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+        - MAX(0, s.total - s.paid_amount)
+        - COALESCE((
+          SELECT SUM(srr.amount)
+          FROM sale_return_refunds srr
+          JOIN sale_returns sr ON sr.id = srr.return_id
+          WHERE sr.sale_id = s.id
+        ), 0)
+      ) AS refundable
+      FROM sales s WHERE s.id = ? LIMIT 1
+    ''', [saleId]);
+    if (rows.isEmpty) throw StateError('الفاتورة غير موجودة.');
+    return (rows.single['refundable'] as num).toInt();
+  }
+
+  /// تسجيل مبلغ نقدي أُعيد بالفعل للزبون؛ لا يسمح بتجاوز فائض المرتجعات عن دين الفاتورة.
+  Future<int> recordReturnRefund({
+    required int returnId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+  }) async {
+    if (returnId <= 0) throw ArgumentError('معرّف المرتجع غير صالح.');
+    if (amount <= 0) throw ArgumentError('مبلغ الرد يجب أن يكون أكبر من صفر.');
+    if (paymentMethod.trim().isEmpty) {
+      throw ArgumentError('حدد طريقة رد المبلغ.');
+    }
+    return _database.transaction((txn) async {
+      final returns = await txn.query(
+        'sale_returns',
+        columns: ['id', 'sale_id'],
+        where: 'id = ?',
+        whereArgs: [returnId],
+        limit: 1,
+      );
+      if (returns.isEmpty) throw StateError('سجل المرتجع غير موجود.');
+      final saleId = returns.single['sale_id'] as int;
+      final rows = await txn.rawQuery('''
+        SELECT MAX(0,
+          COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+          - MAX(0, s.total - s.paid_amount)
+          - COALESCE((
+            SELECT SUM(srr.amount)
+            FROM sale_return_refunds srr
+            JOIN sale_returns sr ON sr.id = srr.return_id
+            WHERE sr.sale_id = s.id
+          ), 0)
+        ) AS refundable
+        FROM sales s WHERE s.id = ? LIMIT 1
+      ''', [saleId]);
+      final available = (rows.single['refundable'] as num).toInt();
+      if (amount > available) {
+        throw ArgumentError('مبلغ الرد يتجاوز المبلغ المتاح للرد النقدي ($available ج.س).');
+      }
+      return txn.insert('sale_return_refunds', {
+        'return_id': returnId,
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+  }
+
   /// مجموع الكميات المرتجعة لبند فاتورة.
   Future<double> returnedQuantity(int saleItemId) async {
     final rows = await _database.rawQuery('''
