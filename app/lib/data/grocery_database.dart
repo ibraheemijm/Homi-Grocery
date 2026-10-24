@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 5;
+  static const int _version = 6;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -39,6 +39,7 @@ class GroceryDatabase {
         await createCustomersSchema(db);
         await createStockMovementsSchema(db);
         await createSalesReturnsSchema(db);
+        await createPurchasesSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -54,6 +55,10 @@ class GroceryDatabase {
         if (oldVersion < 5) {
           await createSalesReturnsSchema(db);
         }
+        if (oldVersion < 6) {
+          await createPurchasesSchema(db);
+        }
+        await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
     );
     return _instance!;
@@ -231,6 +236,58 @@ class GroceryDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sale_return_items_item ON sale_return_items(sale_item_id)',
     );
+  }
+
+
+  // الموردون وفواتير الشراء وبنودها ومدفوعات الموردين.
+  static Future<void> createPurchasesSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        phone TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_number TEXT NOT NULL UNIQUE,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        subtotal INTEGER NOT NULL CHECK (subtotal >= 0),
+        discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+        total INTEGER NOT NULL CHECK (total >= 0),
+        paid_amount INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+        payment_method TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_id INTEGER NOT NULL REFERENCES purchases(id),
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        product_name TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        unit_cost INTEGER NOT NULL CHECK (unit_cost >= 0),
+        line_total INTEGER NOT NULL CHECK (line_total >= 0)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS supplier_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id, created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase ON purchase_items(purchase_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id, created_at)');
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
