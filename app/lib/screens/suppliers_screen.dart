@@ -424,11 +424,105 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _createSupplierReturn(purchase);
+              },
+              icon: const Icon(Icons.assignment_return_outlined),
+              label: const Text('إرجاع أصناف'),
+            ),
           ],
         ),
       );
     } catch (error) {
       _message('تعذر تحميل تفاصيل فاتورة الشراء: $error');
+    }
+  }
+
+  Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async {
+    try {
+      final rows = await _repository!.returnablePurchaseItems(purchase.id);
+      if (!mounted) return;
+      final controllers = <int, TextEditingController>{};
+      for (final row in rows) {
+        controllers[row['id'] as int] = TextEditingController(text: '0');
+      }
+      final quantities = await showDialog<Map<int, double>>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('مرتجع ${purchase.invoiceNumber}'),
+          content: SizedBox(
+            width: 540,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('أدخل كمية كل صنف تريد إرجاعها. يجب أن تكون الكمية ضمن المتاح في الفاتورة والمخزون الحالي.'),
+                  const SizedBox(height: 12),
+                  ...rows.map((row) {
+                    final id = row['id'] as int;
+                    final remaining = (row['returnable_quantity'] as num).toDouble();
+                    final stock = (row['stock_quantity'] as num).toDouble();
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(row['product_name'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text('المتبقي من الفاتورة: $remaining • المخزون الحالي: $stock • سعر الشراء: ${row['unit_cost']} ج.س'),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: controllers[id],
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(labelText: 'الكمية المرتجعة', border: OutlineInputBorder()),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  const Text('قيمة المرتجع تخصم من مستحق المورد. لا يسمح حاليًا بمرتجع يتجاوز المستحق، ولا يتم تسجيل رد نقدي تلقائي.', style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () {
+                final result = <int, double>{};
+                for (final entry in controllers.entries) {
+                  final value = double.tryParse(entry.value.text.trim()) ?? 0;
+                  if (value > 0) result[entry.key] = value;
+                }
+                if (result.isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('أدخل كمية مرتجعة واحدة على الأقل.')));
+                  return;
+                }
+                Navigator.pop(ctx, result);
+              },
+              child: const Text('تأكيد المرتجع'),
+            ),
+          ],
+        ),
+      );
+      for (final controller in controllers.values) {
+        controller.dispose();
+      }
+      if (quantities == null || !mounted) return;
+      await _repository!.createSupplierReturn(
+        purchaseId: purchase.id,
+        quantitiesByPurchaseItemId: quantities,
+        note: 'مرتجع فاتورة ${purchase.invoiceNumber}',
+      );
+      await _load();
+      _products = await _productsRepository!.search('');
+      _message('تم تسجيل مرتجع المورد وتحديث المخزون والمستحقات.');
+    } catch (error) {
+      _message('تعذر تسجيل مرتجع المورد: $error');
     }
   }
 
