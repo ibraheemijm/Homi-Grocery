@@ -145,6 +145,43 @@ void main() {
     expect(await database.query('sale_returns'), hasLength(1));
   });
 
+  test('يوزع خصم الفاتورة على المرتجعات الجزئية دون تجاوز القيمة المدفوعة', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'أرز', sellingPrice: 100, stockQuantity: 4,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 40,
+      paidAmount: 160,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    final first = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+    final second = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+
+    expect(first.amount, 80);
+    expect(second.amount, 80);
+    final returns = await database.query('sale_returns');
+    expect(
+      returns.fold<int>(0, (sum, row) => sum + (row['amount'] as int)),
+      160,
+    );
+    expect((await products.getById(productId))!.stockQuantity, 4);
+  });
+
   test('يسمح بالمخزون السالب وفق سياسة المشروع', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'حليب',
