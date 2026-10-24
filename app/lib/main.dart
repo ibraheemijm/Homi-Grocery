@@ -1,14 +1,20 @@
+// المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
 import 'package:flutter/material.dart';
+
+// نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
+
 
 void main() {
   runApp(const HomiGroceryApp());
 }
 
+// ألوان الهوية البصرية موحّدة هنا لتسهيل تعديل التصميم مستقبلًا.
 const Color brandGreen = Color(0xFF173D32);
 const Color brandCream = Color(0xFFF7F4EA);
 const Color brandGold = Color(0xFFC7A35A);
 const Color brandMint = Color(0xFFDCE9DF);
 
+// الجذر الرئيسي للتطبيق؛ يحتفظ بحالة المظهر الفاتح أو الداكن.
 class HomiGroceryApp extends StatefulWidget {
   const HomiGroceryApp({super.key});
 
@@ -19,6 +25,7 @@ class HomiGroceryApp extends StatefulWidget {
 class _HomiGroceryAppState extends State<HomiGroceryApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
+  // تبديل المظهر مع إعادة بناء الواجهة لتطبيق الألوان الجديدة.
   void _toggleTheme() {
     setState(() {
       _themeMode =
@@ -41,6 +48,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
     );
   }
 
+  // إنشاء إعدادات الثيم من مجموعة ألوان موحدة بدل تكرارها في كل شاشة.
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final scheme = ColorScheme.fromSeed(
@@ -61,25 +69,26 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         elevation: 0,
       ),
       cardTheme: CardThemeData(
-        color: isDark ? const Color(0xFF1B2B25) : Colors.white.withOpacity(0.88),
+        color: isDark ? const Color(0xFF1B2B25) : Colors.white.withValues(alpha: 0.88),
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
           side: BorderSide(
             color: isDark
-                ? Colors.white.withOpacity(0.08)
-                : brandGreen.withOpacity(0.08),
+                ? Colors.white.withValues(alpha: 0.08)
+                : brandGreen.withValues(alpha: 0.08),
           ),
         ),
       ),
       dividerColor: isDark
-          ? Colors.white.withOpacity(0.10)
-          : brandGreen.withOpacity(0.10),
+          ? Colors.white.withValues(alpha: 0.10)
+          : brandGreen.withValues(alpha: 0.10),
     );
   }
 }
 
+// الشاشة الرئيسية التي تتكيف مع عرض الكمبيوتر أو الهاتف.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     required this.isDark,
@@ -97,6 +106,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
 
+  // تعريف عناصر التنقل في مكان واحد لتوحيد أسماء الأقسام وأيقوناتها.
   static const List<_NavigationItem> _navigationItems = [
     _NavigationItem('الرئيسية', Icons.dashboard_rounded),
     _NavigationItem('المبيعات', Icons.point_of_sale_rounded),
@@ -111,10 +121,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // فرض اتجاه RTL على الشاشة لدعم الواجهة العربية.
     return Directionality(
       textDirection: TextDirection.rtl,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          // عند عرض 900 بكسل أو أكثر نستخدم قائمة جانبية للكمبيوتر.
           final isDesktop = constraints.maxWidth >= 900;
           return Scaffold(
             body: SafeArea(
@@ -161,6 +173,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // قائمة التنقل الجانبية الخاصة بالشاشات الواسعة.
   Widget _buildSidebar(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -168,7 +181,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.all(14),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.86),
+        color: theme.colorScheme.surface.withValues(alpha: 0.86),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: theme.dividerColor),
       ),
@@ -244,10 +257,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           Divider(color: theme.dividerColor),
-          ListTile(
+          const ListTile(
             leading: const Icon(Icons.sync_rounded, color: brandGreen),
-            title: const Text('العمل دون إنترنت', style: TextStyle(fontSize: 12)),
-            subtitle: const Text('الحفظ المحلي مفعّل', style: TextStyle(fontSize: 11)),
+            title: const Text('جاهزية العمل دون إنترنت', style: TextStyle(fontSize: 12)),
+            subtitle: const Text('سيُفعّل الحفظ المحلي مع قاعدة البيانات', style: TextStyle(fontSize: 11)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           ),
         ],
@@ -255,6 +268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // بناء لوحة الملخص؛ تتغير الأعمدة والمسافات بحسب مساحة الشاشة.
   Widget _buildDashboard(BuildContext context, bool isDesktop) {
     final theme = Theme.of(context);
     final horizontalPadding = isDesktop ? 28.0 : 16.0;
@@ -299,7 +313,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  CircleAvatar(
+                  const CircleAvatar(
                     backgroundColor: brandMint,
                     foregroundColor: brandGreen,
                     child: const Icon(Icons.person_rounded),
@@ -388,6 +402,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // شريط يوضح حالة المشروع. لا ندّعي تفعيل التخزين قبل بناء قاعدة البيانات.
   Widget _buildStatusBanner(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -396,7 +411,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         gradient: LinearGradient(
           colors: [
             brandGreen,
-            brandGreen.withOpacity(0.88),
+            brandGreen.withValues(alpha: 0.88),
           ],
         ),
         borderRadius: BorderRadius.circular(22),
@@ -410,7 +425,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'بياناتك محفوظة على هذا الجهاز',
+                  'واجهة أولية قيد التطوير',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -418,7 +433,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'سيعمل التطبيق دون إنترنت. المزامنة السحابية ستُضاف لاحقًا.',
+                  'سيُضاف التخزين المحلي قبل استخدام بيانات المتجر الحقيقية.',
                   style: TextStyle(color: Color(0xFFE1EDE6), fontSize: 12),
                 ),
               ],
@@ -430,6 +445,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // مساحة عرض آخر الفواتير؛ ستُربط لاحقًا ببيانات قاعدة البيانات.
   Widget _buildRecentSales(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
@@ -454,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 8),
             Icon(Icons.receipt_long_outlined,
-                size: 42, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.45)),
+                size: 42, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
             const SizedBox(height: 10),
             const Text(
               'لا توجد فواتير حتى الآن',
@@ -479,6 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // اختصارات تنقل المستخدم مباشرة إلى الأقسام الأكثر استخدامًا.
   Widget _buildQuickActions(BuildContext context) {
     return Card(
       child: Padding(
@@ -517,6 +534,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // شاشة مؤقتة للأقسام التي لم تُنفّذ وظائفها بعد.
   Widget _buildPlaceholder(BuildContext context, _NavigationItem item) {
     final theme = Theme.of(context);
     return Center(
@@ -560,6 +578,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+// بطاقة ملخص قابلة لإعادة الاستخدام للأرقام مثل المبيعات والديون.
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.title,
@@ -627,6 +646,7 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
+// عنصر اختصار موحد؛ يستقبل الأيقونة والنص والإجراء عند الضغط.
 class _QuickAction extends StatelessWidget {
   const _QuickAction({
     required this.icon,
@@ -655,6 +675,7 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
+// نموذج بسيط يجمع اسم القسم وأيقونته لتجنب تكرار القيم.
 class _NavigationItem {
   const _NavigationItem(this.label, this.icon);
 
