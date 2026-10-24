@@ -301,7 +301,7 @@ class SaleRepository {
           whereArgs: [line['product_id']],
         );
         await txn.insert('sale_return_items', {
-          'return_id': returnId,
+          'sale_id': saleId,
           'sale_item_id': line['sale_item_id'],
           'quantity': quantity,
           'amount': line['amount'],
@@ -337,8 +337,7 @@ class SaleRepository {
         - COALESCE((
           SELECT SUM(srr.amount)
           FROM sale_return_refunds srr
-          JOIN sale_returns sr ON sr.id = srr.return_id
-          WHERE sr.sale_id = s.id
+          WHERE srr.sale_id = s.id
         ), 0)
       ) AS refundable
       FROM sales s WHERE s.id = ? LIMIT 1
@@ -349,26 +348,25 @@ class SaleRepository {
 
   /// تسجيل مبلغ نقدي أُعيد بالفعل للزبون؛ لا يسمح بتجاوز فائض المرتجعات عن دين الفاتورة.
   Future<int> recordReturnRefund({
-    required int returnId,
+    required int saleId,
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
   }) async {
-    if (returnId <= 0) throw ArgumentError('معرّف المرتجع غير صالح.');
+    if (saleId <= 0) throw ArgumentError('معرّف الفاتورة غير صالح.');
     if (amount <= 0) throw ArgumentError('مبلغ الرد يجب أن يكون أكبر من صفر.');
     if (paymentMethod.trim().isEmpty) {
       throw ArgumentError('حدد طريقة رد المبلغ.');
     }
     return _database.transaction((txn) async {
-      final returns = await txn.query(
-        'sale_returns',
-        columns: ['id', 'sale_id'],
+      final sales = await txn.query(
+        'sales',
+        columns: ['id'],
         where: 'id = ?',
-        whereArgs: [returnId],
+        whereArgs: [saleId],
         limit: 1,
       );
-      if (returns.isEmpty) throw StateError('سجل المرتجع غير موجود.');
-      final saleId = returns.single['sale_id'] as int;
+      if (sales.isEmpty) throw StateError('الفاتورة غير موجودة.');
       final rows = await txn.rawQuery('''
         SELECT MAX(0,
           COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
@@ -376,8 +374,7 @@ class SaleRepository {
           - COALESCE((
             SELECT SUM(srr.amount)
             FROM sale_return_refunds srr
-            JOIN sale_returns sr ON sr.id = srr.return_id
-            WHERE sr.sale_id = s.id
+            WHERE srr.sale_id = s.id
           ), 0)
         ) AS refundable
         FROM sales s WHERE s.id = ? LIMIT 1
