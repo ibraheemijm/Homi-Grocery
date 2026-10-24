@@ -44,6 +44,20 @@ class SaleRecord {
       );
 }
 
+class SaleReturnRecord {
+  const SaleReturnRecord({
+    required this.id,
+    required this.saleId,
+    required this.amount,
+    required this.createdAt,
+  });
+
+  final int id;
+  final int saleId;
+  final int amount;
+  final String createdAt;
+}
+
 class SaleRepository {
   SaleRepository(this._database);
 
@@ -182,6 +196,129 @@ class SaleRepository {
         customerName: normalizedCustomer?.isEmpty == true ? null : normalizedCustomer,
       );
     });
+  }
+
+
+  /// إرجاع كميات من فاتورة سابقة مع تحديث المخزون والسجل المالي ذريًا.
+  /// مفاتيح الخريطة هي معرّفات بنود الفاتورة الأصلية.
+  Future<SaleReturnRecord> returnItems({
+    required int saleId,
+    required Map<int, double> quantitiesBySaleItemId,
+    String? note,
+  }) async {
+    if (quantitiesBySaleItemId.isEmpty) {
+      throw ArgumentError('حدد كمية واحدة على الأقل لإرجاعها.');
+    }
+    for (final entry in quantitiesBySaleItemId.entries) {
+      if (entry.key <= 0 || !entry.value.isFinite || entry.value <= 0) {
+        throw ArgumentError('كميات المرتجع يجب أن تكون أرقامًا موجبة وصالحة.');
+      }
+    }
+
+    return _database.transaction((txn) async {
+      final sales = await txn.query(
+        'sales',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [saleId],
+        limit: 1,
+      );
+      if (sales.isEmpty) throw StateError('الفاتورة غير موجودة.');
+
+      final returnLines = <Map<String, Object?>>[];
+      var totalAmount = 0;
+      for (final entry in quantitiesBySaleItemId.entries) {
+        final rows = await txn.rawQuery('''
+          SELECT si.id, si.sale_id, si.product_id, si.product_name,
+            si.quantity, si.unit_price,
+            COALESCE((SELECT SUM(sri.quantity)
+              FROM sale_return_items sri
+              JOIN sale_returns sr ON sr.id = sri.return_id
+              WHERE sri.sale_item_id = si.id), 0) AS returned_quantity,
+            p.stock_quantity
+          FROM sale_items si
+          JOIN products p ON p.id = si.product_id
+          WHERE si.id = ? AND si.sale_id = ?
+          LIMIT 1
+        ''', [entry.key, saleId]);
+        if (rows.isEmpty) {
+          throw ArgumentError('أحد البنود لا يتبع الفاتورة المحددة.');
+        }
+        final row = rows.single;
+        final sold = (row['quantity'] as num).toDouble();
+        final returned = (row['returned_quantity'] as num).toDouble();
+        final requested = entry.value;
+        if (requested > sold - returned + 1e-9) {
+          throw ArgumentError(
+            'الكمية المطلوبة تتجاوز الكمية المتبقية للإرجاع للصنف ' +
+                (row['product_name'] as String) + '.',
+          );
+        }
+        final unitPrice = (row['unit_price'] as num).toInt();
+        final amount = (unitPrice * requested).round();
+        totalAmount += amount;
+        returnLines.add({
+          'sale_item_id': row['id'] as int,
+          'product_id': row['product_id'] as int,
+          'quantity': requested,
+          'amount': amount,
+          'stock_before': (row['stock_quantity'] as num).toDouble(),
+        });
+      }
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      final returnId = await txn.insert('sale_returns', {
+        'sale_id': saleId,
+        'amount': totalAmount,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': now,
+      });
+
+      for (final line in returnLines) {
+        final before = line['stock_before'] as double;
+        final quantity = line['quantity'] as double;
+        final after = before + quantity;
+        await txn.update(
+          'products',
+          {'stock_quantity': after},
+          where: 'id = ?',
+          whereArgs: [line['product_id']],
+        );
+        await txn.insert('sale_return_items', {
+          'return_id': returnId,
+          'sale_item_id': line['sale_item_id'],
+          'quantity': quantity,
+          'amount': line['amount'],
+        });
+        await txn.insert('stock_movements', {
+          'product_id': line['product_id'],
+          'movement_type': 'مرتجع بيع',
+          'quantity_delta': quantity,
+          'stock_before': before,
+          'stock_after': after,
+          'note': note?.trim().isEmpty == true ? null : note?.trim(),
+          'reference_type': 'sale_return',
+          'reference_id': returnId,
+          'created_at': now,
+        });
+      }
+
+      return SaleReturnRecord(
+        id: returnId,
+        saleId: saleId,
+        amount: totalAmount,
+        createdAt: now,
+      );
+    });
+  }
+
+  /// مجموع الكميات المرتجعة لبند فاتورة.
+  Future<double> returnedQuantity(int saleItemId) async {
+    final rows = await _database.rawQuery('''
+      SELECT COALESCE(SUM(quantity), 0) AS quantity
+      FROM sale_return_items WHERE sale_item_id = ?
+    ''', [saleItemId]);
+    return (rows.single['quantity'] as num).toDouble();
   }
 
   // عرض أحدث الفواتير أولًا.
