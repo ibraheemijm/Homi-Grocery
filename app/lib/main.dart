@@ -485,7 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           const Icon(Icons.cloud_off_rounded, color: Colors.white, size: 28),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
