@@ -202,7 +202,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('أرشفة الصنف؟'),
-        content: const Text('سيختفي "${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
+        content: Text('سيختفي "${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('أرشفة')),
