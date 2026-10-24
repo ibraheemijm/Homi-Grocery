@@ -250,8 +250,7 @@ class SaleRepository {
         final requested = entry.value;
         if (requested > sold - returned + 1e-9) {
           throw ArgumentError(
-            'الكمية المطلوبة تتجاوز الكمية المتبقية للإرجاع للصنف ' +
-                (row['product_name'] as String) + '.',
+            'الكمية المطلوبة تتجاوز الكمية المتبقية للإرجاع للصنف ${row['product_name']}.',
           );
         }
         final unitPrice = (row['unit_price'] as num).toInt();
