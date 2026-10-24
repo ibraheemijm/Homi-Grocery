@@ -247,31 +247,49 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Future<void> _collect(CustomerBalance customer) async {
     final amountController = TextEditingController();
     final noteController = TextEditingController();
-    final amount = await showDialog<int>(
+    String paymentMethod = 'نقدي';
+    final result = await showDialog<Map<String, Object?>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('تحصيل من ${customer.name}'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('الرصيد المستحق: ${customer.balance} ج.س'),
-          const SizedBox(height: 12),
-          TextField(controller: amountController, autofocus: true, keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
-          const SizedBox(height: 10),
-          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder())),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          FilledButton(onPressed: () {
-            final value = int.tryParse(amountController.text.trim());
-            if (value == null || value <= 0) return;
-            Navigator.pop(context, value);
-          }, child: const Text('تسجيل التحصيل')),
-        ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, refresh) => AlertDialog(
+          title: Text('تحصيل من ${customer.name}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('الرصيد المستحق: ${customer.balance} ج.س'),
+            const SizedBox(height: 12),
+            TextField(controller: amountController, autofocus: true, keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: paymentMethod,
+              decoration: const InputDecoration(labelText: 'طريقة التحصيل', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+              ],
+              onChanged: (value) { if (value != null) refresh(() => paymentMethod = value); },
+            ),
+            const SizedBox(height: 10),
+            TextField(controller: noteController, decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder())),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(onPressed: () {
+              final value = int.tryParse(amountController.text.trim());
+              if (value == null || value <= 0) return;
+              Navigator.pop(dialogContext, {'amount': value, 'method': paymentMethod});
+            }, child: const Text('تسجيل التحصيل')),
+          ],
+        ),
       ),
     );
-    if (amount != null && mounted) {
+    if (result != null && mounted) {
       try {
-        await _repository!.recordPayment(customerId: customer.id, amount: amount, note: noteController.text);
+        await _repository!.recordPayment(
+          customerId: customer.id,
+          amount: result['amount']! as int,
+          paymentMethod: result['method']! as String,
+          note: noteController.text,
+        );
         await _load();
         _message('تم تسجيل التحصيل بنجاح.');
       } catch (error) {
@@ -282,6 +300,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     noteController.dispose();
   }
 
+  
   void _message(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
