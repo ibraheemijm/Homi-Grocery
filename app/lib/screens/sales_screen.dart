@@ -312,6 +312,136 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  // فتح نموذج مرتجع مرتبط ببنود الفاتورة الأصلية.
+  Future<void> _returnSale(SaleRecord sale) async {
+    try {
+      final database = await GroceryDatabase.open();
+      final items = await database.query(
+        'sale_items',
+        columns: ['id', 'product_name', 'unit', 'quantity'],
+        where: 'sale_id = ?',
+        whereArgs: [sale.id],
+        orderBy: 'id ASC',
+      );
+      final remaining = <int, double>{};
+      for (final item in items) {
+        final id = item['id'] as int;
+        final sold = (item['quantity'] as num).toDouble();
+        final returned = await _salesRepository!.returnedQuantity(id);
+        remaining[id] = (sold - returned).clamp(0, sold).toDouble();
+      }
+      final controllers = <int, TextEditingController>{
+        for (final item in items)
+          item['id'] as int: TextEditingController(text: '0'),
+      };
+      final noteController = TextEditingController();
+      final quantities = await showDialog<Map<int, double>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, refreshDialog) => AlertDialog(
+            title: Text('مرتجع الفاتورة ${sale.invoiceNumber}'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('أدخل الكمية المرتجعة لكل صنف. لا يمكن تجاوز الكمية المتبقية.'),
+                    const SizedBox(height: 12),
+                    for (final item in items)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item['product_name'] as String,
+                                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  Text('المتاح للإرجاع: ${_quantity(remaining[item['id'] as int]!)} ${item['unit']}'),
+                                ],
+                              ),
+                            ),
+                            SizedBox(
+                              width: 92,
+                              child: TextField(
+                                controller: controllers[item['id'] as int],
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(labelText: 'الكمية', border: OutlineInputBorder(), isDense: true),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final selected = <int, double>{};
+                  for (final entry in controllers.entries) {
+                    final value = double.tryParse(entry.value.text.trim()) ?? 0;
+                    if (!value.isFinite || value < 0 || value > (remaining[entry.key] ?? 0)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تحقق من الكميات؛ لا يمكن إرجاع كمية أكبر من المتبقي.')),
+                      );
+                      return;
+                    }
+                    if (value > 0) selected[entry.key] = value;
+                  }
+                  if (selected.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('أدخل كمية واحدة على الأقل لإرجاعها.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, selected);
+                },
+                child: const Text('تأكيد المرتجع'),
+              ),
+            ],
+          ),
+        ),
+      );
+      final note = noteController.text;
+      for (final controller in controllers.values) {
+        controller.dispose();
+      }
+      noteController.dispose();
+      if (quantities == null || !mounted) return;
+
+      final returned = await _salesRepository!.returnItems(
+        saleId: sale.id,
+        quantitiesBySaleItemId: quantities,
+        note: note,
+      );
+      _recent = await _salesRepository!.recentSales(limit: 8);
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم تسجيل المرتجع بقيمة ${returned.amount} ج.س وإعادة الكمية إلى المخزون.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تسجيل المرتجع: $error')),
+      );
+    }
+  }
+
   // عرض أحدث الفواتير المحفوظة محليًا.
   Widget _buildRecent(ThemeData theme) => Card(
     child: Padding(
@@ -327,7 +457,17 @@ class _SalesScreenState extends State<SalesScreen> {
             leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
             title: Text(sale.invoiceNumber),
             subtitle: Text('${sale.customerName?.isNotEmpty == true ? sale.customerName : 'زبون نقدي'} • ${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س'),
-            trailing: Text('${sale.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${sale.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+                TextButton(
+                  onPressed: () => _returnSale(sale),
+                  child: const Text('مرتجع'),
+                ),
+              ],
+            ),
           )),
       ]),
     ),
