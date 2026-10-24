@@ -20,6 +20,7 @@ void main() {
     await GroceryDatabase.createStockMovementsSchema(database);
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createPurchasesSchema(database);
+    await GroceryDatabase.createCashTransactionsSchema(database);
     products = ProductRepository(database);
     suppliers = SupplierRepository(database);
   });
