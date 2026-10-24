@@ -37,6 +37,7 @@ class GroceryDatabase {
         await createSchema(db);
         await createSalesSchema(db);
         await createCustomersSchema(db);
+        await createStockMovementsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -45,6 +46,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 3) {
           await createCustomersSchema(db);
+        }
+        if (oldVersion < 4) {
+          await createStockMovementsSchema(db);
         }
       },
     );
@@ -173,6 +177,27 @@ class GroceryDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id)',
+    );
+  }
+
+  // سجل دائم لحركات المخزون بما فيها الحركات الناتجة عن المبيعات.
+  static Future<void> createStockMovementsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        movement_type TEXT NOT NULL,
+        quantity_delta REAL NOT NULL CHECK (quantity_delta <> 0),
+        stock_before REAL NOT NULL,
+        stock_after REAL NOT NULL,
+        note TEXT,
+        reference_type TEXT,
+        reference_id INTEGER,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id, created_at)',
     );
   }
 
