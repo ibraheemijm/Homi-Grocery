@@ -5,7 +5,10 @@ import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+  const SalesScreen({this.onDataChanged, super.key});
+
+  final VoidCallback? onDataChanged;
+
   @override
   State<SalesScreen> createState() => _SalesScreenState();
 }
@@ -288,6 +291,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _customer.clear();
       _discountController.text = '0';
       _recent = await _salesRepository!.recentSales(limit: 8);
+      widget.onDataChanged?.call();
       await _searchProducts(_search.text);
       if (!mounted) return;
       setState(() => _saving = false);
@@ -430,11 +434,16 @@ class _SalesScreenState extends State<SalesScreen> {
         note: note,
       );
       _recent = await _salesRepository!.recentSales(limit: 8);
+      widget.onDataChanged?.call();
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تم تسجيل المرتجع بقيمة ${returned.amount} ج.س وإعادة الكمية إلى المخزون.')),
       );
+      // إذا تجاوز المرتجع الدين الأصلي، اسأل عن الرد النقدي الفعلي
+      // بدل خصم مبلغ من الخزينة لم يُسلَّم للزبون.
+      final refundable = await _salesRepository!.maximumRefundableAmount(sale.id);
+      if (refundable > 0 && mounted) await _refundSale(sale);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -519,6 +528,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         paymentMethod: paymentMethod,
       );
+      widget.onDataChanged?.call();
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
