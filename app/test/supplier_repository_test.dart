@@ -22,6 +22,7 @@ void main() {
     await GroceryDatabase.createPurchasesSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
     await GroceryDatabase.createSupplierReturnsSchema(database);
+    await GroceryDatabase.createSupplierReturnRefundsSchema(database);
     products = ProductRepository(database);
     suppliers = SupplierRepository(database);
   });
@@ -249,6 +250,52 @@ void main() {
     expect((await products.getById(productId))!.stockQuantity, 1);
     expect(await database.query('supplier_returns'), hasLength(1));
     expect(await database.query('supplier_return_items'), hasLength(1));
+  });
+
+  test('يسمح برصيد دائن بعد مرتجع فاتورة مدفوعة ويسجل الاسترداد النقدي منفصلًا', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الحليب');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'حليب', unit: 'عبوة', quantity: 1, unitCost: 100)],
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+    final returnId = await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+
+    var balance = (await suppliers.balances()).single;
+    expect(balance.balance, -100);
+    expect(balance.credit, 100);
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 100);
+    expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return_refund'"), isEmpty);
+
+    await expectLater(
+      suppliers.recordSupplierReturnRefund(returnId: returnId, amount: 101),
+      throwsArgumentError,
+    );
+    await suppliers.recordSupplierReturnRefund(
+      returnId: returnId,
+      amount: 40,
+      paymentMethod: 'تحويل بنكي',
+    );
+    balance = (await suppliers.balances()).single;
+    expect(balance.balance, -60);
+    expect(balance.credit, 60);
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 60);
+    final cashEntries = await database.query(
+      'cash_transactions',
+      where: "reference_type = 'supplier_return_refund'",
+    );
+    expect(cashEntries, hasLength(1));
+    expect(cashEntries.single['direction'], 'in');
+    expect(cashEntries.single['amount'], 40);
+    expect(cashEntries.single['payment_method'], 'تحويل بنكي');
   });
 
   test('يرفض اسم المورد الفارغ', () async {
