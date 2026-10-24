@@ -185,6 +185,13 @@ void main() {
     await sales.recordReturnRefund(saleId: sale.id, amount: 20);
     expect(await sales.maximumRefundableAmount(sale.id), 0);
     expect(await database.query('sale_return_refunds'), hasLength(2));
+    final cashEntries = await database.query(
+      'cash_transactions',
+      where: "reference_type = 'sale_return_refund'",
+    );
+    expect(cashEntries, hasLength(2));
+    expect(cashEntries.fold<int>(0, (sum, row) => sum + (row['amount'] as int)), 100);
+    expect(cashEntries.every((row) => row['direction'] == 'out'), isTrue);
   });
 
   test('المرتجع لفاتورة مدفوعة بالكامل يسمح برد قيمة المرتجع فقط', () async {
