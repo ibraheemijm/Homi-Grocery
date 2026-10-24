@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 10;
+  static const int _version = 11;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -44,6 +44,7 @@ class GroceryDatabase {
         await createCashTransactionsSchema(db);
         await createSupplierReturnsSchema(db);
         await createCostOfGoodsSchema(db);
+        await createSupplierReturnRefundsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -73,6 +74,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 10) {
           await createCostOfGoodsSchema(db);
+        }
+        if (oldVersion < 11) {
+          await createSupplierReturnRefundsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -379,6 +383,21 @@ class GroceryDatabase {
     if (!columns.any((column) => column['name'] == 'cost_price')) {
       await db.execute('ALTER TABLE sale_items ADD COLUMN cost_price INTEGER CHECK (cost_price IS NULL OR cost_price >= 0)');
     }
+  }
+
+  // المبالغ التي استُلمت فعليًا من المورد بعد مرتجع؛ مستقلة عن رصيد المرتجع نفسه.
+  static Future<void> createSupplierReturnRefundsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS supplier_return_refunds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_return_id INTEGER NOT NULL REFERENCES supplier_returns(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        payment_method TEXT NOT NULL DEFAULT 'نقدي',
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_return_refunds_return ON supplier_return_refunds(supplier_return_id, created_at)');
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
