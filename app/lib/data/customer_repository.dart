@@ -119,9 +119,11 @@ class CustomerRepository {
       final debt = (result.first['debt'] as num).toInt();
       final collected = (result.first['collected'] as num).toInt();
       final returned = (result.first['returned'] as num).toInt();
-      final outstanding = debt - returned - collected;
+      final outstanding = (debt - returned - collected)
+          .clamp(0, 1 << 62)
+          .toInt();
       if (amount > outstanding) {
-        throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق (${outstanding < 0 ? 0 : outstanding} ج.س).');
+        throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق ($outstanding ج.س).');
       }
       await txn.insert('customer_payments', {
         'customer_id': customerId,
