@@ -104,17 +104,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
             else
               Expanded(child: ListView.separated(
                 itemCount: _products.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = _products[index];
                   final low = item.stockQuantity <= item.minimumQuantity;
+                  final barcodeText = item.barcode == null ? '' : ' • باركود: ${item.barcode}';
                   return Card(child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: low ? const Color(0xFFF3DEDA) : const Color(0xFFDCE9DF),
                       child: Icon(low ? Icons.warning_amber_rounded : Icons.inventory_2_rounded, color: const Color(0xFF173D32)),
                     ),
                     title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}${item.barcode == null ? '' : ' • باركود: ${item.barcode}'}'),
+                    subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}$barcodeText'),
                     isThreeLine: true,
                     trailing: PopupMenuButton<String>(
                       onSelected: (value) { if (value == 'edit') _edit(item); if (value == 'archive') _archive(item); },
@@ -201,7 +202,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('أرشفة الصنف؟'),
-        content: Text('سيختفي "${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
+        content: const Text('سيختفي "${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('أرشفة')),
