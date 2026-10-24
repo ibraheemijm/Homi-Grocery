@@ -120,7 +120,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 Text('حركة الخزينة', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 _ReportTile(title: 'إجمالي المقبوضات', amount: report.cashIncome, note: 'من حركات الخزينة المسجلة', icon: Icons.south_west_rounded, money: _money),
-                _ReportTile(title: 'إجمالي المدفوعات', amount: report.cashExpense, note: 'من حركات الخزينة المسجلة', icon: Icons.north_east_rounded, money: _money),
+                _ReportTile(title: 'إجمالي المدفوعات', amount: report.cashExpense, note: 'من حركات الخزينة المسجلة بجميع الطرق', icon: Icons.north_east_rounded, money: _money),
+                const SizedBox(height: 8),
+                Text('تفصيل الخزينة حسب طريقة الدفع', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                _ReportTile(title: 'المقبوضات النقدية', amount: report.cashOnlyIncome, note: 'المبالغ المستلمة نقدًا', icon: Icons.payments_outlined, money: _money),
+                _ReportTile(title: 'المدفوعات النقدية', amount: report.cashOnlyExpense, note: 'المبالغ المدفوعة نقدًا', icon: Icons.money_off_csred_outlined, money: _money),
+                _ReportTile(title: 'مقبوضات التحويل البنكي', amount: report.bankTransferIncome, note: 'المبالغ المستلمة بتحويل بنكي', icon: Icons.account_balance_outlined, money: _money),
+                _ReportTile(title: 'مدفوعات التحويل البنكي', amount: report.bankTransferExpense, note: 'المبالغ المدفوعة بتحويل بنكي', icon: Icons.account_balance_outlined, money: _money),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.account_balance_wallet_rounded),
