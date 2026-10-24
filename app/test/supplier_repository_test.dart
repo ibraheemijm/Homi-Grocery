@@ -50,6 +50,10 @@ void main() {
     expect(movements, hasLength(1));
     expect(movements.single['quantity_delta'], 3);
     expect((await suppliers.balances()).single.balance, 240);
+    final cashEntries = await database.query('cash_transactions', where: "reference_type = 'purchase'");
+    expect(cashEntries, hasLength(1));
+    expect(cashEntries.single['direction'], 'out');
+    expect(cashEntries.single['amount'], 100);
   });
 
   test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
