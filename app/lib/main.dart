@@ -7,6 +7,7 @@ import 'data/grocery_database.dart';
 import 'screens/cashbox_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
+import 'screens/reports_screen.dart';
 import 'screens/sales_screen.dart';
 import 'screens/stock_movements_screen.dart';
 import 'screens/suppliers_screen.dart';
@@ -176,7 +177,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ? const SuppliersScreen()
                                         : _selectedIndex == 6
                                             ? const CashboxScreen()
-                                            : _selectedIndex == 9
+                                            : _selectedIndex == 7
+                                                ? const ReportsScreen()
+                                                : _selectedIndex == 9
                                         ? const StockMovementsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
