@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 1;
+  static const int _version = 2;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -35,6 +35,12 @@ class GroceryDatabase {
       },
       onCreate: (db, version) async {
         await createSchema(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
+        if (oldVersion < 2) {
+          await createSalesSchema(db);
+        }
       },
     );
     return _instance!;
@@ -72,6 +78,37 @@ class GroceryDatabase {
       'key': 'schema_version',
       'value': _version.toString(),
     });
+  }
+
+  // إنشاء جداول الفواتير وبنودها داخل معاملة واحدة لكل عملية بيع.
+  static Future<void> createSalesSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_number TEXT NOT NULL UNIQUE,
+        customer_name TEXT,
+        subtotal INTEGER NOT NULL CHECK (subtotal >= 0),
+        discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
+        total INTEGER NOT NULL CHECK (total >= 0),
+        paid_amount INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+        payment_method TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE sale_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL REFERENCES sales(id),
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        product_name TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        unit_price INTEGER NOT NULL CHECK (unit_price >= 0),
+        line_total INTEGER NOT NULL CHECK (line_total >= 0)
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_sales_created_at ON sales(created_at)');
+    await db.execute('CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id)');
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
