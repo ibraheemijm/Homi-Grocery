@@ -224,6 +224,34 @@ void main() {
     expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return'"), isEmpty);
   });
 
+  test('يوزع خصم الشراء على المرتجعات الجزئية دون تكرار الخصم', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد السكر بخصم');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كيلوجرام', quantity: 2, unitCost: 100)],
+      discount: 20,
+      paidAmount: 0,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+    final first = await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+    final second = await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+    final returns = await database.query('supplier_returns');
+    expect(returns, hasLength(2));
+    expect(first, isNot(second));
+    expect(returns.fold<int>(0, (sum, row) => sum + (row['amount'] as int)), 180);
+    expect((await suppliers.balances()).single.balance, 0);
+    expect((await products.getById(productId))!.stockQuantity, 0);
+  });
+
   test('يرفض تجاوز كمية الفاتورة أو المستحق دون تعديل البيانات', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'زيت', purchasePrice: 50, sellingPrice: 80, stockQuantity: 0,
