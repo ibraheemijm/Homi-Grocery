@@ -246,6 +246,7 @@ class _SalesScreenState extends State<SalesScreen> {
               refreshDialog(() {
                 method = value;
                 if (method == 'نقدي') paidController.text = '$_total';
+                if (method == 'جزئي') paidController.text = _total > 1 ? '${_total ~/ 2}' : '0';
                 if (method == 'آجل') paidController.text = '0';
               });
             },
