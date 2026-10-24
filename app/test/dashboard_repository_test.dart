@@ -16,6 +16,7 @@ void main() {
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
     await GroceryDatabase.createSalesSchema(database);
+    await GroceryDatabase.createCostOfGoodsSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
     await GroceryDatabase.createSalesReturnsSchema(database);
