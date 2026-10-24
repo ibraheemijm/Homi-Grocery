@@ -141,13 +141,16 @@ void main() {
     );
 
     expect((await suppliers.balances()).single.balance, 80);
-    await suppliers.recordPayment(supplierId: supplierId, amount: 30, note: 'دفعة نقدية');
+    await suppliers.recordPayment(supplierId: supplierId, amount: 30, paymentMethod: 'تحويل بنكي', note: 'دفعة بنكية');
     expect((await suppliers.balances()).single.balance, 50);
     await expectLater(
       suppliers.recordPayment(supplierId: supplierId, amount: 51),
       throwsArgumentError,
     );
     expect(await database.query('supplier_payments'), hasLength(1));
+    final cashEntries = await database.query('cash_transactions', where: "reference_type = 'supplier_payment'");
+    expect(cashEntries.single['payment_method'], 'تحويل بنكي');
+    expect(cashEntries.single['direction'], 'out');
   });
 
   test('يعرض سجل فواتير الشراء وبنودها كما حُفظت', () async {
