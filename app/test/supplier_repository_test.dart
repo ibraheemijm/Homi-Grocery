@@ -40,6 +40,7 @@ void main() {
       discount: 20,
       paidAmount: 100,
       paymentMethod: 'جزئي',
+      paymentChannel: 'تحويل بنكي',
     );
 
     expect(purchase.subtotal, 360);
@@ -56,6 +57,7 @@ void main() {
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['direction'], 'out');
     expect(cashEntries.single['amount'], 100);
+    expect(cashEntries.single['payment_method'], 'تحويل بنكي');
   });
 
   test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
