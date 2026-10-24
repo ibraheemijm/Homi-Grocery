@@ -34,6 +34,50 @@ class PurchaseRecord {
   int get remainingAmount => (total - paidAmount).clamp(0, 1 << 62).toInt();
 }
 
+class PurchaseHistoryRecord {
+  const PurchaseHistoryRecord({
+    required this.id,
+    required this.invoiceNumber,
+    required this.supplierName,
+    required this.subtotal,
+    required this.discount,
+    required this.total,
+    required this.paidAmount,
+    required this.paymentMethod,
+    required this.createdAt,
+    this.note,
+  });
+
+  final int id;
+  final String invoiceNumber;
+  final String supplierName;
+  final int subtotal;
+  final int discount;
+  final int total;
+  final int paidAmount;
+  final String paymentMethod;
+  final String createdAt;
+  final String? note;
+
+  int get remainingAmount => (total - paidAmount).clamp(0, 1 << 62).toInt();
+}
+
+class PurchaseItemRecord {
+  const PurchaseItemRecord({
+    required this.productName,
+    required this.unit,
+    required this.quantity,
+    required this.unitCost,
+    required this.lineTotal,
+  });
+
+  final String productName;
+  final String unit;
+  final double quantity;
+  final int unitCost;
+  final int lineTotal;
+}
+
 class SupplierRepository {
   SupplierRepository(this._database);
   final Database _database;
@@ -135,6 +179,56 @@ class SupplierRepository {
       return PurchaseRecord(id: purchaseId, invoiceNumber: invoiceNumber, supplierId: supplierId,
         subtotal: subtotal, discount: discount, total: total, paidAmount: paidAmount, createdAt: now);
     });
+  }
+
+  /// يعرض سجل فواتير الشراء الأحدث أولًا، مع اسم المورد والمبالغ المحاسبية.
+  Future<List<PurchaseHistoryRecord>> purchaseHistory({
+    int? supplierId,
+    int limit = 100,
+  }) async {
+    if (limit < 1 || limit > 1000) {
+      throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
+    }
+    final rows = await _database.rawQuery('''
+      SELECT p.id, p.invoice_number, p.supplier_id, s.name AS supplier_name,
+        p.subtotal, p.discount, p.total, p.paid_amount, p.payment_method,
+        p.note, p.created_at
+      FROM purchases p
+      JOIN suppliers s ON s.id = p.supplier_id
+      WHERE (? IS NULL OR p.supplier_id = ?)
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT ?
+    ''', [supplierId, supplierId, limit]);
+    return rows.map((row) => PurchaseHistoryRecord(
+      id: row['id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      subtotal: (row['subtotal'] as num).toInt(),
+      discount: (row['discount'] as num).toInt(),
+      total: (row['total'] as num).toInt(),
+      paidAmount: (row['paid_amount'] as num).toInt(),
+      paymentMethod: row['payment_method'] as String,
+      note: row['note'] as String?,
+      createdAt: row['created_at'] as String,
+    )).toList(growable: false);
+  }
+
+  /// يعرض البنود المحفوظة كما كانت وقت الشراء، لا حسب بيانات الصنف الحالية.
+  Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId) async {
+    final rows = await _database.query(
+      'purchase_items',
+      columns: ['product_name', 'unit', 'quantity', 'unit_cost', 'line_total'],
+      where: 'purchase_id = ?',
+      whereArgs: [purchaseId],
+      orderBy: 'id ASC',
+    );
+    return rows.map((row) => PurchaseItemRecord(
+      productName: row['product_name'] as String,
+      unit: row['unit'] as String,
+      quantity: (row['quantity'] as num).toDouble(),
+      unitCost: (row['unit_cost'] as num).toInt(),
+      lineTotal: (row['line_total'] as num).toInt(),
+    )).toList(growable: false);
   }
 
   Future<void> recordPayment({required int supplierId, required int amount, String? note}) async {
