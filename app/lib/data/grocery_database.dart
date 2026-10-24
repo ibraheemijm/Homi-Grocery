@@ -299,7 +299,7 @@ class GroceryDatabase {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sale_return_refunds (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        return_id INTEGER NOT NULL REFERENCES sale_returns(id),
+        sale_id INTEGER NOT NULL REFERENCES sales(id),
         amount INTEGER NOT NULL CHECK (amount > 0),
         payment_method TEXT NOT NULL DEFAULT 'نقدي',
         note TEXT,
@@ -307,7 +307,7 @@ class GroceryDatabase {
       )
     ''');
     await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_sale_return_refunds_return ON sale_return_refunds(return_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_refunds_sale ON sale_return_refunds(sale_id, created_at)',
     );
   }
 
