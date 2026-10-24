@@ -141,6 +141,18 @@ class SaleRepository {
         'payment_method': paymentMethod,
         'created_at': createdAt,
       });
+      if (paidAmount > 0) {
+        await txn.insert('cash_transactions', {
+          'direction': 'in',
+          'category': 'مبيعات',
+          'amount': paidAmount,
+          'payment_method': paymentMethod,
+          'reference_type': 'sale',
+          'reference_id': saleId,
+          'note': 'فاتورة $invoice',
+          'created_at': createdAt,
+        });
+      }
 
       for (final line in lines) {
         final productId = line.product.id!;
@@ -383,13 +395,25 @@ class SaleRepository {
       if (amount > available) {
         throw ArgumentError('مبلغ الرد يتجاوز المبلغ المتاح للرد النقدي ($available ج.س).');
       }
-      return txn.insert('sale_return_refunds', {
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final refundId = await txn.insert('sale_return_refunds', {
         'sale_id': saleId,
         'amount': amount,
         'payment_method': paymentMethod.trim(),
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': createdAt,
       });
+      await txn.insert('cash_transactions', {
+        'direction': 'out',
+        'category': 'رد نقدي لمرتجع بيع',
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'reference_type': 'sale_return_refund',
+        'reference_id': refundId,
+        'note': note?.trim().isEmpty == true ? 'فاتورة البيع #$saleId' : note?.trim(),
+        'created_at': createdAt,
+      });
+      return refundId;
     });
   }
 
