@@ -109,7 +109,7 @@ void main() {
       note: 'مرتجع مدفوع',
     );
     await sales.recordReturnRefund(
-      returnId: returned.id, amount: 90, note: 'تم تسليم النقد',
+      saleId: sale.id, amount: 90, note: 'تم تسليم النقد',
     );
 
     final ledger = await customers.ledger(customer.id);
