@@ -81,6 +81,14 @@ void main() {
       'direction': 'out', 'category': 'مصروف', 'amount': 200,
       'payment_method': 'نقدي', 'created_at': createdAt,
     });
+    await database.insert('cash_transactions', {
+      'direction': 'in', 'category': 'تحويل وارد', 'amount': 250,
+      'payment_method': 'تحويل بنكي', 'created_at': createdAt,
+    });
+    await database.insert('cash_transactions', {
+      'direction': 'out', 'category': 'تحويل صادر', 'amount': 80,
+      'payment_method': 'تحويل بنكي', 'created_at': createdAt,
+    });
     final productId = await database.insert('products', {
       'name': 'صنف منخفض',
       'unit': 'حبة',
@@ -119,9 +127,13 @@ void main() {
     expect(report.supplierPayments, 50);
     expect(report.supplierRefunds, 10);
     expect(report.returnRefunds, 20);
-    expect(report.cashIncome, 400);
-    expect(report.cashExpense, 200);
-    expect(report.cashNet, 200);
+    expect(report.cashIncome, 650);
+    expect(report.cashExpense, 280);
+    expect(report.cashNet, 370);
+    expect(report.cashOnlyIncome, 400);
+    expect(report.cashOnlyExpense, 200);
+    expect(report.bankTransferIncome, 250);
+    expect(report.bankTransferExpense, 80);
     expect(report.lowStockCount, 1);
   });
 }
