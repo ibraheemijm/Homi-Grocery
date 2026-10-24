@@ -35,6 +35,7 @@ class GroceryDatabase {
       },
       onCreate: (db, version) async {
         await createSchema(db);
+        await createSalesSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
