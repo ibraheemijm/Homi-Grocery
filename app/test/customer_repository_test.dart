@@ -20,6 +20,7 @@ void main() {
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
+    await GroceryDatabase.createSalesReturnsSchema(database);
     customers = CustomerRepository(database);
     products = ProductRepository(database);
     sales = SaleRepository(database);
@@ -49,6 +50,40 @@ void main() {
     final after = (await customers.balances()).single;
     expect(after.totalPaid, 300);
     expect(after.balance, 500);
+  });
+
+  test('يخصم مرتجع البيع من رصيد الزبون ومن حد التحصيل', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'أرز', sellingPrice: 1000, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: 'سارة',
+    );
+    final customer = (await customers.balances()).single;
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+
+    expect((await customers.balances()).single.balance, 1000);
+    await customers.recordPayment(customerId: customer.id, amount: 1000);
+    expect((await customers.balances()).single.balance, 0);
+    await expectLater(
+      customers.recordPayment(customerId: customer.id, amount: 1),
+      throwsArgumentError,
+    );
   });
 
   test('يرفض التحصيل الذي يتجاوز الرصيد دون تسجيله', () async {
