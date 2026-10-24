@@ -26,6 +26,8 @@ jobs:
         run: flutter analyze
       - name: Run widget tests
         run: flutter test
+      - name: Prepare Linux desktop platform
+        run: flutter create --platforms=linux .
       - name: Build Linux desktop
         run: |
           sudo apt-get update
