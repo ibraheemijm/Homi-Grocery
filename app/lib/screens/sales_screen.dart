@@ -56,7 +56,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   int get _subtotal => _cart.fold<int>(0, (sum, line) => sum + line.lineTotal);
   int get _discount => int.tryParse(_discountController.text.trim()) ?? 0;
-  int get _total => (_subtotal - _discount).clamp(0, 1 << 62);
+  int get _total => (_subtotal - _discount).clamp(0, 1 << 62).toInt();
 
   // إضافة الصنف إلى السلة أو زيادة كميته إذا كان موجودًا.
   void _addProduct(GroceryProduct product) {
@@ -199,7 +199,7 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
         const SizedBox(height: 14),
         _totalRow('الإجمالي قبل الخصم', _subtotal),
-        _totalRow('الخصم', _discount.clamp(0, _subtotal)),
+        _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
         const Divider(),
         _totalRow('المطلوب دفعه', _total, strong: true),
         const SizedBox(height: 14),
