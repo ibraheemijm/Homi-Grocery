@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 6;
+  static const int _version = 7;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -40,6 +40,7 @@ class GroceryDatabase {
         await createStockMovementsSchema(db);
         await createSalesReturnsSchema(db);
         await createPurchasesSchema(db);
+        await createSaleReturnRefundsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -57,6 +58,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 6) {
           await createPurchasesSchema(db);
+        }
+        if (oldVersion < 7) {
+          await createSaleReturnRefundsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -288,6 +292,23 @@ class GroceryDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id, created_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase ON purchase_items(purchase_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id, created_at)');
+  }
+
+  // سجل مستقل للمبالغ النقدية التي دُفعت فعليًا للزبون بسبب المرتجعات.
+  static Future<void> createSaleReturnRefundsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_return_refunds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL REFERENCES sale_returns(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        payment_method TEXT NOT NULL DEFAULT 'نقدي',
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_refunds_return ON sale_return_refunds(return_id, created_at)',
+    );
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
