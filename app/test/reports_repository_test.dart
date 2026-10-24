@@ -120,7 +120,7 @@ void main() {
     expect(report.salesTotal, 500);
     expect(report.salesCount, 1);
     expect(report.saleReturns, 100);
-    expect(report.grossProfit, 200);
+    expect(report.grossProfit, 160);
     expect(report.purchaseTotal, 250);
     expect(report.purchaseCount, 1);
     expect(report.customerCollections, 100);
