@@ -103,7 +103,7 @@ void main() {
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
-    final returned = await sales.returnItems(
+    await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
       note: 'مرتجع مدفوع',
