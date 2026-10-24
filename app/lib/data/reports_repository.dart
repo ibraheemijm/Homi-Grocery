@@ -11,6 +11,8 @@ class DailyReport {
     required this.customerCollections,
     required this.supplierPayments,
     required this.returnRefunds,
+    required this.saleReturns,
+    required this.grossProfit,
     required this.cashIncome,
     required this.cashExpense,
     required this.lowStockCount,
@@ -24,6 +26,9 @@ class DailyReport {
   final int customerCollections;
   final int supplierPayments;
   final int returnRefunds;
+  final int saleReturns;
+  /// null إذا كانت هناك فواتير قديمة بلا تكلفة محفوظة وقت البيع.
+  final int? grossProfit;
   final int cashIncome;
   final int cashExpense;
   final int lowStockCount;
@@ -43,6 +48,27 @@ class ReportsRepository {
     final sales = await _database.rawQuery('''
       SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count
       FROM sales WHERE created_at >= ? AND created_at < ?
+    ''', [start, end]);
+    final saleReturns = await _database.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM sale_returns WHERE created_at >= ? AND created_at < ?
+    ''', [start, end]);
+    final cost = await _database.rawQuery('''
+      SELECT
+        COALESCE(SUM(si.cost_price * si.quantity), 0) AS sold_cost,
+        SUM(CASE WHEN si.cost_price IS NULL THEN 1 ELSE 0 END) AS missing_costs
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.created_at >= ? AND s.created_at < ?
+    ''', [start, end]);
+    final returnedCost = await _database.rawQuery('''
+      SELECT
+        COALESCE(SUM(sri.quantity * si.cost_price), 0) AS cost,
+        SUM(CASE WHEN si.cost_price IS NULL THEN 1 ELSE 0 END) AS missing_costs
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id = sri.return_id
+      JOIN sale_items si ON si.id = sri.sale_item_id
+      WHERE sr.created_at >= ? AND sr.created_at < ?
     ''', [start, end]);
     final purchases = await _database.rawQuery('''
       SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count
@@ -80,6 +106,14 @@ class ReportsRepository {
       customerCollections: (customerCollections.single['total'] as num).toInt(),
       supplierPayments: (supplierPayments.single['total'] as num).toInt(),
       returnRefunds: (refunds.single['total'] as num).toInt(),
+      saleReturns: (saleReturns.single['total'] as num).toInt(),
+      grossProfit: ((cost.single['missing_costs'] as num? ?? 0).toInt() > 0 ||
+              (returnedCost.single['missing_costs'] as num? ?? 0).toInt() > 0)
+          ? null
+          : (sales.single['total'] as num).toInt() -
+              (saleReturns.single['total'] as num).toInt() -
+              (cost.single['sold_cost'] as num).round() +
+              (returnedCost.single['cost'] as num).round(),
       cashIncome: (cash.single['income'] as num).toInt(),
       cashExpense: (cash.single['expense'] as num).toInt(),
       lowStockCount: (stock.single['count'] as num).toInt(),
