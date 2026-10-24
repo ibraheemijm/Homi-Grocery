@@ -18,6 +18,7 @@ void main() {
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
+    await GroceryDatabase.createSalesReturnsSchema(database);
     products = ProductRepository(database);
     sales = SaleRepository(database);
   });
@@ -71,6 +72,77 @@ void main() {
 
     expect(await sales.recentSales(), isEmpty);
     expect((await products.getById(productId))!.stockQuantity, 4);
+  });
+
+  test('يعيد الكمية إلى المخزون ويسجل المرتجع مرة واحدة', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'حليب', sellingPrice: 250, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 3)],
+      discount: 0,
+      paidAmount: 750,
+      paymentMethod: 'نقدي',
+    );
+    final item = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single;
+    final itemId = item['id'] as int;
+
+    final returned = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+      note: 'عبوة تالفة',
+    );
+
+    expect(returned.amount, 250);
+    expect((await products.getById(productId))!.stockQuantity, 3);
+    expect(await sales.returnedQuantity(itemId), 1);
+    final movements = await database.query(
+      'stock_movements',
+      where: "reference_type = 'sale_return'",
+    );
+    expect(movements, hasLength(1));
+    expect(movements.single['quantity_delta'], 1);
+  });
+
+  test('يرفض تكرار إرجاع كمية تتجاوز المتبقي دون تغيير المخزون', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'زيت', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 200,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+    await expectLater(
+      sales.returnItems(
+        saleId: sale.id,
+        quantitiesBySaleItemId: {itemId: 1.1},
+      ),
+      throwsArgumentError,
+    );
+
+    expect((await products.getById(productId))!.stockQuantity, 1);
+    expect(await sales.returnedQuantity(itemId), 1);
+    expect(await database.query('sale_returns'), hasLength(1));
   });
 
   test('يسمح بالمخزون السالب وفق سياسة المشروع', () async {
