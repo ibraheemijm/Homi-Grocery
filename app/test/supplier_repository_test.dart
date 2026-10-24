@@ -21,6 +21,7 @@ void main() {
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createPurchasesSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createSupplierReturnsSchema(database);
     products = ProductRepository(database);
     suppliers = SupplierRepository(database);
   });
@@ -187,6 +188,67 @@ void main() {
   test('يرفض حد سجل مشتريات غير صالح', () async {
     await expectLater(suppliers.purchaseHistory(limit: 0), throwsArgumentError);
     await expectLater(suppliers.purchaseHistory(limit: 1001), throwsArgumentError);
+  });
+
+  test('مرتجع المورد يخفض المخزون والمستحق ويسجل حركة عكسية ذريًا', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الأرز');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلوجرام', quantity: 4, unitCost: 100)],
+      paidAmount: 0,
+    );
+    final items = await suppliers.returnablePurchaseItems(purchase.id);
+    final itemId = items.single['id'] as int;
+
+    final returnId = await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+      note: 'صنف تالف',
+    );
+
+    expect((await products.getById(productId))!.stockQuantity, 3);
+    expect((await suppliers.balances()).single.balance, 300);
+    final returns = await database.query('supplier_returns', where: 'id = ?', whereArgs: [returnId]);
+    expect(returns.single['amount'], 100);
+    final lines = await database.query('supplier_return_items', where: 'return_id = ?', whereArgs: [returnId]);
+    expect(lines.single['quantity'], 1);
+    final movements = await database.query('stock_movements', where: "reference_type = 'supplier_return'");
+    expect(movements, hasLength(1));
+    expect(movements.single['quantity_delta'], -1);
+    expect(movements.single['stock_before'], 4);
+    expect(movements.single['stock_after'], 3);
+    expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return'"), isEmpty);
+  });
+
+  test('يرفض تجاوز كمية الفاتورة أو المستحق دون تعديل البيانات', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'زيت', purchasePrice: 50, sellingPrice: 80, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الزيت');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'زيت', unit: 'عبوة', quantity: 2, unitCost: 50)],
+      paidAmount: 0,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+
+    await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+    await expectLater(
+      suppliers.createSupplierReturn(
+        purchaseId: purchase.id,
+        quantitiesByPurchaseItemId: {itemId: 2},
+      ),
+      throwsArgumentError,
+    );
+    expect((await products.getById(productId))!.stockQuantity, 1);
+    expect(await database.query('supplier_returns'), hasLength(1));
+    expect(await database.query('supplier_return_items'), hasLength(1));
   });
 
   test('يرفض اسم المورد الفارغ', () async {
