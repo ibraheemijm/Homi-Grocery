@@ -175,19 +175,26 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       _message('أضف صنفًا إلى المخزون أولًا.');
       return;
     }
+
     int supplierId = _suppliers.first.id;
-    int productId = _products.first.id!;
-    final quantity = TextEditingController(text: '1');
-    final cost = TextEditingController(text: '${_products.first.purchasePrice}');
+    final drafts = <_PurchaseDraftLine>[
+      _PurchaseDraftLine(productId: _products.first.id!),
+    ];
     final discount = TextEditingController(text: '0');
     final paid = TextEditingController(text: '0');
     final note = TextEditingController();
+    int estimatedSubtotal() => drafts.fold<int>(0, (sum, line) {
+      final quantity = double.tryParse(line.quantity.text.trim()) ?? 0;
+      final cost = int.tryParse(line.cost.text.trim()) ?? 0;
+      return sum + (quantity * cost).round();
+    });
+
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
         title: const Text('فاتورة شراء جديدة'),
         content: SizedBox(
-          width: 460,
+          width: 520,
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<int>(
               initialValue: supplierId,
@@ -196,37 +203,100 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               items: [for (final s in _suppliers) DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis))],
               onChanged: (v) { if (v != null) refresh(() => supplierId = v); },
             ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<int>(
-              initialValue: productId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'الصنف', border: OutlineInputBorder()),
-              items: [for (final p in _products) DropdownMenuItem(value: p.id, child: Text('${p.name} • المخزون ${p.stockQuantity}', overflow: TextOverflow.ellipsis))],
-              onChanged: (v) { if (v != null) refresh(() { productId = v; cost.text = _products.firstWhere((p) => p.id == v).purchasePrice.toString(); }); },
-            ),
-            const SizedBox(height: 10),
-            TextField(controller: quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكمية', border: OutlineInputBorder())),
-            const SizedBox(height: 10),
-            TextField(controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر الشراء للوحدة (ج.س)', border: OutlineInputBorder())),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+            Row(children: [
+              const Expanded(child: Text('أصناف الفاتورة', style: TextStyle(fontWeight: FontWeight.w800))),
+              TextButton.icon(
+                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!))),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('إضافة صنف'),
+              ),
+            ]),
+            ...List.generate(drafts.length, (index) {
+              final draft = drafts[index];
+              final product = _products.firstWhere((p) => p.id == draft.productId);
+              return Card(
+                key: ValueKey(draft),
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(children: [
+                    Row(children: [
+                      Expanded(child: Text('الصنف ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                      if (drafts.length > 1)
+                        IconButton(
+                          tooltip: 'حذف الصنف',
+                          onPressed: () => refresh(() => drafts.removeAt(index).dispose()),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                    ]),
+                    DropdownButtonFormField<int>(
+                      initialValue: draft.productId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'الصنف', border: OutlineInputBorder()),
+                      items: [for (final p in _products) DropdownMenuItem(value: p.id, child: Text('${p.name} • المخزون ${p.stockQuantity}', overflow: TextOverflow.ellipsis))],
+                      onChanged: (v) {
+                        if (v != null) refresh(() {
+                          draft.productId = v;
+                          draft.cost.text = _products.firstWhere((p) => p.id == v).purchasePrice.toString();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Expanded(child: TextField(
+                        controller: draft.quantity,
+                        onChanged: (_) => refresh(() {}),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'الكمية', border: OutlineInputBorder()),
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(child: TextField(
+                        controller: draft.cost,
+                        onChanged: (_) => refresh(() {}),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'سعر الوحدة (ج.س)', border: OutlineInputBorder()),
+                      )),
+                    ]),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Text('الإجمالي: ${((double.tryParse(draft.quantity.text.trim()) ?? 0) * (int.tryParse(draft.cost.text.trim()) ?? 0)).round()} ج.س'),
+                    ),
+                  ]),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
             TextField(controller: discount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الخصم (ج.س)', border: OutlineInputBorder())),
             const SizedBox(height: 10),
             TextField(controller: paid, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المدفوع الآن (ج.س)', border: OutlineInputBorder())),
             const SizedBox(height: 10),
             TextField(controller: note, decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
+              child: Text('إجمالي الأصناف: ${estimatedSubtotal()} ج.س\nالإجمالي بعد الخصم: ${(estimatedSubtotal() - (int.tryParse(discount.text.trim()) ?? 0)).clamp(0, 1 << 62)} ج.س',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
             const SizedBox(height: 8),
-            const Text('تُحفظ الفاتورة وتُحدّث الكمية وسجل المخزون معًا.', style: TextStyle(fontSize: 12)),
+            const Text('تُحفظ جميع الأصناف وتُحدّث الكميات وسجل المخزون ضمن معاملة واحدة.', style: TextStyle(fontSize: 12)),
           ])),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () {
-            final q = double.tryParse(quantity.text.trim());
-            final c = int.tryParse(cost.text.trim());
+            final subtotal = estimatedSubtotal();
             final d = int.tryParse(discount.text.trim());
             final p = int.tryParse(paid.text.trim());
-            if (q == null || !q.isFinite || q <= 0 || c == null || c < 0 || d == null || d < 0 || p == null || p < 0) {
-              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تحقق من الكمية والأسعار والمبالغ المدخلة.')));
+            final validLines = drafts.every((line) {
+              final q = double.tryParse(line.quantity.text.trim());
+              final cost = int.tryParse(line.cost.text.trim());
+              return q != null && q.isFinite && q > 0 && cost != null && cost >= 0;
+            });
+            if (!validLines || d == null || d < 0 || d > subtotal || p == null || p < 0 || p > subtotal - d) {
+              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تحقق من الكميات والأسعار والخصم والمدفوع.')));
               return;
             }
             Navigator.pop(ctx, true);
@@ -234,23 +304,38 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         ],
       )),
     );
+
     if (saved == true && mounted) {
       try {
-        final product = _products.firstWhere((p) => p.id == productId);
+        final lines = drafts.map((draft) {
+          final product = _products.firstWhere((p) => p.id == draft.productId);
+          return PurchaseLine(
+            productId: product.id!,
+            productName: product.name,
+            unit: product.unit,
+            quantity: double.parse(draft.quantity.text.trim()),
+            unitCost: int.parse(draft.cost.text.trim()),
+          );
+        }).toList(growable: false);
         await _repository!.createPurchase(
           supplierId: supplierId,
-          lines: [PurchaseLine(productId: productId, productName: product.name, unit: product.unit, quantity: double.parse(quantity.text.trim()), unitCost: int.parse(cost.text.trim()) )],
+          lines: lines,
           discount: int.parse(discount.text.trim()),
           paidAmount: int.parse(paid.text.trim()),
-          paymentMethod: 'جزئي',
+          paymentMethod: int.parse(paid.text.trim()) == 0 ? 'آجل' : 'جزئي',
           note: note.text,
         );
         await _load();
         _products = await _productsRepository!.search('');
-        _message('تم حفظ فاتورة الشراء وتحديث المخزون.');
-      } catch (error) { _message('لم تُحفظ الفاتورة: $error'); }
+        _message('تم حفظ فاتورة الشراء بجميع أصنافها وتحديث المخزون.');
+      } catch (error) {
+        _message('لم تُحفظ الفاتورة: $error');
+      }
     }
-    quantity.dispose(); cost.dispose(); discount.dispose(); paid.dispose(); note.dispose();
+    for (final draft in drafts) { draft.dispose(); }
+    discount.dispose();
+    paid.dispose();
+    note.dispose();
   }
 
   Future<void> _recordPayment(SupplierBalance supplier) async {
@@ -286,5 +371,20 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   void _message(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _PurchaseDraftLine {
+  _PurchaseDraftLine({required this.productId, String quantity = '1', String? cost})
+      : quantity = TextEditingController(text: quantity),
+        cost = TextEditingController(text: cost ?? '0');
+
+  int productId;
+  final TextEditingController quantity;
+  final TextEditingController cost;
+
+  void dispose() {
+    quantity.dispose();
+    cost.dispose();
   }
 }
