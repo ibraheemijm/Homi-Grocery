@@ -8,7 +8,23 @@ class CustomerBalance {
   final int salesCount;
   final int totalDebt;
   final int totalPaid;
-  int get balance => totalDebt - totalPaid;
+  int get balance => (totalDebt - totalPaid).clamp(0, 1 << 62).toInt();
+}
+
+class CustomerLedgerEntry {
+  const CustomerLedgerEntry({
+    required this.title,
+    required this.amount,
+    required this.isCredit,
+    required this.createdAt,
+    this.note,
+  });
+
+  final String title;
+  final int amount;
+  final bool isCredit;
+  final String createdAt;
+  final String? note;
 }
 
 class CustomerRepository {
@@ -36,6 +52,38 @@ class CustomerRepository {
       salesCount: (row['sales_count'] as num).toInt(),
       totalDebt: (row['total_debt'] as num).toInt(),
       totalPaid: (row['total_paid'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  /// كشف حساب موحد مرتب زمنيًا من الفواتير والمرتجعات والتحصيلات.
+  Future<List<CustomerLedgerEntry>> ledger(int customerId) async {
+    final rows = await _database.rawQuery('''
+      SELECT 'فاتورة ' || s.invoice_number AS title,
+        MAX(0, s.total - s.paid_amount) AS amount,
+        0 AS is_credit, s.created_at AS created_at,
+        ('الإجمالي: ' || s.total || ' ج.س • المدفوع عند البيع: ' || s.paid_amount || ' ج.س') AS note
+      FROM sales s
+      WHERE s.customer_id = ?
+      UNION ALL
+      SELECT 'مرتجع فاتورة ' || s.invoice_number AS title,
+        sr.amount AS amount, 1 AS is_credit,
+        sr.created_at AS created_at, sr.note AS note
+      FROM sale_returns sr
+      JOIN sales s ON s.id = sr.sale_id
+      WHERE s.customer_id = ?
+      UNION ALL
+      SELECT 'تحصيل من الزبون' AS title, cp.amount AS amount,
+        1 AS is_credit, cp.created_at AS created_at, cp.note AS note
+      FROM customer_payments cp
+      WHERE cp.customer_id = ?
+      ORDER BY created_at ASC
+    ''', [customerId, customerId, customerId]);
+    return rows.map((row) => CustomerLedgerEntry(
+      title: row['title'] as String,
+      amount: (row['amount'] as num).toInt(),
+      isCredit: (row['is_credit'] as num).toInt() == 1,
+      createdAt: row['created_at'] as String,
+      note: row['note'] as String?,
     )).toList(growable: false);
   }
 
