@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 2;
+  static const int _version = 3;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -36,11 +36,15 @@ class GroceryDatabase {
       onCreate: (db, version) async {
         await createSchema(db);
         await createSalesSchema(db);
+        await createCustomersSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
         if (oldVersion < 2) {
           await createSalesSchema(db);
+        }
+        if (oldVersion < 3) {
+          await createCustomersSchema(db);
         }
       },
     );
@@ -110,6 +114,40 @@ class GroceryDatabase {
     ''');
     await db.execute('CREATE INDEX idx_sales_created_at ON sales(created_at)');
     await db.execute('CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id)');
+  }
+
+  // إنشاء سجل الزبائن والتحصيلات، مع ربط فواتير المبيعات القديمة دون حذفها.
+  static Future<void> createCustomersSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        phone TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    final columns = await db.rawQuery('PRAGMA table_info(sales)');
+    if (!columns.any((column) => column['name'] == 'customer_id')) {
+      await db.execute(
+        'ALTER TABLE sales ADD COLUMN customer_id INTEGER REFERENCES customers(id)',
+      );
+    }
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS customer_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL REFERENCES customers(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customer_payments_customer ON customer_payments(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id)',
+    );
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
