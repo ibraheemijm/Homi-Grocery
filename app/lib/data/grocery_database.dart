@@ -211,7 +211,7 @@ class GroceryDatabase {
       CREATE TABLE IF NOT EXISTS sale_returns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sale_id INTEGER NOT NULL REFERENCES sales(id),
-        amount INTEGER NOT NULL CHECK (amount > 0),
+        amount INTEGER NOT NULL CHECK (amount >= 0),
         note TEXT,
         created_at TEXT NOT NULL
       )
