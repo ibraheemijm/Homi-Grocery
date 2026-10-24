@@ -443,6 +443,95 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  // تسجيل رد نقدي فعلي للزبون بعد احتساب الجزء الذي يغطي دين الفاتورة.
+  Future<void> _refundSale(SaleRecord sale) async {
+    try {
+      final available = await _salesRepository!.maximumRefundableAmount(sale.id);
+      if (!mounted) return;
+      if (available <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يوجد فائض متاح للرد النقدي؛ المرتجعات تغطي الدين الأصلي للفاتورة أولًا.')),
+        );
+        return;
+      }
+
+      final amountController = TextEditingController(text: available.toString());
+      String paymentMethod = 'نقدي';
+      final amount = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, refreshDialog) => AlertDialog(
+            title: Text('رد نقدي للفاتورة ${sale.invoiceNumber}'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('الحد الأقصى المتاح للرد: $available ج.س'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'المبلغ الذي رُدّ فعليًا', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: paymentMethod,
+                    decoration: const InputDecoration(labelText: 'طريقة الرد', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                      DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                      DropdownMenuItem(value: 'محفظة إلكترونية', child: Text('محفظة إلكترونية')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) refreshDialog(() => paymentMethod = value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+              FilledButton(
+                onPressed: () {
+                  final value = int.tryParse(amountController.text.trim());
+                  if (value == null || value <= 0 || value > available) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text('أدخل مبلغًا بين 1 و$available ج.س.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, value);
+                },
+                child: const Text('تسجيل الرد الفعلي'),
+              ),
+            ],
+          ),
+        ),
+      );
+      amountController.dispose();
+      if (amount == null || !mounted) return;
+
+      await _salesRepository!.recordReturnRefund(
+        saleId: sale.id,
+        amount: amount,
+        paymentMethod: paymentMethod,
+      );
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم تسجيل رد نقدي فعلي بقيمة $amount ج.س.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تسجيل رد المبلغ: $error')),
+      );
+    }
+  }
+
   // عرض أحدث الفواتير المحفوظة محليًا.
   Widget _buildRecent(ThemeData theme) => Card(
     child: Padding(
@@ -466,6 +555,10 @@ class _SalesScreenState extends State<SalesScreen> {
                 TextButton(
                   onPressed: () => _returnSale(sale),
                   child: const Text('مرتجع'),
+                ),
+                TextButton(
+                  onPressed: () => _refundSale(sale),
+                  child: const Text('رد نقدي'),
                 ),
               ],
             ),
