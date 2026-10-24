@@ -256,7 +256,6 @@ class SupplierRepository {
       );
       if (purchases.isEmpty) throw StateError('فاتورة الشراء غير موجودة.');
       final purchase = purchases.single;
-      final supplierId = purchase['supplier_id'] as int;
       final now = DateTime.now().toUtc().toIso8601String();
       final selectedLines = <Map<String, Object?>>[];
       var total = 0;
