@@ -55,8 +55,8 @@ void main() {
   });
 
   test('يرفض حفظ صنف بلا اسم', () async {
-    expect(
-      () => repository.add(const GroceryProduct(name: '   ')),
+    await expectLater(
+      repository.add(const GroceryProduct(name: '   ')),
       throwsArgumentError,
     );
   });
