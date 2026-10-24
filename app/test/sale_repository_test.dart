@@ -44,6 +44,7 @@ void main() {
       discount: 200,
       paidAmount: 1000,
       paymentMethod: 'جزئي',
+      paymentChannel: 'تحويل بنكي',
       customerName: 'زبون اختبار',
     );
 
@@ -57,6 +58,7 @@ void main() {
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['direction'], 'in');
     expect(cashEntries.single['amount'], 1000);
+    expect(cashEntries.single['payment_method'], 'تحويل بنكي');
   });
 
   test('يحفظ تكلفة الصنف وقت البيع لا سعر الشراء الذي قد يتغير لاحقًا', () async {
