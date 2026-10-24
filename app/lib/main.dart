@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/products_screen.dart';
+import 'screens/sales_screen.dart';
 
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
 
@@ -138,9 +139,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: _selectedIndex == 0
                         ? _buildDashboard(context, isDesktop)
-                        : _selectedIndex == 4
-                            ? const ProductsScreen()
-                            : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
+                        : _selectedIndex == 1
+                            ? const SalesScreen()
+                            : _selectedIndex == 4
+                                ? const ProductsScreen()
+                                : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
                 ],
               ),
