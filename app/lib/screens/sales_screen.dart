@@ -234,7 +234,7 @@ class _SalesScreenState extends State<SalesScreen> {
           _totalRow('إجمالي الفاتورة', _total),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: method,
+            initialValue: method,
             decoration: const InputDecoration(labelText: 'طريقة السداد', border: OutlineInputBorder()),
             items: const [
               DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
