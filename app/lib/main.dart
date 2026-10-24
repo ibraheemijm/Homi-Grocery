@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
 
+import 'screens/cashbox_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/sales_screen.dart';
@@ -173,7 +174,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ? const ProductsScreen()
                                     : _selectedIndex == 5
                                         ? const SuppliersScreen()
-                                        : _selectedIndex == 9
+                                        : _selectedIndex == 6
+                                            ? const CashboxScreen()
+                                            : _selectedIndex == 9
                                         ? const StockMovementsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
