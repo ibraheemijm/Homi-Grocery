@@ -168,7 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _selectedIndex == 0
                         ? _buildDashboard(context, isDesktop)
                         : _selectedIndex == 1
-                            ? const SalesScreen()
+                            ? SalesScreen(onDataChanged: _loadDashboardStats)
                             : _selectedIndex == 3
                                 ? const CustomersScreen()
                                 : _selectedIndex == 4
@@ -201,6 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _showMoreMenu(context);
                       } else {
                         setState(() => _selectedIndex = index == 2 ? 3 : index);
+                        if (index == 0) _loadDashboardStats();
                       }
                     },
                     destinations: const [
@@ -328,7 +329,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: selected ? brandGreen : null,
                       ),
                     ),
-                    onTap: () => setState(() => _selectedIndex = index),
+                    onTap: () {
+                      setState(() => _selectedIndex = index);
+                      if (index == 0) _loadDashboardStats();
+                    },
                   ),
                 );
               },
