@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 7;
+  static const int _version = 8;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -41,6 +41,7 @@ class GroceryDatabase {
         await createSalesReturnsSchema(db);
         await createPurchasesSchema(db);
         await createSaleReturnRefundsSchema(db);
+        await createCashTransactionsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -61,6 +62,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 7) {
           await createSaleReturnRefundsSchema(db);
+        }
+        if (oldVersion < 8) {
+          await createCashTransactionsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -308,6 +312,29 @@ class GroceryDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sale_return_refunds_sale ON sale_return_refunds(sale_id, created_at)',
+    );
+  }
+
+  // سجل موحد للمقبوضات والمدفوعات الفعلية، مرتبط بمصدر الحركة لمنع الخلط مع الديون.
+  static Future<void> createCashTransactionsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cash_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+        category TEXT NOT NULL,
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        payment_method TEXT NOT NULL DEFAULT 'نقدي',
+        reference_type TEXT,
+        reference_id INTEGER,
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cash_transactions_created ON cash_transactions(created_at, direction)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cash_transactions_reference ON cash_transactions(reference_type, reference_id)',
     );
   }
 
