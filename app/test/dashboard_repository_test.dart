@@ -18,6 +18,7 @@ void main() {
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
+    await GroceryDatabase.createSalesReturnsSchema(database);
   });
 
   tearDown(() async => database.close());
