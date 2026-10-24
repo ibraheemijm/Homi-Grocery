@@ -102,6 +102,18 @@ class SupplierRepository {
         'paid_amount': paidAmount, 'payment_method': paymentMethod,
         'note': note?.trim().isEmpty == true ? null : note?.trim(), 'created_at': now,
       });
+      if (paidAmount > 0) {
+        await txn.insert('cash_transactions', {
+          'direction': 'out',
+          'category': 'شراء مدفوع',
+          'amount': paidAmount,
+          'payment_method': paymentMethod,
+          'reference_type': 'purchase',
+          'reference_id': purchaseId,
+          'note': 'فاتورة شراء $invoiceNumber',
+          'created_at': now,
+        });
+      }
       for (final line in lines) {
         final products = await txn.query('products', columns: ['id', 'stock_quantity'], where: 'id = ?', whereArgs: [line.productId], limit: 1);
         if (products.isEmpty) throw ArgumentError('أحد أصناف الشراء غير موجود.');
@@ -136,10 +148,21 @@ class SupplierRepository {
       ''', [supplierId, supplierId]);
       final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt()).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) throw ArgumentError('الدفع يتجاوز المستحق للمورد ($outstanding ج.س).');
-      await txn.insert('supplier_payments', {
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final paymentId = await txn.insert('supplier_payments', {
         'supplier_id': supplierId, 'amount': amount,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'out',
+        'category': 'سداد للمورد',
+        'amount': amount,
+        'payment_method': 'نقدي',
+        'reference_type': 'supplier_payment',
+        'reference_id': paymentId,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
       });
     });
   }
