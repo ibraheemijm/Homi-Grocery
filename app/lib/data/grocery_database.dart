@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 8;
+  static const int _version = 9;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -42,6 +42,7 @@ class GroceryDatabase {
         await createPurchasesSchema(db);
         await createSaleReturnRefundsSchema(db);
         await createCashTransactionsSchema(db);
+        await createSupplierReturnsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -65,6 +66,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 8) {
           await createCashTransactionsSchema(db);
+        }
+        if (oldVersion < 9) {
+          await createSupplierReturnsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -336,6 +340,33 @@ class GroceryDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_cash_transactions_reference ON cash_transactions(reference_type, reference_id)',
     );
+  }
+
+  // مرتجعات الموردين وبنودها؛ تُحفظ مع حركات المخزون ضمن معاملة واحدة.
+  static Future<void> createSupplierReturnsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS supplier_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_id INTEGER NOT NULL REFERENCES purchases(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS supplier_return_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL REFERENCES supplier_returns(id),
+        purchase_item_id INTEGER NOT NULL REFERENCES purchase_items(id),
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        product_name TEXT NOT NULL,
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        unit_cost INTEGER NOT NULL CHECK (unit_cost >= 0),
+        line_total INTEGER NOT NULL CHECK (line_total >= 0)
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_returns_purchase ON supplier_returns(purchase_id, created_at)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_return_items_item ON supplier_return_items(purchase_item_id)');
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
