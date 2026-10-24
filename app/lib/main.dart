@@ -491,15 +491,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Text(
                   _statsError == null ? 'ملخص قاعدة البيانات المحلية' : 'تعذر تحميل الإحصاءات',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   _statsError == null ? 'الأرقام تُقرأ من قاعدة البيانات على هذا الجهاز.' : 'افتح التطبيق مجددًا أو تحقق من قاعدة البيانات المحلية.',
-                  style: TextStyle(color: Color(0xFFE1EDE6), fontSize: 12),
+                  style: const TextStyle(color: Color(0xFFE1EDE6), fontSize: 12),
                 ),
               ],
             ),
