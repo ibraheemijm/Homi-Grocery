@@ -218,7 +218,7 @@ class _SalesScreenState extends State<SalesScreen> {
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
       Expanded(child: Text(label, style: TextStyle(fontWeight: strong ? FontWeight.w800 : FontWeight.normal))),
-      Text('$1 ج.س', style: TextStyle(fontWeight: strong ? FontWeight.w900 : FontWeight.w600, fontSize: strong ? 18 : 14)),
+      Text('$value ج.س', style: TextStyle(fontWeight: strong ? FontWeight.w900 : FontWeight.w600, fontSize: strong ? 18 : 14)),
     ]),
   );
 
