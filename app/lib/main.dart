@@ -1,6 +1,9 @@
 // المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
 import 'package:flutter/material.dart';
 
+import 'data/dashboard_repository.dart';
+import 'data/grocery_database.dart';
+
 import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/sales_screen.dart';
@@ -109,6 +112,25 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  DashboardStats? _stats;
+  String? _statsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardStats();
+  }
+
+  // تحميل إحصاءات فعلية من قاعدة البيانات المحلية.
+  Future<void> _loadDashboardStats() async {
+    try {
+      final database = await GroceryDatabase.open();
+      final stats = await DashboardRepository(database).load();
+      if (mounted) setState(() { _stats = stats; _statsError = null; });
+    } catch (error) {
+      if (mounted) setState(() => _statsError = error.toString());
+    }
+  }
 
   // تعريف عناصر التنقل في مكان واحد لتوحيد أسماء الأقسام وأيقوناتها.
   static const List<_NavigationItem> _navigationItems = [
@@ -380,34 +402,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                     childAspectRatio: columns == 1 ? 2.8 : 1.7,
-                    children: const [
+                    children: [
                       _MetricCard(
                         title: 'مبيعات اليوم',
-                        value: '0 ج.س',
+                        value: _stats == null ? '—' : '${_stats!.todaySales} ج.س',
                         note: 'إجمالي الفواتير اليوم',
                         icon: Icons.trending_up_rounded,
-                        tint: Color(0xFFDCE9DF),
+                        tint: const Color(0xFFDCE9DF),
                       ),
                       _MetricCard(
-                        title: 'المقبوض نقدًا',
-                        value: '0 ج.س',
-                        note: 'المبالغ المستلمة اليوم',
+                        title: 'المقبوض اليوم',
+                        value: _stats == null ? '—' : '${_stats!.todayPaid} ج.س',
+                        note: 'المبالغ المسجلة في فواتير اليوم',
                         icon: Icons.payments_rounded,
-                        tint: Color(0xFFF1E6CC),
+                        tint: const Color(0xFFF1E6CC),
                       ),
                       _MetricCard(
                         title: 'ديون الزبائن',
-                        value: '0 ج.س',
-                        note: 'إجمالي الرصيد المستحق',
+                        value: _stats == null ? '—' : '${_stats!.customerDebt} ج.س',
+                        note: 'الرصيد المستحق بعد التحصيلات',
                         icon: Icons.account_balance_wallet_rounded,
-                        tint: Color(0xFFF3DEDA),
+                        tint: const Color(0xFFF3DEDA),
                       ),
                       _MetricCard(
                         title: 'أصناف منخفضة',
-                        value: '0',
-                        note: 'تحتاج إلى مراجعة المخزون',
+                        value: _stats == null ? '—' : '${_stats!.lowStockCount}',
+                        note: 'وصلت إلى حد التنبيه أو أقل',
                         icon: Icons.inventory_2_rounded,
-                        tint: Color(0xFFDDE7F2),
+                        tint: const Color(0xFFDDE7F2),
                       ),
                     ],
                   );
@@ -468,7 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'واجهة أولية قيد التطوير',
+                  _statsError == null ? 'ملخص قاعدة البيانات المحلية' : 'تعذر تحميل الإحصاءات',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -476,7 +498,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'سيُضاف التخزين المحلي قبل استخدام بيانات المتجر الحقيقية.',
+                  _statsError == null ? 'الأرقام تُقرأ من قاعدة البيانات على هذا الجهاز.' : 'افتح التطبيق مجددًا أو تحقق من قاعدة البيانات المحلية.',
                   style: TextStyle(color: Color(0xFFE1EDE6), fontSize: 12),
                 ),
               ],
