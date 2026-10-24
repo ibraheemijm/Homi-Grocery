@@ -114,7 +114,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       child: Icon(low ? Icons.warning_amber_rounded : Icons.inventory_2_rounded, color: const Color(0xFF173D32)),
                     ),
                     title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('شراء: \${item.purchasePrice} ج.س • بيع: \${item.sellingPrice} ج.س\\nالمخزون: \${_quantity(item.stockQuantity)} \${item.unit}\${item.barcode == null ? '' : ' • باركود: \${item.barcode}'}'),
+                    subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}${item.barcode == null ? '' : ' • باركود: ${item.barcode}'}'),
                     isThreeLine: true,
                     trailing: PopupMenuButton<String>(
                       onSelected: (value) { if (value == 'edit') _edit(item); if (value == 'archive') _archive(item); },
@@ -127,7 +127,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 },
               )),
             if (!_loading && _error == null)
-              Padding(padding: const EdgeInsets.only(top: 10), child: Text('عدد الأصناف النشطة: \${_products.length}', style: theme.textTheme.bodySmall)),
+              Padding(padding: const EdgeInsets.only(top: 10), child: Text('عدد الأصناف النشطة: ${_products.length}', style: theme.textTheme.bodySmall)),
           ]),
         ),
       ),
@@ -140,10 +140,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final name = TextEditingController(text: old?.name ?? '');
     final barcode = TextEditingController(text: old?.barcode ?? '');
     final unit = TextEditingController(text: old?.unit ?? 'حبة');
-    final buy = TextEditingController(text: '\${old?.purchasePrice ?? 0}');
-    final sell = TextEditingController(text: '\${old?.sellingPrice ?? 0}');
-    final stock = TextEditingController(text: '\${old?.stockQuantity ?? 0}');
-    final minimum = TextEditingController(text: '\${old?.minimumQuantity ?? 0}');
+    final buy = TextEditingController(text: '${old?.purchasePrice ?? 0}');
+    final sell = TextEditingController(text: '${old?.sellingPrice ?? 0}');
+    final stock = TextEditingController(text: '${old?.stockQuantity ?? 0}');
+    final minimum = TextEditingController(text: '${old?.minimumQuantity ?? 0}');
 
     final result = await showDialog<GroceryProduct>(
       context: context,
@@ -201,7 +201,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('أرشفة الصنف؟'),
-        content: Text('سيختفي "\${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
+        content: Text('سيختفي "${item.name}" من قائمة الأصناف النشطة دون حذف سجله.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('أرشفة')),
