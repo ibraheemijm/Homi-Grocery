@@ -10,6 +10,7 @@ class DailyReport {
     required this.purchaseCount,
     required this.customerCollections,
     required this.supplierPayments,
+    required this.supplierRefunds,
     required this.returnRefunds,
     required this.saleReturns,
     required this.grossProfit,
@@ -25,6 +26,7 @@ class DailyReport {
   final int purchaseCount;
   final int customerCollections;
   final int supplierPayments;
+  final int supplierRefunds;
   final int returnRefunds;
   final int saleReturns;
   /// null إذا كانت هناك فواتير قديمة بلا تكلفة محفوظة وقت البيع.
@@ -82,6 +84,10 @@ class ReportsRepository {
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM supplier_payments WHERE created_at >= ? AND created_at < ?
     ''', [start, end]);
+    final supplierRefunds = await _database.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM supplier_return_refunds WHERE created_at >= ? AND created_at < ?
+    ''', [start, end]);
     final refunds = await _database.rawQuery('''
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM sale_return_refunds WHERE created_at >= ? AND created_at < ?
@@ -105,6 +111,7 @@ class ReportsRepository {
       purchaseCount: (purchases.single['count'] as num).toInt(),
       customerCollections: (customerCollections.single['total'] as num).toInt(),
       supplierPayments: (supplierPayments.single['total'] as num).toInt(),
+      supplierRefunds: (supplierRefunds.single['total'] as num).toInt(),
       returnRefunds: (refunds.single['total'] as num).toInt(),
       saleReturns: (saleReturns.single['total'] as num).toInt(),
       grossProfit: ((cost.single['missing_costs'] as num? ?? 0).toInt() > 0 ||
