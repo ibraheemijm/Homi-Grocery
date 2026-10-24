@@ -82,9 +82,29 @@ class SaleRepository {
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
+      final normalizedCustomer = customerName?.trim();
+      int? customerId;
+      if (normalizedCustomer != null && normalizedCustomer.isNotEmpty) {
+        final existing = await txn.query(
+          'customers',
+          columns: ['id'],
+          where: 'name = ? COLLATE NOCASE',
+          whereArgs: [normalizedCustomer],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          customerId = existing.first['id'] as int;
+        } else {
+          customerId = await txn.insert('customers', {
+            'name': normalizedCustomer,
+            'created_at': createdAt,
+          });
+        }
+      }
       final saleId = await txn.insert('sales', {
         'invoice_number': invoice,
-        'customer_name': customerName?.trim().isEmpty == true ? null : customerName?.trim(),
+        'customer_id': customerId,
+        'customer_name': normalizedCustomer?.isEmpty == true ? null : normalizedCustomer,
         'subtotal': subtotal,
         'discount': discount,
         'total': total,
@@ -132,7 +152,7 @@ class SaleRepository {
         paidAmount: paidAmount,
         paymentMethod: paymentMethod,
         createdAt: createdAt,
-        customerName: customerName?.trim().isEmpty == true ? null : customerName?.trim(),
+        customerName: normalizedCustomer?.isEmpty == true ? null : normalizedCustomer,
       );
     });
   }
