@@ -158,7 +158,7 @@ class SaleRepository {
         final productId = line.product.id!;
         final rows = await txn.query(
           'products',
-          columns: ['id', 'name', 'unit', 'selling_price', 'stock_quantity', 'is_active'],
+          columns: ['id', 'name', 'unit', 'selling_price', 'purchase_price', 'stock_quantity', 'is_active'],
           where: 'id = ?',
           whereArgs: [productId],
           limit: 1,
@@ -177,6 +177,7 @@ class SaleRepository {
           'unit': current['unit'],
           'quantity': line.quantity,
           'unit_price': current['selling_price'],
+          'cost_price': current['purchase_price'],
           'line_total': line.lineTotal,
         });
         // المخزون السالب مسموح حسب سياسة المشروع؛ كل حركة بيع تسجل هنا.
