@@ -34,17 +34,28 @@ class CustomerRepository {
   // يعرض الأرصدة المحسوبة من الفواتير والتحصيلات الفعلية.
   Future<List<CustomerBalance>> balances({String query = ''}) async {
     final rows = await _database.rawQuery('''
-      SELECT c.id, c.name, COUNT(DISTINCT s.id) AS sales_count,
-        MAX(0, COALESCE(SUM(CASE WHEN s.id IS NULL THEN 0 ELSE s.total - s.paid_amount END), 0) - COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr JOIN sales rs ON rs.id = sr.sale_id WHERE rs.customer_id = c.id), 0)) AS total_debt,
+      SELECT c.id, c.name,
+        (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.id) AS sales_count,
+        COALESCE((
+          SELECT SUM(MAX(0,
+            (s.total - s.paid_amount) - MIN(
+              s.total - s.paid_amount,
+              COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+            )
+          )) FROM sales s WHERE s.customer_id = c.id
+        ), 0) AS total_debt,
         COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0) AS total_paid
       FROM customers c
-      LEFT JOIN sales s ON s.customer_id = c.id
       WHERE c.name LIKE ?
-      GROUP BY c.id, c.name
-      ORDER BY (COALESCE(SUM(CASE WHEN s.id IS NULL THEN 0 ELSE s.total - s.paid_amount END), 0)
-        - COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr JOIN sales rs ON rs.id = sr.sale_id WHERE rs.customer_id = c.id), 0)
-        - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0)) DESC,
-        c.name COLLATE NOCASE ASC
+      ORDER BY (
+        COALESCE((SELECT SUM(MAX(0,
+          (s.total - s.paid_amount) - MIN(
+            s.total - s.paid_amount,
+            COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+          )
+        )) FROM sales s WHERE s.customer_id = c.id), 0)
+        - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0)
+      ) DESC, c.name COLLATE NOCASE ASC
     ''', ['%${query.trim()}%']);
     return rows.map((row) => CustomerBalance(
       id: row['id'] as int,
@@ -111,17 +122,18 @@ class CustomerRepository {
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
       final result = await txn.rawQuery('''
-        SELECT COALESCE(SUM(total - paid_amount), 0) AS debt,
-          COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected,
-          COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr JOIN sales rs ON rs.id = sr.sale_id WHERE rs.customer_id = ?), 0) AS returned
-        FROM sales WHERE customer_id = ?
-      ''', [customerId, customerId, customerId]);
+        SELECT COALESCE(SUM(MAX(0,
+          (s.total - s.paid_amount) - MIN(
+            s.total - s.paid_amount,
+            COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+          )
+        )), 0) AS debt,
+        COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected
+        FROM sales s WHERE s.customer_id = ?
+      ''', [customerId, customerId]);
       final debt = (result.first['debt'] as num).toInt();
       final collected = (result.first['collected'] as num).toInt();
-      final returned = (result.first['returned'] as num).toInt();
-      final outstanding = (debt - returned - collected)
-          .clamp(0, 1 << 62)
-          .toInt();
+      final outstanding = (debt - collected).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) {
         throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق ($outstanding ج.س).');
       }
