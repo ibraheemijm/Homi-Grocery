@@ -229,6 +229,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _checkout() async {
     final paidController = TextEditingController(text: '$_total');
     String method = 'نقدي';
+    String paymentChannel = 'نقدي';
     final result = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(builder: (context, refreshDialog) => AlertDialog(
@@ -256,6 +257,18 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           const SizedBox(height: 12),
           TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: paymentChannel,
+            decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+              DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+            ],
+            onChanged: (value) {
+              if (value != null) refreshDialog(() => paymentChannel = value);
+            },
+          ),
           const SizedBox(height: 8),
           const Text('المتبقي سيظهر في الفاتورة. متابعة ديون الزبائن ستضاف ضمن وحدة الحسابات.', style: TextStyle(fontSize: 12)),
         ])),
@@ -270,7 +283,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
               return;
             }
-            Navigator.pop(dialogContext, {'paid': paid, 'method': method});
+            Navigator.pop(dialogContext, {'paid': paid, 'method': method, 'channel': paymentChannel});
           }, child: const Text('حفظ الفاتورة')),
         ],
       )),
@@ -285,6 +298,7 @@ class _SalesScreenState extends State<SalesScreen> {
         discount: _discount,
         paidAmount: result['paid']! as int,
         paymentMethod: result['method']! as String,
+        paymentChannel: result['channel']! as String,
         customerName: _customer.text,
       );
       _cart = [];
