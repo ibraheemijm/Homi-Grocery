@@ -86,6 +86,49 @@ void main() {
     );
   });
 
+  test('يعرض كشف الحساب الفواتير والمرتجعات والتحصيلات بترتيب زمني', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: 'خالد',
+    );
+    final customer = (await customers.balances()).single;
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+      note: 'إرجاع عبوة',
+    );
+    await customers.recordPayment(
+      customerId: customer.id,
+      amount: 100,
+      note: 'تحصيل نقدي',
+    );
+
+    final ledger = await customers.ledger(customer.id);
+    expect(ledger.length, 3);
+    expect(ledger[0].title, contains('فاتورة'));
+    expect(ledger[0].isCredit, isFalse);
+    expect(ledger[1].title, contains('مرتجع'));
+    expect(ledger[1].isCredit, isTrue);
+    expect(ledger[1].note, 'إرجاع عبوة');
+    expect(ledger[2].title, 'تحصيل من الزبون');
+    expect(ledger[2].isCredit, isTrue);
+    expect((await customers.balances()).single.balance, 0);
+  });
+
   test('يرفض التحصيل الذي يتجاوز الرصيد دون تسجيله', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'دقيق', sellingPrice: 200, stockQuantity: 4,
