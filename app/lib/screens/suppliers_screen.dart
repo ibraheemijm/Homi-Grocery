@@ -235,10 +235,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       decoration: const InputDecoration(labelText: 'الصنف', border: OutlineInputBorder()),
                       items: [for (final p in _products) DropdownMenuItem(value: p.id, child: Text('${p.name} • المخزون ${p.stockQuantity}', overflow: TextOverflow.ellipsis))],
                       onChanged: (v) {
-                        if (v != null) refresh(() {
-                          draft.productId = v;
-                          draft.cost.text = _products.firstWhere((p) => p.id == v).purchasePrice.toString();
-                        });
+                        if (v != null) {
+                          refresh(() {
+                            draft.productId = v;
+                            draft.cost.text = _products.firstWhere((p) => p.id == v).purchasePrice.toString();
+                          });
+                        }
                       },
                     ),
                     const SizedBox(height: 8),
