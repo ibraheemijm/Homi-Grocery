@@ -258,16 +258,20 @@ class _CashboxScreenState extends State<CashboxScreen> {
                         DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
                       ],
                       onChanged: (value) {
-                        if (value != null) setState(() {
-                          _paymentFilter = value;
-                          _reload();
-                        });
+                        if (value != null) {
+                          setState(() {
+                            _paymentFilter = value;
+                            _reload();
+                          });
+                        }
                       },
                     ),
                   ),
                 ]),
-                  Text('${summary.todayCount} حركة', style: theme.textTheme.bodySmall),
-                ]),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('${data.movements.length} حركة معروضة', style: theme.textTheme.bodySmall),
+                ),
                 const SizedBox(height: 10),
                 if (data.movements.isEmpty)
                   Card(child: Padding(
