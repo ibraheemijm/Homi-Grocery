@@ -13,6 +13,7 @@ class CashboxScreen extends StatefulWidget {
 
 class _CashboxScreenState extends State<CashboxScreen> {
   late Future<_CashboxData> _data;
+  String _paymentFilter = 'الكل';
 
   @override
   void initState() {
@@ -27,7 +28,10 @@ class _CashboxScreenState extends State<CashboxScreen> {
   Future<_CashboxData> _load() async {
     final db = await GroceryDatabase.open();
     final repo = CashboxRepository(db);
-    return _CashboxData(await repo.summary(), await repo.recent());
+    return _CashboxData(
+      await repo.summary(),
+      await repo.recent(paymentMethod: _paymentFilter == 'الكل' ? null : _paymentFilter),
+    );
   }
 
   Future<void> _addMovement() async {
@@ -222,15 +226,55 @@ class _CashboxScreenState extends State<CashboxScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                Text('تفصيل المقبوضات والمدفوعات حسب الطريقة', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                LayoutBuilder(builder: (context, constraints) {
+                  final width = (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _SummaryCard(title: 'المقبوض نقدًا', amount: summary.todayCashIncome, icon: Icons.payments_outlined, color: Colors.green, width: width, money: _money),
+                      _SummaryCard(title: 'المدفوع نقدًا', amount: summary.todayCashExpense, icon: Icons.money_off_csred_outlined, color: Colors.red, width: width, money: _money),
+                      _SummaryCard(title: 'المقبوض بتحويل بنكي', amount: summary.todayBankIncome, icon: Icons.account_balance_outlined, color: Colors.green, width: width, money: _money),
+                      _SummaryCard(title: 'المدفوع بتحويل بنكي', amount: summary.todayBankExpense, icon: Icons.account_balance_outlined, color: Colors.red, width: width, money: _money),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 24),
                 Row(children: [
                   Expanded(child: Text('حركات اليوم', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 160,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _paymentFilter,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'فرز حسب الطريقة', isDense: true),
+                      items: const [
+                        DropdownMenuItem(value: 'الكل', child: Text('كل الطرق')),
+                        DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                        DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setState(() {
+                          _paymentFilter = value;
+                          _reload();
+                        });
+                      },
+                    ),
+                  ),
+                ]),
                   Text('${summary.todayCount} حركة', style: theme.textTheme.bodySmall),
                 ]),
                 const SizedBox(height: 10),
                 if (data.movements.isEmpty)
-                  const Card(child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text('لا توجد حركات مسجلة اليوم. ستظهر هنا المقبوضات والمدفوعات الجديدة.')),
+                  Card(child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(child: Text(_paymentFilter == 'الكل'
+                        ? 'لا توجد حركات مسجلة اليوم. ستظهر هنا المقبوضات والمدفوعات الجديدة.'
+                        : 'لا توجد حركات مسجلة اليوم بطريقة الدفع: $_paymentFilter.')),
                   ))
                 else
                   ...data.movements.map((movement) => Card(
