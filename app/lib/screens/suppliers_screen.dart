@@ -184,6 +184,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     }
 
     int supplierId = _suppliers.first.id;
+    String paymentChannel = 'نقدي';
     final drafts = <_PurchaseDraftLine>[
       _PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString()),
     ];
@@ -279,6 +280,16 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             const SizedBox(height: 10),
             TextField(controller: paid, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المدفوع الآن (ج.س)', border: OutlineInputBorder())),
             const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: paymentChannel,
+              decoration: const InputDecoration(labelText: 'طريقة دفع المبلغ', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+              ],
+              onChanged: (value) { if (value != null) refresh(() => paymentChannel = value); },
+            ),
+            const SizedBox(height: 10),
             TextField(controller: note, decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder())),
             const SizedBox(height: 10),
             Container(
@@ -331,6 +342,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           discount: int.parse(discount.text.trim()),
           paidAmount: int.parse(paid.text.trim()),
           paymentMethod: int.parse(paid.text.trim()) == 0 ? 'آجل' : 'جزئي',
+          paymentChannel: paymentChannel,
           note: note.text,
         );
         await _load();
