@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 9;
+  static const int _version = 10;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -43,6 +43,7 @@ class GroceryDatabase {
         await createSaleReturnRefundsSchema(db);
         await createCashTransactionsSchema(db);
         await createSupplierReturnsSchema(db);
+        await createCostOfGoodsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -69,6 +70,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 9) {
           await createSupplierReturnsSchema(db);
+        }
+        if (oldVersion < 10) {
+          await createCostOfGoodsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -367,6 +371,14 @@ class GroceryDatabase {
     ''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_returns_purchase ON supplier_returns(purchase_id, created_at)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_return_items_item ON supplier_return_items(purchase_item_id)');
+  }
+
+  // تكلفة الصنف المحفوظة وقت البيع؛ null تعني أن الفاتورة قديمة ولا يمكن إثبات تكلفتها.
+  static Future<void> createCostOfGoodsSchema(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(sale_items)');
+    if (!columns.any((column) => column['name'] == 'cost_price')) {
+      await db.execute('ALTER TABLE sale_items ADD COLUMN cost_price INTEGER CHECK (cost_price IS NULL OR cost_price >= 0)');
+    }
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
