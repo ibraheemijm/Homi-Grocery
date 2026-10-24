@@ -24,10 +24,21 @@ class DashboardRepository {
     final start = DateTime(localNow.year, localNow.month, localNow.day).toUtc();
     final end = start.add(const Duration(days: 1));
     final today = await _database.rawQuery('''
-      SELECT COALESCE(SUM(total), 0) AS sales,
-             COALESCE(SUM(paid_amount), 0) AS paid
-      FROM sales WHERE created_at >= ? AND created_at < ?
-    ''', [start.toIso8601String(), end.toIso8601String()]);
+      SELECT
+        COALESCE((SELECT SUM(total) FROM sales
+          WHERE created_at >= ? AND created_at < ?), 0)
+        - COALESCE((SELECT SUM(amount) FROM sale_returns
+          WHERE created_at >= ? AND created_at < ?), 0) AS sales,
+        COALESCE((SELECT SUM(paid_amount) FROM sales
+          WHERE created_at >= ? AND created_at < ?), 0)
+        - COALESCE((SELECT SUM(amount) FROM sale_return_refunds
+          WHERE created_at >= ? AND created_at < ?), 0) AS paid
+    ''', [
+      start.toIso8601String(), end.toIso8601String(),
+      start.toIso8601String(), end.toIso8601String(),
+      start.toIso8601String(), end.toIso8601String(),
+      start.toIso8601String(), end.toIso8601String(),
+    ]);
     final debt = await _database.rawQuery('''
       SELECT
         COALESCE((SELECT SUM(total - paid_amount) FROM sales), 0) -
