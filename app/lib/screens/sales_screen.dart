@@ -147,7 +147,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ..._matches.take(30).map((product) => ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('السعر: \${product.sellingPrice} ج.س • المتاح: \${_quantity(product.stockQuantity)} \${product.unit}'),
+            subtitle: Text('السعر: ${product.sellingPrice} ج.س • المتاح: ${_quantity(product.stockQuantity)} ${product.unit}'),
             trailing: IconButton.filledTonal(
               tooltip: 'إضافة إلى الفاتورة',
               onPressed: () => _addProduct(product),
@@ -165,7 +165,7 @@ class _SalesScreenState extends State<SalesScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Expanded(child: Text('الفاتورة الحالية', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-          Text('\${_cart.length} صنف'),
+          Text('${_cart.length} صنف'),
         ]),
         const SizedBox(height: 8),
         if (_cart.isEmpty)
@@ -179,7 +179,7 @@ class _SalesScreenState extends State<SalesScreen> {
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(line.product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text('\${line.lineTotal} ج.س', style: theme.textTheme.bodySmall),
+                  Text('${line.lineTotal} ج.س', style: theme.textTheme.bodySmall),
                 ])),
                 IconButton(onPressed: () => _changeQuantity(index, line.quantity - 1), icon: const Icon(Icons.remove_circle_outline)),
                 SizedBox(width: 34, child: Text(_quantity(line.quantity), textAlign: TextAlign.center)),
@@ -218,13 +218,13 @@ class _SalesScreenState extends State<SalesScreen> {
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
       Expanded(child: Text(label, style: TextStyle(fontWeight: strong ? FontWeight.w800 : FontWeight.normal))),
-      Text('\$value ج.س', style: TextStyle(fontWeight: strong ? FontWeight.w900 : FontWeight.w600, fontSize: strong ? 18 : 14)),
+      Text('$1 ج.س', style: TextStyle(fontWeight: strong ? FontWeight.w900 : FontWeight.w600, fontSize: strong ? 18 : 14)),
     ]),
   );
 
   // اختيار طريقة الدفع والمبلغ المستلم، مع السماح بالبيع الآجل والجزئي.
   Future<void> _checkout() async {
-    final paidController = TextEditingController(text: '\$_total');
+    final paidController = TextEditingController(text: '$1');
     String method = 'نقدي';
     final result = await showDialog<Map<String, Object?>>(
       context: context,
@@ -245,7 +245,7 @@ class _SalesScreenState extends State<SalesScreen> {
               if (value == null) return;
               refreshDialog(() {
                 method = value;
-                if (method == 'نقدي') paidController.text = '\$_total';
+                if (method == 'نقدي') paidController.text = '$1';
                 if (method == 'آجل') paidController.text = '0';
               });
             },
@@ -295,7 +295,7 @@ class _SalesScreenState extends State<SalesScreen> {
         builder: (context) => AlertDialog(
           title: const Text('تم حفظ الفاتورة'),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('رقم الفاتورة: \${sale.invoiceNumber}'),
+            Text('رقم الفاتورة: ${sale.invoiceNumber}'),
             const SizedBox(height: 8),
             _totalRow('الإجمالي', sale.total),
             _totalRow('المستلم', sale.paidAmount),
@@ -325,8 +325,8 @@ class _SalesScreenState extends State<SalesScreen> {
             contentPadding: EdgeInsets.zero,
             leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
             title: Text(sale.invoiceNumber),
-            subtitle: Text('\${sale.customerName?.isNotEmpty == true ? sale.customerName : 'زبون نقدي'} • \${sale.paymentMethod} • متبقي \${sale.remainingAmount} ج.س'),
-            trailing: Text('\${sale.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('${sale.customerName?.isNotEmpty == true ? sale.customerName : 'زبون نقدي'} • ${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س'),
+            trailing: Text('${sale.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
           )),
       ]),
     ),
