@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 4;
+  static const int _version = 5;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -38,6 +38,7 @@ class GroceryDatabase {
         await createSalesSchema(db);
         await createCustomersSchema(db);
         await createStockMovementsSchema(db);
+        await createSalesReturnsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -49,6 +50,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 4) {
           await createStockMovementsSchema(db);
+        }
+        if (oldVersion < 5) {
+          await createSalesReturnsSchema(db);
         }
       },
     );
@@ -198,6 +202,34 @@ class GroceryDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id, created_at)',
+    );
+  }
+
+  // سجل المرتجعات وبنودها لضمان عدم تجاوز الكميات المباعة.
+  static Future<void> createSalesReturnsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL REFERENCES sales(id),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        note TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_return_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL REFERENCES sale_returns(id),
+        sale_item_id INTEGER NOT NULL REFERENCES sale_items(id),
+        quantity REAL NOT NULL CHECK (quantity > 0),
+        amount INTEGER NOT NULL CHECK (amount >= 0)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_returns_sale ON sale_returns(sale_id, created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_items_item ON sale_return_items(sale_item_id)',
     );
   }
 
