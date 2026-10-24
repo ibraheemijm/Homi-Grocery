@@ -16,6 +16,10 @@ class DailyReport {
     required this.grossProfit,
     required this.cashIncome,
     required this.cashExpense,
+    required this.cashOnlyIncome,
+    required this.cashOnlyExpense,
+    required this.bankTransferIncome,
+    required this.bankTransferExpense,
     required this.lowStockCount,
   });
 
@@ -33,6 +37,10 @@ class DailyReport {
   final int? grossProfit;
   final int cashIncome;
   final int cashExpense;
+  final int cashOnlyIncome;
+  final int cashOnlyExpense;
+  final int bankTransferIncome;
+  final int bankTransferExpense;
   final int lowStockCount;
   int get cashNet => cashIncome - cashExpense;
 }
@@ -95,7 +103,11 @@ class ReportsRepository {
     final cash = await _database.rawQuery('''
       SELECT
         COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS expense,
+        COALESCE(SUM(CASE WHEN direction = 'in' AND payment_method = 'نقدي' THEN amount ELSE 0 END), 0) AS cash_income,
+        COALESCE(SUM(CASE WHEN direction = 'out' AND payment_method = 'نقدي' THEN amount ELSE 0 END), 0) AS cash_expense,
+        COALESCE(SUM(CASE WHEN direction = 'in' AND payment_method = 'تحويل بنكي' THEN amount ELSE 0 END), 0) AS bank_income,
+        COALESCE(SUM(CASE WHEN direction = 'out' AND payment_method = 'تحويل بنكي' THEN amount ELSE 0 END), 0) AS bank_expense
       FROM cash_transactions WHERE created_at >= ? AND created_at < ?
     ''', [start, end]);
     final stock = await _database.rawQuery('''
@@ -123,6 +135,10 @@ class ReportsRepository {
               (returnedCost.single['cost'] as num).round(),
       cashIncome: (cash.single['income'] as num).toInt(),
       cashExpense: (cash.single['expense'] as num).toInt(),
+      cashOnlyIncome: (cash.single['cash_income'] as num).toInt(),
+      cashOnlyExpense: (cash.single['cash_expense'] as num).toInt(),
+      bankTransferIncome: (cash.single['bank_income'] as num).toInt(),
+      bankTransferExpense: (cash.single['bank_expense'] as num).toInt(),
       lowStockCount: (stock.single['count'] as num).toInt(),
     );
   }
