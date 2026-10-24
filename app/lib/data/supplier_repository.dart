@@ -249,7 +249,7 @@ class SupplierRepository {
     return _database.transaction((txn) async {
       final purchases = await txn.query(
         'purchases',
-        columns: ['id', 'supplier_id', 'invoice_number'],
+        columns: ['id', 'supplier_id', 'invoice_number', 'subtotal', 'total'],
         where: 'id = ?',
         whereArgs: [purchaseId],
         limit: 1,
@@ -262,10 +262,12 @@ class SupplierRepository {
       var total = 0;
       for (final entry in quantitiesByPurchaseItemId.entries) {
         final rows = await txn.rawQuery('''
-          SELECT pi.id, pi.product_id, pi.product_name, pi.quantity, pi.unit_cost,
-            pr.stock_quantity,
-            COALESCE((SELECT SUM(sri.quantity) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_quantity
+          SELECT pi.id, pi.product_id, pi.product_name, pi.quantity, pi.unit_cost, pi.line_total,
+            p.subtotal AS purchase_subtotal, p.total AS purchase_total, pr.stock_quantity,
+            COALESCE((SELECT SUM(sri.quantity) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_quantity,
+            COALESCE((SELECT SUM(sri.line_total) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_amount
           FROM purchase_items pi
+          JOIN purchases p ON p.id = pi.purchase_id
           JOIN products pr ON pr.id = pi.product_id
           WHERE pi.id = ? AND pi.purchase_id = ?
         ''', [entry.key, purchaseId]);
@@ -282,7 +284,20 @@ class SupplierRepository {
           throw ArgumentError('المخزون الحالي لا يكفي لإرجاع هذه الكمية.');
         }
         final unitCost = (row['unit_cost'] as num).toInt();
-        final lineTotal = (quantity * unitCost).round();
+        final originalLineTotal = (row['line_total'] as num).toInt();
+        final purchaseSubtotal = (row['purchase_subtotal'] as num).toInt();
+        final purchaseTotal = (row['purchase_total'] as num).toInt();
+        final previousAmount = (row['returned_amount'] as num).toInt();
+        // يوزّع خصم فاتورة الشراء نسبيًا على البنود، ويستخدم المجموع التراكمي
+        // حتى لا تختلف القيمة إذا قُسّم إرجاع الكمية إلى عمليات متعددة.
+        final cumulativeAmount = purchaseSubtotal == 0
+            ? 0
+            : (originalLineTotal * purchaseTotal * (alreadyReturned + quantity) /
+                    (purchaseSubtotal * original))
+                .round();
+        final lineTotal = (cumulativeAmount - previousAmount)
+            .clamp(0, originalLineTotal)
+            .toInt();
         total += lineTotal;
         selectedLines.add({
           'purchase_item_id': entry.key,
