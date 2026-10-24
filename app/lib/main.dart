@@ -258,10 +258,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           Divider(color: theme.dividerColor),
           const ListTile(
-            leading: const Icon(Icons.sync_rounded, color: brandGreen),
-            title: const Text('جاهزية العمل دون إنترنت', style: TextStyle(fontSize: 12)),
-            subtitle: const Text('سيُفعّل الحفظ المحلي مع قاعدة البيانات', style: TextStyle(fontSize: 11)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            leading: Icon(Icons.sync_rounded, color: brandGreen),
+            title: Text('جاهزية العمل دون إنترنت', style: TextStyle(fontSize: 12)),
+            subtitle: Text('سيُفعّل الحفظ المحلي مع قاعدة البيانات', style: TextStyle(fontSize: 11)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 8),
           ),
         ],
       ),
@@ -316,7 +316,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const CircleAvatar(
                     backgroundColor: brandMint,
                     foregroundColor: brandGreen,
-                    child: const Icon(Icons.person_rounded),
+                    child: Icon(Icons.person_rounded),
                   ),
                 ],
               ),
