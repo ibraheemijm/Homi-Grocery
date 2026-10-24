@@ -359,8 +359,9 @@ class SupplierRepository {
       if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
       final result = await txn.rawQuery('''
         SELECT COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0) AS debt,
-          COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) AS paid
-      ''', [supplierId, supplierId]);
+          COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) +
+          COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid
+      ''', [supplierId, supplierId, supplierId]);
       final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt()).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) throw ArgumentError('الدفع يتجاوز المستحق للمورد ($outstanding ج.س).');
       final createdAt = DateTime.now().toUtc().toIso8601String();
