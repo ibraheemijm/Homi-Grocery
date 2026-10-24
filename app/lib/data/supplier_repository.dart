@@ -423,8 +423,11 @@ class SupplierRepository {
     });
   }
 
-  Future<void> recordPayment({required int supplierId, required int amount, String? note}) async {
+  Future<void> recordPayment({required int supplierId, required int amount, String paymentMethod = 'نقدي', String? note}) async {
     if (amount <= 0) throw ArgumentError('قيمة الدفع يجب أن تكون أكبر من صفر.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
+      throw ArgumentError('طريقة الدفع غير مدعومة.');
+    }
     await _database.transaction((txn) async {
       final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
       if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
@@ -446,7 +449,7 @@ class SupplierRepository {
         'direction': 'out',
         'category': 'سداد للمورد',
         'amount': amount,
-        'payment_method': 'نقدي',
+        'payment_method': paymentMethod,
         'reference_type': 'supplier_payment',
         'reference_id': paymentId,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
