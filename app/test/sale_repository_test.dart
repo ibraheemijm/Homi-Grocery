@@ -21,6 +21,7 @@ void main() {
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
+    await GroceryDatabase.createCostOfGoodsSchema(database);
     products = ProductRepository(database);
     sales = SaleRepository(database);
   });
@@ -56,6 +57,28 @@ void main() {
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['direction'], 'in');
     expect(cashEntries.single['amount'], 1000);
+  });
+
+  test('يحفظ تكلفة الصنف وقت البيع لا سعر الشراء الذي قد يتغير لاحقًا', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'قهوة', purchasePrice: 40, sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 200,
+      paymentMethod: 'نقدي',
+    );
+    final item = (await database.query(
+      'sale_items', where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single;
+    expect(item['cost_price'], 40);
+    await database.update('products', {'purchase_price': 75}, where: 'id = ?', whereArgs: [productId]);
+    final saved = (await database.query(
+      'sale_items', where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single;
+    expect(saved['cost_price'], 40);
   });
 
   test('يرفض الخصم الزائد دون حفظ فاتورة أو تعديل المخزون', () async {
