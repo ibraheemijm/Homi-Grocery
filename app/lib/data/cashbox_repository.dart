@@ -46,6 +46,10 @@ class CashboxSummary {
     required this.totalIncome,
     required this.totalExpense,
     required this.todayCount,
+    required this.todayCashIncome,
+    required this.todayCashExpense,
+    required this.todayBankIncome,
+    required this.todayBankExpense,
   });
 
   final int todayIncome;
@@ -53,7 +57,13 @@ class CashboxSummary {
   final int totalIncome;
   final int totalExpense;
   final int todayCount;
+  final int todayCashIncome;
+  final int todayCashExpense;
+  final int todayBankIncome;
+  final int todayBankExpense;
 
+  int get todayCashNet => todayCashIncome - todayCashExpense;
+  int get todayBankNet => todayBankIncome - todayBankExpense;
   int get todayNet => todayIncome - todayExpense;
   int get currentBalance => totalIncome - totalExpense;
 }
@@ -73,9 +83,13 @@ class CashboxRepository {
         COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND direction = 'out' THEN amount ELSE 0 END), 0) AS today_expense,
         COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE 0 END), 0) AS total_income,
         COALESCE(SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END), 0) AS total_expense,
-        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS today_count
+        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END), 0) AS today_count,
+        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND direction = 'in' AND payment_method = 'نقدي' THEN amount ELSE 0 END), 0) AS cash_income,
+        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND direction = 'out' AND payment_method = 'نقدي' THEN amount ELSE 0 END), 0) AS cash_expense,
+        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND direction = 'in' AND payment_method = 'تحويل بنكي' THEN amount ELSE 0 END), 0) AS bank_income,
+        COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < ? AND direction = 'out' AND payment_method = 'تحويل بنكي' THEN amount ELSE 0 END), 0) AS bank_expense
       FROM cash_transactions
-    ''', [start, end, start, end, start, end]);
+    ''', [start, end, start, end, start, end, start, end, start, end, start, end, start, end]);
     final row = rows.single;
     return CashboxSummary(
       todayIncome: (row['today_income'] as num).toInt(),
@@ -83,18 +97,24 @@ class CashboxRepository {
       totalIncome: (row['total_income'] as num).toInt(),
       totalExpense: (row['total_expense'] as num).toInt(),
       todayCount: (row['today_count'] as num).toInt(),
+      todayCashIncome: (row['cash_income'] as num).toInt(),
+      todayCashExpense: (row['cash_expense'] as num).toInt(),
+      todayBankIncome: (row['bank_income'] as num).toInt(),
+      todayBankExpense: (row['bank_expense'] as num).toInt(),
     );
   }
 
-  Future<List<CashTransaction>> recent({DateTime? day, int limit = 100}) async {
+  Future<List<CashTransaction>> recent({DateTime? day, String? paymentMethod, int limit = 100}) async {
     final selected = day ?? DateTime.now();
     final localStart = DateTime(selected.year, selected.month, selected.day);
     final start = localStart.toUtc().toIso8601String();
     final end = localStart.add(const Duration(days: 1)).toUtc().toIso8601String();
     final rows = await _database.query(
       'cash_transactions',
-      where: 'created_at >= ? AND created_at < ?',
-      whereArgs: [start, end],
+      where: paymentMethod == null
+          ? 'created_at >= ? AND created_at < ?'
+          : 'created_at >= ? AND created_at < ? AND payment_method = ?',
+      whereArgs: paymentMethod == null ? [start, end] : [start, end, paymentMethod],
       orderBy: 'created_at DESC, id DESC',
       limit: limit,
     );
