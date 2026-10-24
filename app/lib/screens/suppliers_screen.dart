@@ -190,7 +190,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           width: 460,
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<int>(
-              value: supplierId,
+              initialValue: supplierId,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'المورد', border: OutlineInputBorder()),
               items: [for (final s in _suppliers) DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis))],
@@ -198,7 +198,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
-              value: productId,
+              initialValue: productId,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'الصنف', border: OutlineInputBorder()),
               items: [for (final p in _products) DropdownMenuItem(value: p.id, child: Text('${p.name} • المخزون ${p.stockQuantity}', overflow: TextOverflow.ellipsis))],
