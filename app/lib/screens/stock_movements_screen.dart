@@ -152,6 +152,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
           note: note.text,
         );
         _selectedProductId = productId;
+        _products = await _productsRepository!.search('');
         await _loadHistory();
         if (mounted) {
           setState(() {});
@@ -171,7 +172,13 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selected = _products.where((p) => p.id == _selectedProductId).firstOrNull;
+    GroceryProduct? selected;
+    for (final product in _products) {
+      if (product.id == _selectedProductId) {
+        selected = product;
+        break;
+      }
+    }
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SafeArea(
