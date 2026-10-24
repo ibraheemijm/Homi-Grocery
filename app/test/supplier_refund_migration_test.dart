@@ -20,7 +20,6 @@ void main() {
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
     await GroceryDatabase.createSupplierReturnsSchema(database);
-    await GroceryDatabase.createCostOfGoodsSchema(database);
   });
 
   tearDown(() async => database.close());
@@ -41,6 +40,27 @@ void main() {
       'is_active': 1,
       'created_at': createdAt,
     });
+    // بيانات بيع موجودة قبل الترحيل من v9، وتكلفتها التاريخية يجب أن تبقى مجهولة.
+    final saleId = await database.insert('sales', {
+      'invoice_number': 'OLD-SALE-V9',
+      'customer_name': null,
+      'subtotal': 80,
+      'discount': 0,
+      'total': 80,
+      'paid_amount': 80,
+      'payment_method': 'نقدي',
+      'created_at': createdAt,
+    });
+    final saleItemId = await database.insert('sale_items', {
+      'sale_id': saleId,
+      'product_id': productId,
+      'product_name': 'صنف قديم',
+      'unit': 'حبة',
+      'quantity': 1,
+      'unit_price': 80,
+      'line_total': 80,
+    });
+
     final purchaseId = await database.insert('purchases', {
       'invoice_number': 'OLD-PURCHASE-V10',
       'supplier_id': supplierId,
@@ -76,7 +96,10 @@ void main() {
       'line_total': 50,
     });
 
+    // هاتان هما خطوتا الترحيل من مخطط v9 إلى v11.
+    await GroceryDatabase.createCostOfGoodsSchema(database);
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
+    // يجب أن يكون تطبيق الخطوة الأخيرة أكثر من مرة آمنًا.
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
 
     final savedReturn = (await database.query(
@@ -100,5 +123,10 @@ void main() {
     expect(indexes, hasLength(1));
     expect(costColumn.any((column) => column['name'] == 'cost_price'), isTrue);
     expect(await database.query('supplier_return_items'), hasLength(1));
+    final oldSaleItem = (await database.query(
+      'sale_items', where: 'id = ?', whereArgs: [saleItemId],
+    )).single;
+    expect(oldSaleItem['line_total'], 80);
+    expect(oldSaleItem['cost_price'], isNull);
   });
 }
