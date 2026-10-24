@@ -146,6 +146,70 @@ void main() {
     expect(await database.query('sale_returns'), hasLength(1));
   });
 
+  test('لا يسمح برد نقد يتجاوز فائض المرتجع عن الدين الأصلي للفاتورة', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'منظف', sellingPrice: 100, stockQuantity: 4,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'جزئي',
+      customerName: 'زبون مرتجع',
+    );
+    final itemId = (await database.query(
+      'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    final returned = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 2},
+    );
+    expect(returned.amount, 200);
+    expect(await sales.maximumRefundableAmount(sale.id), 100);
+
+    await expectLater(
+      sales.recordReturnRefund(returnId: returned.id, amount: 101),
+      throwsArgumentError,
+    );
+    await sales.recordReturnRefund(
+      returnId: returned.id, amount: 80, paymentMethod: 'نقدي', note: 'رد فعلي',
+    );
+    expect(await sales.maximumRefundableAmount(sale.id), 20);
+    await sales.recordReturnRefund(returnId: returned.id, amount: 20);
+    expect(await sales.maximumRefundableAmount(sale.id), 0);
+    expect(await database.query('sale_return_refunds'), hasLength(2));
+  });
+
+  test('المرتجع لفاتورة مدفوعة بالكامل يسمح برد قيمة المرتجع فقط', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'صابون', sellingPrice: 75, stockQuantity: 3,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 150,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await database.query(
+      'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single['id'] as int;
+    final returned = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+
+    expect(await sales.maximumRefundableAmount(sale.id), 75);
+    await sales.recordReturnRefund(returnId: returned.id, amount: 75);
+    expect(await sales.maximumRefundableAmount(sale.id), 0);
+    await expectLater(
+      sales.recordReturnRefund(returnId: returned.id, amount: 1),
+      throwsArgumentError,
+    );
+  });
+
   test('يوزع خصم الفاتورة على المرتجعات الجزئية دون تجاوز القيمة المدفوعة', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'أرز', sellingPrice: 100, stockQuantity: 4,
