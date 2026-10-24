@@ -76,6 +76,21 @@ class SaleRepository {
     if (paidAmount > total) {
       throw ArgumentError('المبلغ المدفوع أكبر من إجمالي الفاتورة.');
     }
+    if (!const ['نقدي', 'جزئي', 'آجل'].contains(paymentMethod)) {
+      throw ArgumentError('طريقة السداد غير معروفة.');
+    }
+    if (paymentMethod == 'نقدي' && paidAmount != total) {
+      throw ArgumentError('الفاتورة النقدية يجب أن تُدفع بالكامل.');
+    }
+    if (paymentMethod == 'آجل' && paidAmount != 0) {
+      throw ArgumentError('الفاتورة الآجلة لا تسجل مبلغًا مدفوعًا عند البيع.');
+    }
+    if (paymentMethod == 'جزئي' && (paidAmount <= 0 || paidAmount >= total)) {
+      throw ArgumentError('الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من الإجمالي.');
+    }
+    if (paidAmount < total && customerName?.trim().isNotEmpty != true) {
+      throw ArgumentError('اسم الزبون مطلوب لتسجيل الرصيد المتبقي في دفتر الديون.');
+    }
 
     final now = DateTime.now().toUtc();
     final invoice = 'HG-${now.microsecondsSinceEpoch}';
