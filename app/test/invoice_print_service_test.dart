@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/data/invoice_print_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Database database;
   late InvoicePrintService printer;
 
