@@ -118,4 +118,42 @@ void main() {
     expect(invoices, isEmpty);
   });
 
+  test('يعرض اسم الزبون النقدي عند غياب اسم الزبون', () async {
+    await database.insert('sales', {
+      'invoice_number': 'INV-CASH',
+      'customer_name': null,
+      'subtotal': 75,
+      'discount': 0,
+      'total': 75,
+      'paid_amount': 75,
+      'payment_method': 'نقدي',
+      'created_at': '2026-01-03T10:00:00.000',
+    });
+
+    final invoices = await DashboardRepository(database).loadRecentInvoices();
+
+    expect(invoices.single.customerName, 'زبون نقدي');
+  });
+
+  test('يكسر تعادل وقت الإنشاء بمعرّف الفاتورة ويحترم حد القائمة', () async {
+    for (var id = 1; id <= 3; id++) {
+      await database.insert('sales', {
+        'id': id,
+        'invoice_number': 'INV-$id',
+        'customer_name': 'زبون $id',
+        'subtotal': 100,
+        'discount': 0,
+        'total': 100,
+        'paid_amount': 100,
+        'payment_method': 'نقدي',
+        'created_at': '2026-01-04T10:00:00.000',
+      });
+    }
+
+    final invoices = await DashboardRepository(database).loadRecentInvoices(limit: 2);
+
+    expect(invoices.map((invoice) => invoice.invoiceNumber).toList(),
+        ['INV-3', 'INV-2']);
+  });
+
 }
