@@ -162,21 +162,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 18),
                           const Text('الساعة الرقمية',
                               style: TextStyle(fontWeight: FontWeight.w700)),
-                          RadioGroup<bool>(
-                            groupValue: _clock24,
-                            onChanged: (value) => setState(() => _clock24 = value),
-                            child: const Column(
-                              children: [
-                                RadioListTile<bool>(
-                                  value: true,
-                                  title: Text('24 ساعة — 18:45:09'),
-                                ),
-                                RadioListTile<bool>(
-                                  value: false,
-                                  title: Text('12 ساعة — 06:45:09 م'),
-                                ),
-                              ],
+                          DropdownButtonFormField<bool>(
+                            value: _clock24,
+                            decoration: const InputDecoration(
+                              labelText: 'نظام الوقت',
+                              border: OutlineInputBorder(),
                             ),
+                            items: const [
+                              DropdownMenuItem(value: true, child: Text('24 ساعة — 18:45:09')),
+                              DropdownMenuItem(value: false, child: Text('12 ساعة — 06:45:09 م')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) setState(() => _clock24 = value);
+                            },
                           ),
                         ],
                       ),
