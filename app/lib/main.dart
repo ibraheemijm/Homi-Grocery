@@ -129,6 +129,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _clockTimer;
   String _storeName = 'اسم البقالة';
   bool _use24HourClock = true;
+  String _occasionText = '';
+  String _occasionStart = '';
+  String _occasionEnd = '';
+  bool _occasionEnabled = false;
 
   @override
   void initState() {
@@ -151,13 +155,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final database = await GroceryDatabase.open();
       final rows = await database.query('app_metadata', columns: ['key', 'value'],
-        where: 'key IN (?, ?)', whereArgs: ['store_name', 'clock_24h']);
+        where: 'key IN (?, ?, ?, ?, ?, ?)', whereArgs: ['store_name', 'clock_24h', 'occasion_enabled', 'occasion_text', 'occasion_start', 'occasion_end']);
       final values = {for (final row in rows) row['key'] as String: row['value'] as String};
       if (!mounted) return;
       setState(() {
         final name = values['store_name']?.trim();
         if (name != null && name.isNotEmpty) _storeName = name;
         _use24HourClock = values['clock_24h'] != 'false';
+        _occasionEnabled = values['occasion_enabled'] == 'true';
+        _occasionText = values['occasion_text'] ?? '';
+        _occasionStart = values['occasion_start'] ?? '';
+        _occasionEnd = values['occasion_end'] ?? '';
       });
     } catch (_) {
       // تبقى القيم الافتراضية إذا كانت قاعدة البيانات غير متاحة.
@@ -179,6 +187,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String get _timeGreeting {
+    if (_occasionEnabled && _occasionText.trim().isNotEmpty) {
+      final today = '\${_clockNow.year.toString().padLeft(4, '0')}-\${_clockNow.month.toString().padLeft(2, '0')}-\${_clockNow.day.toString().padLeft(2, '0')}';
+      if (_occasionStart.isNotEmpty && _occasionEnd.isNotEmpty &&
+          today.compareTo(_occasionStart) >= 0 && today.compareTo(_occasionEnd) <= 0) {
+        return _occasionText;
+      }
+    }
     final hour = _clockNow.hour;
     if (hour >= 5 && hour < 11) return 'صباح الخير';
     if (hour >= 11 && hour < 17) return 'نهارك سعيد';
@@ -271,7 +286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _showMoreMenu(context);
                       } else {
                         setState(() => _selectedIndex = index == 2 ? 3 : index);
-                        if (index == 0) _loadDashboardStats();
+                        if (index == 0) { _loadDashboardStats(); _loadRecentInvoices(); _loadHomePreferences(); }
                       }
                     },
                     destinations: const [
@@ -414,7 +429,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       onTap: () {
                         setState(() => _selectedIndex = index);
-                        if (index == 0) _loadDashboardStats();
+                        if (index == 0) { _loadDashboardStats(); _loadRecentInvoices(); _loadHomePreferences(); }
                       },
                     ),
                   ),
