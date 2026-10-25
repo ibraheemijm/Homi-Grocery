@@ -171,7 +171,23 @@ class FontPreferences {
             bytes[3] == 0);
   }
 
-  static List<int>? _registeredFontBytes;
+  static String? _registeredFontFamily;
+  static final Set<String> _registeredFontFamilies = {};
+
+  /// عائلة فعلية فريدة لكل ملف مستورد؛ قيمة importedFontFamily تبقى معرّف
+  /// ثابتًا محفوظًا في الإعدادات ولا تُستخدم كاسم عائلة Flutter مباشرة.
+  static String get registeredImportedFontFamily =>
+      _registeredFontFamily ?? importedFontFamily;
+
+  @visibleForTesting
+  static String familyForBytes(List<int> bytes) {
+    // FNV-1a 32-bit: اسم حتمي للملف نفسه ومختلف غالبًا بين الملفات المختلفة.
+    var hash = 0x811c9dc5;
+    for (final byte in bytes) {
+      hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
+    }
+    return 'HomiImportedFont_${hash.toRadixString(16).padLeft(8, '0')}';
+  }
 
   static Future<void> registerImportedFont() async {
     final path = importedFontPath;
@@ -180,21 +196,16 @@ class FontPreferences {
     if (!hasSupportedSignature(bytes)) {
       throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
     }
-    final previous = _registeredFontBytes;
-    if (previous != null && previous.length == bytes.length) {
-      var identical = true;
-      for (var index = 0; index < bytes.length; index++) {
-        if (previous[index] != bytes[index]) {
-          identical = false;
-          break;
-        }
-      }
-      if (identical) return;
+    final family = familyForBytes(bytes);
+    if (_registeredFontFamilies.contains(family)) {
+      _registeredFontFamily = family;
+      return;
     }
-    final loader = FontLoader(importedFontFamily)
+    final loader = FontLoader(family)
       ..addFont(Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))));
     await loader.load();
-    _registeredFontBytes = List<int>.unmodifiable(bytes);
+    _registeredFontFamilies.add(family);
+    _registeredFontFamily = family;
   }
 
   static Future<Uint8List?> importedFontBytes() async {
