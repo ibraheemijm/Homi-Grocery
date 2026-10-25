@@ -70,6 +70,71 @@ void main() {
   });
 
 
+
+  test('يستعيد نسخة إصدار 1 ويرحّلها إلى المخطط الحالي دون فقد بياناتها', () async {
+    final backupPath = '${directory.path}/restore-legacy-v1.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      backupPath,
+      options: OpenDatabaseOptions(version: 1),
+    );
+    await GroceryDatabase.createSchema(legacy);
+    await legacy.insert('products', {
+      'name': 'سكر قديم',
+      'purchase_price': 80,
+      'selling_price': 120,
+      'stock_quantity': 7,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await legacy.close();
+    await database.update('products', {'name': 'طحين'});
+
+    final targetPath = database.path;
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        if (database.isOpen) await database.close();
+      },
+      openRestoredDatabase: () async {
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(
+            version: GroceryDatabase.schemaVersion,
+            onUpgrade: (db, oldVersion, newVersion) async {
+              if (oldVersion < 2) await GroceryDatabase.createSalesSchema(db);
+              if (oldVersion < 3) await GroceryDatabase.createCustomersSchema(db);
+              if (oldVersion < 4) await GroceryDatabase.createStockMovementsSchema(db);
+              if (oldVersion < 5) await GroceryDatabase.createSalesReturnsSchema(db);
+              if (oldVersion < 6) await GroceryDatabase.createPurchasesSchema(db);
+              if (oldVersion < 7) await GroceryDatabase.createSaleReturnRefundsSchema(db);
+              if (oldVersion < 8) await GroceryDatabase.createCashTransactionsSchema(db);
+              if (oldVersion < 9) await GroceryDatabase.createSupplierReturnsSchema(db);
+              if (oldVersion < 10) await GroceryDatabase.createCostOfGoodsSchema(db);
+              if (oldVersion < 11) await GroceryDatabase.createSupplierReturnRefundsSchema(db);
+              await db.insert(
+                'app_metadata',
+                {'key': 'schema_version', 'value': newVersion.toString()},
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            },
+          ),
+        );
+        return database;
+      },
+    );
+
+    await repository.restoreBackup(backupPath);
+
+    final products = await database.query('products');
+    expect(products.single['name'], 'سكر قديم');
+    expect(products.single['stock_quantity'], 7);
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final names = tables.map((row) => row['name']).whereType<String>().toSet();
+    expect(names, contains('sales'));
+    expect(names, contains('supplier_return_refunds'));
+  });
+
   test('يعيد النسخة السليمة ويستبدل البيانات الحالية بالبيانات المحفوظة', () async {
     final backupPath = '${directory.path}/restore-source.db';
     await database.execute("VACUUM INTO '$backupPath'");
