@@ -62,7 +62,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         whereArgs: ['occasion_end'],
         limit: 1,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _storeName.text = values['store_name'] ?? '';
         _clock24 = values['clock_24h'] != 'false';
@@ -163,7 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Text('الساعة الرقمية',
                               style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<bool>(
-                            value: _clock24,
+                            initialValue: _clock24,
                             decoration: const InputDecoration(
                               labelText: 'نظام الوقت',
                               border: OutlineInputBorder(),
@@ -241,7 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text('الخطوط والطباعة',
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                           SizedBox(height: 8),
-                          Text('سيضاف هنا اختيار Arial وCairo وAmiri والخطوط المضافة، بعد تضمين ملفات الخطوط المرخّصة وربطها فعليًا بواجهة البرنامج وPDF والإيصالات الحرارية.'),
+                          const Text('Cairo وAmiri متاحان ضمن ملفات البرنامج. إعداد اختيار الخط وتطبيقه على الواجهة والفواتير قيد الاستكمال. Arial سيستخدم من النظام عند توفره.'),
                         ],
                       ),
                     ),
