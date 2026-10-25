@@ -73,7 +73,7 @@ class InvoicePrintService {
             cellStyle: pw.TextStyle(fontSize: thermal ? 8 : 10),
             cellAlignment: pw.Alignment.centerRight,
             headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE8EFEA)),
-            border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFB8C6BE), width: 0.5),
+            border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFB8C6BE), width: 0.5),
             cellPadding: pw.EdgeInsets.all(thermal ? 3 : 6),
           ),
           pw.SizedBox(height: 12),
