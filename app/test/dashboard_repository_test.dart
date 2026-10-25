@@ -83,4 +83,39 @@ void main() {
     expect(stats.todaySales, 250);
     expect(stats.todayPaid, 250);
   });
+
+  test('تعيد آخر الفواتير من الأحدث إلى الأقدم بدل الحالة الفارغة الثابتة', () async {
+    await database.insert('sales', {
+      'invoice_number': 'INV-OLD',
+      'customer_name': 'زبون قديم',
+      'subtotal': 100,
+      'discount': 0,
+      'total': 100,
+      'paid_amount': 100,
+      'payment_method': 'نقدي',
+      'created_at': '2026-01-01T10:00:00.000',
+    });
+    await database.insert('sales', {
+      'invoice_number': 'INV-NEW',
+      'customer_name': 'زبون جديد',
+      'subtotal': 250,
+      'discount': 0,
+      'total': 250,
+      'paid_amount': 100,
+      'payment_method': 'جزئي',
+      'created_at': '2026-01-02T10:00:00.000',
+    });
+
+    final invoices = await DashboardRepository(database).loadRecentInvoices();
+    expect(invoices.map((invoice) => invoice.invoiceNumber).toList(),
+        ['INV-NEW', 'INV-OLD']);
+    expect(invoices.first.customerName, 'زبون جديد');
+    expect(invoices.first.remaining, 150);
+  });
+
+  test('تتعامل مع قاعدة فواتير فارغة دون خطأ', () async {
+    final invoices = await DashboardRepository(database).loadRecentInvoices();
+    expect(invoices, isEmpty);
+  });
+
 }
