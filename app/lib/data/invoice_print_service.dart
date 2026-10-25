@@ -1,9 +1,14 @@
 // خدمة طباعة فواتير المبيعات بصيغتي A4 والإيصال الحراري.
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:sqflite/sqflite.dart';
+
+import 'font_preferences.dart';
 
 /// تجمع بيانات الفاتورة من قاعدة البيانات وتعرض نافذة الطباعة أو الحفظ PDF.
 class InvoicePrintSummary {
@@ -68,12 +73,8 @@ class InvoicePrintService {
       orderBy: 'id ASC',
     );
 
-    // تحميل الخطوط من حزمة التطبيق لتعمل الطباعة دون اتصال بالإنترنت.
-    final arabicFont = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Regular.ttf'));
-    final arabicBold = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Bold.ttf'));
-    final document = pw.Document(
-      theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBold),
-    );
+    // تضمين ملف الخط في PDF نفسه حتى لا يعتمد عرض الفاتورة على جهاز المستلم.
+    final document = pw.Document(theme: await _loadDocumentTheme());
     final pageFormat = thermal
         ? const PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm,
             marginAll: 4 * PdfPageFormat.mm)
@@ -145,6 +146,51 @@ class InvoicePrintService {
       format: pageFormat,
       onLayout: (_) async => document.save(),
     );
+  }
+
+  Future<pw.ThemeData> _loadDocumentTheme() async {
+    final selected = FontPreferences.documentFont;
+    Uint8List? baseBytes;
+    Uint8List? boldBytes;
+
+    if (selected == 'Cairo') {
+      baseBytes = (await rootBundle.load('assets/fonts/Cairo.ttf')).buffer.asUint8List();
+      boldBytes = baseBytes;
+    } else if (selected == 'Amiri') {
+      baseBytes = (await rootBundle.load('assets/fonts/Amiri-Regular.ttf')).buffer.asUint8List();
+      boldBytes = (await rootBundle.load('assets/fonts/Amiri-Bold.ttf')).buffer.asUint8List();
+    } else if (selected == FontPreferences.importedFontFamily) {
+      baseBytes = await FontPreferences.importedFontBytes();
+      // الخط المستورد قد لا يحتوي على وزن عريض منفصل.
+      boldBytes = baseBytes;
+    } else if (selected == 'Arial') {
+      final paths = Platform.isWindows
+          ? [r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\arialbd.ttf']
+          : Platform.isLinux
+              ? ['/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',
+                  '/usr/share/fonts/truetype/msttcorefonts/arial.ttf',
+                  '/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf']
+              : <String>[];
+      for (final path in paths) {
+        final file = File(path);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          if (baseBytes == null) {
+            baseBytes = bytes;
+          } else {
+            boldBytes = bytes;
+            break;
+          }
+        }
+      }
+    }
+
+    // Arial غير موجود على بعض الأنظمة، لذا نعود إلى Amiri بدل إنتاج PDF عربي بخط غير مناسب.
+    baseBytes ??= (await rootBundle.load('assets/fonts/Amiri-Regular.ttf')).buffer.asUint8List();
+    boldBytes ??= (await rootBundle.load('assets/fonts/Amiri-Bold.ttf')).buffer.asUint8List();
+    final base = pw.Font.ttf(ByteData.sublistView(baseBytes));
+    final bold = pw.Font.ttf(ByteData.sublistView(boldBytes));
+    return pw.ThemeData.withFont(base: base, bold: bold);
   }
 
   pw.Widget _amountRow(String label, int amount, bool thermal, {bool bold = false}) {
