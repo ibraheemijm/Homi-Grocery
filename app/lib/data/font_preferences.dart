@@ -95,16 +95,7 @@ class FontPreferences {
       throw const FormatException('ملف الخط فارغ أو غير صالح.');
     }
     // تحقق أولي من ترويسة OpenType/TrueType، لا يثبت وجود محارف عربية داخل الخط.
-    final signature = String.fromCharCodes(bytes.take(4));
-    final validSignature = signature == 'OTTO' ||
-        signature == 'true' ||
-        signature == 'typ1' ||
-        (bytes.length >= 4 &&
-            bytes[0] == 0 &&
-            bytes[1] == 1 &&
-            bytes[2] == 0 &&
-            bytes[3] == 0);
-    if (!validSignature) {
+    if (!hasSupportedSignature(bytes)) {
       throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
     }
 
