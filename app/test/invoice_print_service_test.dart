@@ -72,6 +72,26 @@ void main() {
     expect(summary.outstandingAfterReturns, 0);
   });
 
+  test('يجمع المرتجعات وردود النقد ويمنع الرصيد السالب عند تجاوز الدين', () async {
+    await database.insert('sales', {
+      'id': 3,
+      'invoice_number': 'HG-3',
+      'total': 1000,
+      'paid_amount': 600,
+    });
+    await database.insert('sale_returns', {'sale_id': 3, 'amount': 250});
+    await database.insert('sale_returns', {'sale_id': 3, 'amount': 350});
+    await database.insert('sale_return_refunds', {'sale_id': 3, 'amount': 100});
+    await database.insert('sale_return_refunds', {'sale_id': 3, 'amount': 150});
+
+    final summary = await printer.loadSummary(3);
+
+    expect(summary.returnedAmount, 600);
+    expect(summary.refundedAmount, 250);
+    // الدين الأصلي 400؛ لا يجوز أن يتحول إلى رصيد سالب بسبب زيادة المرتجعات.
+    expect(summary.outstandingAfterReturns, 0);
+  });
+
   test('يرفض طباعة ملخص فاتورة غير موجودة', () async {
     await expectLater(printer.loadSummary(999), throwsStateError);
   });
