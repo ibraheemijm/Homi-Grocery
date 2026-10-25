@@ -1,0 +1,152 @@
+// إعدادات الخطوط المشتركة بين الواجهة والمستندات، محفوظة داخل app_metadata.
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+
+import 'grocery_database.dart';
+
+class FontPreferences {
+  FontPreferences._();
+
+  static const defaultUiFont = 'Cairo';
+  static const defaultDocumentFont = 'Amiri';
+  static const importedFontFamily = 'HomiImportedFont';
+
+  static String uiFont = defaultUiFont;
+  static String documentFont = defaultDocumentFont;
+  static String? importedFontPath;
+  static String? importedFontName;
+
+  static Future<void> load() async {
+    final db = await GroceryDatabase.open();
+    final rows = await db.query(
+      'app_metadata',
+      columns: ['key', 'value'],
+      where: 'key IN (?, ?, ?, ?, ?)',
+      whereArgs: [
+        'ui_font_family',
+        'document_font_family',
+        'imported_font_path',
+        'imported_font_name',
+        'imported_font_registered',
+      ],
+    );
+    final values = {
+      for (final row in rows) row['key'] as String: row['value'] as String,
+    };
+    uiFont = _validUiFont(values['ui_font_family']);
+    documentFont = _validDocumentFont(values['document_font_family']);
+    importedFontPath = values['imported_font_path'];
+    importedFontName = values['imported_font_name'];
+    await registerImportedFont();
+  }
+
+  static String _validUiFont(String? value) =>
+      const {'Arial', 'Cairo', 'Amiri', importedFontFamily}.contains(value)
+          ? value!
+          : defaultUiFont;
+
+  static String _validDocumentFont(String? value) =>
+      const {'Arial', 'Cairo', 'Amiri', importedFontFamily}.contains(value)
+          ? value!
+          : defaultDocumentFont;
+
+  static Future<void> save({
+    required String uiFamily,
+    required String documentFamily,
+  }) async {
+    final db = await GroceryDatabase.open();
+    await db.transaction((txn) async {
+      for (final entry in <String, String>{
+        'ui_font_family': _validUiFont(uiFamily),
+        'document_font_family': _validDocumentFont(documentFamily),
+      }.entries) {
+        await txn.insert(
+          'app_metadata',
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    uiFont = _validUiFont(uiFamily);
+    documentFont = _validDocumentFont(documentFamily);
+  }
+
+  /// يستورد TTF/OTF إلى مجلد بيانات التطبيق ولا يحتفظ بمسار مؤقت من مدير الملفات.
+  static Future<String?> importFont() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['ttf', 'otf'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final picked = result.files.single;
+    final bytes = picked.bytes ??
+        (picked.path == null ? null : await File(picked.path!).readAsBytes());
+    if (bytes == null || bytes.length < 1024) {
+      throw const FormatException('ملف الخط فارغ أو غير صالح.');
+    }
+    // تحقق أولي من ترويسة OpenType/TrueType، لا يثبت وجود محارف عربية داخل الخط.
+    final signature = String.fromCharCodes(bytes.take(4));
+    final validSignature = signature == 'OTTO' ||
+        signature == 'true' ||
+        signature == 'typ1' ||
+        (bytes.length >= 4 &&
+            bytes[0] == 0 &&
+            bytes[1] == 1 &&
+            bytes[2] == 0 &&
+            bytes[3] == 0);
+    if (!validSignature) {
+      throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
+    }
+
+    final directory = await getApplicationSupportDirectory();
+    final fontDirectory = Directory(p.join(directory.path, 'fonts'));
+    await fontDirectory.create(recursive: true);
+    final extension = p.extension(picked.name).toLowerCase() == '.otf'
+        ? '.otf'
+        : '.ttf';
+    final destination = File(p.join(fontDirectory.path, 'homi_imported$extension'));
+    await destination.writeAsBytes(bytes, flush: true);
+
+    final db = await GroceryDatabase.open();
+    await db.transaction((txn) async {
+      for (final entry in <String, String>{
+        'imported_font_path': destination.path,
+        'imported_font_name': p.basenameWithoutExtension(picked.name),
+      }.entries) {
+        await txn.insert(
+          'app_metadata',
+          {'key': entry.key, 'value': entry.value},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    importedFontPath = destination.path;
+    importedFontName = p.basenameWithoutExtension(picked.name);
+    await registerImportedFont();
+    return importedFontName;
+  }
+
+  static Future<void> registerImportedFont() async {
+    final path = importedFontPath;
+    if (path == null || !await File(path).exists()) return;
+    final bytes = await File(path).readAsBytes();
+    final loader = FontLoader(importedFontFamily)
+      ..addFont(Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))));
+    await loader.load();
+  }
+
+  static Future<Uint8List?> importedFontBytes() async {
+    final path = importedFontPath;
+    if (path == null) return null;
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+}
