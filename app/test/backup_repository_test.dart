@@ -122,6 +122,22 @@ void main() {
     expect(rows.single['stock_quantity'], 12);
   });
 
+  test('يرفض استعادة ملف غير صالح ويحافظ على قاعدة البيانات الحالية', () async {
+    final invalid = File('${directory.path}/invalid-restore.db');
+    await invalid.writeAsString('not a sqlite database');
+    await database.update('products', {'name': 'طحين'});
+
+    await expectLater(
+      BackupRepository(database).restoreBackup(invalid.path),
+      throwsA(isA<FormatException>()),
+    );
+
+    expect(database.isOpen, isTrue);
+    final rows = await database.query('products');
+    expect(rows.single['name'], 'طحين');
+    expect(rows.single['stock_quantity'], 12);
+  });
+
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
     final invalid = File('${directory.path}/invalid.db');
     await invalid.writeAsString('not a sqlite database');
