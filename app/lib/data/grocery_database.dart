@@ -10,6 +10,7 @@ class GroceryDatabase {
   GroceryDatabase._();
 
   static const int _version = 11;
+  static int get schemaVersion => _version;
   static Database? _instance;
 
   /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
@@ -82,6 +83,13 @@ class GroceryDatabase {
       },
     );
     return _instance!;
+  }
+
+  /// إغلاق الاتصال قبل استعادة ملف قاعدة البيانات ثم السماح بفتحه مجددًا.
+  static Future<void> closeForMaintenance() async {
+    final current = _instance;
+    _instance = null;
+    if (current != null && current.isOpen) await current.close();
   }
 
   /// إنشاء مخطط البيانات؛ إتاحته تسمح باختباره دون الوصول إلى ملفات المستخدم.

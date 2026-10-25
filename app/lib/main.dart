@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
 
+import 'screens/backup_screen.dart';
 import 'screens/cashbox_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
@@ -179,7 +180,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ? const CashboxScreen()
                                             : _selectedIndex == 7
                                                 ? const ReportsScreen()
-                                                : _selectedIndex == 9
+                                                : _selectedIndex == 8
+                                                    ? const BackupScreen()
+                                                    : _selectedIndex == 9
                                         ? const StockMovementsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
