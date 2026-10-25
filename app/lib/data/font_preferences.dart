@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -17,6 +18,7 @@ class FontPreferences {
   static const defaultDocumentFont = 'Amiri';
   static const importedFontFamily = 'HomiImportedFont';
 
+  static final ValueNotifier<String> uiFontNotifier = ValueNotifier(defaultUiFont);
   static String uiFont = defaultUiFont;
   static String documentFont = defaultDocumentFont;
   static String? importedFontPath;
@@ -40,6 +42,7 @@ class FontPreferences {
       for (final row in rows) row['key'] as String: row['value'] as String,
     };
     uiFont = _validUiFont(values['ui_font_family']);
+    uiFontNotifier.value = uiFont;
     documentFont = _validDocumentFont(values['document_font_family']);
     importedFontPath = values['imported_font_path'];
     importedFontName = values['imported_font_name'];
@@ -74,6 +77,7 @@ class FontPreferences {
       }
     });
     uiFont = _validUiFont(uiFamily);
+    uiFontNotifier.value = uiFont;
     documentFont = _validDocumentFont(documentFamily);
   }
 
