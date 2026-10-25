@@ -311,34 +311,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final selected = _selectedIndex == index;
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: ListTile(
-                    selected: selected,
-                    selectedTileColor: widget.isDark
-                        ? const Color(0xFF315047)
-                        : brandMint,
+                  child: Material(
+                    color: Colors.transparent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    leading: Icon(
-                      item.icon,
-                      color: selected
-                          ? (widget.isDark ? Colors.white : brandGreen)
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    title: Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      selected: selected,
+                      selectedTileColor: widget.isDark
+                          ? const Color(0xFF315047)
+                          : brandMint,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      leading: Icon(
+                        item.icon,
                         color: selected
                             ? (widget.isDark ? Colors.white : brandGreen)
-                            : null,
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
+                      title: Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected
+                              ? (widget.isDark ? Colors.white : brandGreen)
+                              : null,
+                        ),
+                      ),
+                      onTap: () {
+                        setState(() => _selectedIndex = index);
+                        if (index == 0) _loadDashboardStats();
+                      },
                     ),
-                    onTap: () {
-                      setState(() => _selectedIndex = index);
-                      if (index == 0) _loadDashboardStats();
-                    },
                   ),
                 );
               },
