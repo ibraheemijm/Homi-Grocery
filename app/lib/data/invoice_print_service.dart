@@ -63,7 +63,20 @@ class InvoicePrintService {
     );
   }
 
+  /// يفتح نافذة الطباعة بعد بناء PDF مستقل قابل للاختبار.
   Future<void> printInvoice(int saleId, {required bool thermal}) async {
+    final summary = await loadSummary(saleId);
+    final bytes = await buildInvoicePdf(saleId, thermal: thermal);
+    final sale = summary.sale;
+    await Printing.layoutPdf(
+      name: 'invoice-${sale['invoice_number']}${thermal ? '-thermal' : '-A4'}.pdf',
+      format: _pageFormat(thermal),
+      onLayout: (_) async => bytes,
+    );
+  }
+
+  /// يبني ملف PDF دون استدعاء واجهة الطباعة، لتسهيل اختباره آليًا.
+  Future<Uint8List> buildInvoicePdf(int saleId, {required bool thermal}) async {
     final summary = await loadSummary(saleId);
     final sale = summary.sale;
     final items = await _database.query(
@@ -75,15 +88,7 @@ class InvoicePrintService {
 
     // تضمين ملف الخط في PDF نفسه حتى لا يعتمد عرض الفاتورة على جهاز المستلم.
     final document = pw.Document(theme: await _loadDocumentTheme());
-    final pageFormat = thermal
-        ? const PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm,
-            marginAll: 4 * PdfPageFormat.mm)
-        : PdfPageFormat.a4.copyWith(
-            marginLeft: 18 * PdfPageFormat.mm,
-            marginRight: 18 * PdfPageFormat.mm,
-            marginTop: 16 * PdfPageFormat.mm,
-            marginBottom: 16 * PdfPageFormat.mm,
-          );
+    final pageFormat = _pageFormat(thermal);
 
     document.addPage(
       pw.MultiPage(
@@ -141,12 +146,21 @@ class InvoicePrintService {
       ),
     );
 
-    await Printing.layoutPdf(
-      name: 'invoice-${sale['invoice_number']}${thermal ? '-thermal' : '-A4'}.pdf',
-      format: pageFormat,
-      onLayout: (_) async => document.save(),
-    );
+    return document.save();
   }
+
+  PdfPageFormat _pageFormat(bool thermal) => thermal
+      ? const PdfPageFormat(
+          80 * PdfPageFormat.mm,
+          300 * PdfPageFormat.mm,
+          marginAll: 4 * PdfPageFormat.mm,
+        )
+      : PdfPageFormat.a4.copyWith(
+          marginLeft: 18 * PdfPageFormat.mm,
+          marginRight: 18 * PdfPageFormat.mm,
+          marginTop: 16 * PdfPageFormat.mm,
+          marginBottom: 16 * PdfPageFormat.mm,
+        );
 
   Future<pw.ThemeData> _loadDocumentTheme() async {
     final selected = FontPreferences.documentFont;
