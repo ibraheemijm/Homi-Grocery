@@ -5,6 +5,7 @@ import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
 
 import 'screens/backup_screen.dart';
+import 'screens/invoices_screen.dart';
 import 'screens/cashbox_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
@@ -170,6 +171,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? _buildDashboard(context, isDesktop)
                         : _selectedIndex == 1
                             ? SalesScreen(onDataChanged: _loadDashboardStats)
+                            : _selectedIndex == 2
+                                ? const InvoicesScreen()
                             : _selectedIndex == 3
                                 ? const CustomersScreen()
                                 : _selectedIndex == 4
