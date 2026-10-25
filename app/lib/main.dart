@@ -85,7 +85,9 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
     );
     return ThemeData(
       useMaterial3: true,
-      fontFamily: FontPreferences.uiFont,
+      fontFamily: FontPreferences.uiFont == FontPreferences.importedFontFamily
+          ? FontPreferences.registeredImportedFontFamily
+          : FontPreferences.uiFont,
       colorScheme: scheme,
       scaffoldBackgroundColor:
           isDark ? const Color(0xFF101915) : brandCream,
