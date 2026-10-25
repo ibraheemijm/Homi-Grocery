@@ -93,18 +93,33 @@ class BackupRepository {
       throw ArgumentError('اختر ملف نسخة احتياطية، وليس قاعدة البيانات الحالية.');
     }
     await validateBackup(source.path);
+
     final target = File(targetPath);
     final parent = target.parent;
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final staged = File(p.join(parent.path, '.homi-restore-$stamp.db'));
     final rollback = File(p.join(parent.path, '.homi-rollback-$stamp.db'));
-    await source.copy(staged.path);
-    final hadCurrent = await target.exists();
+    var hadCurrent = false;
+    var maintenanceClosed = false;
     var rollbackRecovered = false;
     var restoreCompleted = false;
-    await _closeForMaintenance();
+
     try {
-      // لا تنسخ قاعدة البيانات الحية: أغلق اتصال SQLite أولًا لتفادي نسخة غير متسقة.
+      // Stage the source inside the protected block so partial copies are cleaned up.
+      await source.copy(staged.path);
+      hadCurrent = await target.exists();
+
+      try {
+        await _closeForMaintenance();
+        maintenanceClosed = true;
+      } catch (_) {
+        // A maintenance callback may close the connection before throwing.
+        // Reopen only when it actually left the injected database closed.
+        if (!_database.isOpen) await _openRestoredDatabase();
+        rethrow;
+      }
+
+      // Do not copy the live database: close SQLite first to avoid an inconsistent snapshot.
       if (hadCurrent) {
         await target.copy(rollback.path);
         await validateBackup(rollback.path);
@@ -115,25 +130,28 @@ class BackupRepository {
       await _validateOpenedDatabase(restored);
       restoreCompleted = true;
     } catch (_) {
-      await _closeForMaintenance();
-      try {
-        if (hadCurrent && await rollback.exists()) {
-          // لا تستبدل الملف الحالي بنسخة تراجع لم تجتز فحص السلامة.
-          await validateBackup(rollback.path);
-          if (await target.exists()) await target.delete();
-          await rollback.copy(target.path);
-          rollbackRecovered = true;
-        } else if (!hadCurrent && await target.exists()) {
-          await target.delete();
+      if (maintenanceClosed) {
+        await _closeForMaintenance();
+        try {
+          if (hadCurrent && await rollback.exists()) {
+            // Never replace the target with a rollback file that failed validation.
+            await validateBackup(rollback.path);
+            if (await target.exists()) await target.delete();
+            await rollback.copy(target.path);
+            rollbackRecovered = true;
+          } else if (!hadCurrent && await target.exists()) {
+            await target.delete();
+          }
+        } finally {
+          // Reopen the original database even if rollback itself fails.
+          await _openRestoredDatabase();
         }
-      } finally {
-        // حتى إن فشل التراجع، أعد فتح القاعدة الأصلية إن كانت ما تزال سليمة.
-        await _openRestoredDatabase();
       }
       rethrow;
     } finally {
+      // Cleanup must run even when staging or closing the database fails.
       if (await staged.exists()) await staged.delete();
-      // احتفظ بنسخة التراجع إذا تعذر استرجاعها؛ قد تكون آخر نسخة قابلة للإنقاذ.
+      // Keep the rollback copy if recovery failed; it may be the last recoverable copy.
       if ((restoreCompleted || rollbackRecovered) && await rollback.exists()) {
         await rollback.delete();
       }
