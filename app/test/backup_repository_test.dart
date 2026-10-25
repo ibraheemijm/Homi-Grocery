@@ -38,6 +38,18 @@ void main() {
     await copy.close();
   });
 
+  test('يقبل نسخة إصدار 1 التي لا تحتوي بعد على جداول المبيعات', () async {
+    final path = '${directory.path}/legacy-v1.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(version: 1),
+    );
+    await GroceryDatabase.createSchema(legacy);
+    await legacy.close();
+
+    await BackupRepository(database).validateBackup(path);
+  });
+
   test('يقبل نسخة قديمة مدعومة قبل إضافة سجل الخزينة', () async {
     final path = '${directory.path}/legacy-v7.db';
     final legacy = await databaseFactoryFfi.openDatabase(
