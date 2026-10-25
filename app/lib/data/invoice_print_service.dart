@@ -5,12 +5,28 @@ import 'package:printing/printing.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// تجمع بيانات الفاتورة من قاعدة البيانات وتعرض نافذة الطباعة أو الحفظ PDF.
+class InvoicePrintSummary {
+  const InvoicePrintSummary({
+    required this.sale,
+    required this.returnedAmount,
+    required this.refundedAmount,
+    required this.outstandingAfterReturns,
+  });
+
+  final Map<String, Object?> sale;
+  final int returnedAmount;
+  final int refundedAmount;
+  final int outstandingAfterReturns;
+}
+
 class InvoicePrintService {
   InvoicePrintService(this._database);
 
   final Database _database;
 
-  Future<void> printInvoice(int saleId, {required bool thermal}) async {
+  /// تحميل ملخص الفاتورة مع المرتجعات وردود النقد المسجلة لاحقًا.
+  /// التحصيلات العامة لا تُنسب إلى فاتورة بعينها في المخطط الحالي.
+  Future<InvoicePrintSummary> loadSummary(int saleId) async {
     final sales = await _database.query(
       'sales',
       where: 'id = ?',
@@ -19,6 +35,31 @@ class InvoicePrintService {
     );
     if (sales.isEmpty) throw StateError('الفاتورة غير موجودة.');
     final sale = sales.single;
+    final returns = await _database.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) AS amount FROM sale_returns WHERE sale_id = ?',
+      [saleId],
+    );
+    final refunds = await _database.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) AS amount FROM sale_return_refunds WHERE sale_id = ?',
+      [saleId],
+    );
+    final returnedAmount = (returns.single['amount'] as num).toInt();
+    final refundedAmount = (refunds.single['amount'] as num).toInt();
+    final total = (sale['total'] as num).toInt();
+    final paid = (sale['paid_amount'] as num).toInt();
+    final originalBalance = (total - paid).clamp(0, total).toInt();
+    final debtCoveredByReturns = returnedAmount.clamp(0, originalBalance).toInt();
+    return InvoicePrintSummary(
+      sale: sale,
+      returnedAmount: returnedAmount,
+      refundedAmount: refundedAmount,
+      outstandingAfterReturns: originalBalance - debtCoveredByReturns,
+    );
+  }
+
+  Future<void> printInvoice(int saleId, {required bool thermal}) async {
+    final summary = await loadSummary(saleId);
+    final sale = summary.sale;
     final items = await _database.query(
       'sale_items',
       where: 'sale_id = ?',
@@ -81,8 +122,17 @@ class InvoicePrintService {
           _amountRow('الخصم', sale['discount'] as int, thermal),
           pw.Divider(),
           _amountRow('الإجمالي النهائي', sale['total'] as int, thermal, bold: true),
-          _amountRow('المبلغ المستلم', sale['paid_amount'] as int, thermal),
-          _amountRow('المتبقي', (sale['total'] as int) - (sale['paid_amount'] as int), thermal, bold: true),
+          _amountRow('المبلغ المستلم عند البيع', (sale['paid_amount'] as num).toInt(), thermal),
+          if (summary.returnedAmount > 0)
+            _amountRow('قيمة المرتجعات المسجلة', summary.returnedAmount, thermal),
+          if (summary.refundedAmount > 0)
+            _amountRow('رد نقدي مسجل للزبون', summary.refundedAmount, thermal),
+          _amountRow(
+            'المتبقي بعد المرتجعات (قبل التحصيلات اللاحقة)',
+            summary.outstandingAfterReturns,
+            thermal,
+            bold: true,
+          ),
           pw.SizedBox(height: 18),
           pw.Center(child: pw.Text('شكرًا لتعاملكم معنا', style: pw.TextStyle(fontSize: thermal ? 9 : 12))),
         ],
