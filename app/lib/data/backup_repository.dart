@@ -5,7 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'grocery_database.dart';
 
-class BackupRepository(
+class BackupRepository {
+  BackupRepository(
     this._database, {
     Future<void> Function()? closeForMaintenance,
     Future<Database> Function()? openRestoredDatabase,
@@ -111,7 +112,7 @@ class BackupRepository(
       await _validateOpenedDatabase(restored);
       restoreCompleted = true;
     } catch (_) {
-      await GroceryDatabase.closeForMaintenance();
+      await _closeForMaintenance();
       try {
         if (hadCurrent && await rollback.exists()) {
           // لا تستبدل الملف الحالي بنسخة تراجع لم تجتز فحص السلامة.
