@@ -5,9 +5,16 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'grocery_database.dart';
 
-class BackupRepository {
-  BackupRepository(this._database);
+class BackupRepository(
+    this._database, {
+    Future<void> Function()? closeForMaintenance,
+    Future<Database> Function()? openRestoredDatabase,
+  })  : _closeForMaintenance = closeForMaintenance ?? GroceryDatabase.closeForMaintenance,
+        _openRestoredDatabase = openRestoredDatabase ?? GroceryDatabase.open;
+
   final Database _database;
+  final Future<void> Function() _closeForMaintenance;
+  final Future<Database> Function() _openRestoredDatabase;
 
   Future<Directory> backupDirectory() async {
     final support = await getApplicationSupportDirectory();
@@ -91,7 +98,7 @@ class BackupRepository {
     final hadCurrent = await target.exists();
     var rollbackRecovered = false;
     var restoreCompleted = false;
-    await GroceryDatabase.closeForMaintenance();
+    await _closeForMaintenance();
     try {
       // لا تنسخ قاعدة البيانات الحية: أغلق اتصال SQLite أولًا لتفادي نسخة غير متسقة.
       if (hadCurrent) {
@@ -100,7 +107,7 @@ class BackupRepository {
       }
       if (await target.exists()) await target.delete();
       await staged.copy(target.path);
-      final restored = await GroceryDatabase.open();
+      final restored = await _openRestoredDatabase();
       await _validateOpenedDatabase(restored);
       restoreCompleted = true;
     } catch (_) {
@@ -117,7 +124,7 @@ class BackupRepository {
         }
       } finally {
         // حتى إن فشل التراجع، أعد فتح القاعدة الأصلية إن كانت ما تزال سليمة.
-        await GroceryDatabase.open();
+        await _openRestoredDatabase();
       }
       rethrow;
     } finally {
