@@ -261,7 +261,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _selectedIndex == 0
                         ? _buildDashboard(context, isDesktop)
                         : _selectedIndex == 1
-                            ? SalesScreen(onDataChanged: _loadDashboardStats)
+                            ? SalesScreen(onDataChanged: () {
+                                _loadDashboardStats();
+                                _loadRecentInvoices();
+                              })
                             : _selectedIndex == 2
                                 ? const InvoicesScreen()
                             : _selectedIndex == 3
