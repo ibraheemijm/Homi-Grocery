@@ -75,10 +75,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _loading = false;
       });
     } catch (error) {
-      if (mounted) setState(() {
-        _loading = false;
-        _message = 'تعذر تحميل الإعدادات: $error';
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _message = 'تعذر تحميل الإعدادات: $error';
+        });
+      }
     }
   }
 
@@ -175,7 +177,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               DropdownMenuItem(value: false, child: Text('12 ساعة — 06:45:09 م')),
                             ],
                             onChanged: (value) {
-                              if (value != null) setState(() => _clock24 = value);
+                              if (value != null) {
+                                setState(() => _clock24 = value);
+                              }
                             },
                           ),
                         ],
@@ -234,8 +238,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Card(
-                    child: const Padding(
+                  const Card(
+                    child: Padding(
                       padding: EdgeInsets.all(18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -243,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text('الخطوط والطباعة',
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                           SizedBox(height: 8),
-                          const Text('Cairo وAmiri متاحان ضمن ملفات البرنامج. إعداد اختيار الخط وتطبيقه على الواجهة والفواتير قيد الاستكمال. Arial سيستخدم من النظام عند توفره.'),
+                          Text('Cairo وAmiri متاحان ضمن ملفات البرنامج. إعداد اختيار الخط وتطبيقه على الواجهة والفواتير قيد الاستكمال. Arial سيستخدم من النظام عند توفره.'),
                         ],
                       ),
                     ),
