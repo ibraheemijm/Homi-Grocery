@@ -122,6 +122,7 @@ class FontPreferences {
     final destination = File(p.join(fontDirectory.path, 'homi_imported$extension'));
     final previousPath = importedFontPath;
     final previousName = importedFontName;
+    final previousRegisteredFontFamily = _registeredFontFamily;
     final previousBytes =
         await destination.exists() ? await destination.readAsBytes() : null;
 
@@ -153,6 +154,7 @@ class FontPreferences {
       }
       importedFontPath = previousPath;
       importedFontName = previousName;
+      _registeredFontFamily = previousRegisteredFontFamily;
       rethrow;
     }
     return importedFontName;
