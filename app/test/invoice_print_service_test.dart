@@ -132,6 +132,31 @@ void main() {
     expect(bytes.length, greaterThan(1000));
   });
 
+  test('يبني PDF للإيصال الحراري دون فتح نافذة الطباعة', () async {
+    await database.insert('sales', {
+      'id': 5,
+      'invoice_number': 'HG-THERMAL-5',
+      'customer_name': 'زبون اختبار',
+      'subtotal': 250,
+      'discount': 0,
+      'total': 250,
+      'paid_amount': 250,
+      'created_at': '2026-10-25T10:45:00.000',
+    });
+    await database.insert('sale_items', {
+      'sale_id': 5,
+      'product_name': 'شاي',
+      'quantity': 1,
+      'unit_price': 250,
+      'line_total': 250,
+    });
+
+    final bytes = await printer.buildInvoicePdf(5, thermal: true);
+
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    expect(bytes.length, greaterThan(1000));
+  });
+
   test('يرفض طباعة ملخص فاتورة غير موجودة', () async {
     await expectLater(printer.loadSummary(999), throwsStateError);
   });
