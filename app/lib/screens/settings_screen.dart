@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/grocery_database.dart';
+import '../data/font_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +18,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _occasionStart = TextEditingController();
   final _occasionEnd = TextEditingController();
   bool _clock24 = true;
+  String _uiFont = FontPreferences.defaultUiFont;
+  String _documentFont = FontPreferences.defaultDocumentFont;
+  bool _importingFont = false;
   bool _occasionEnabled = false;
   bool _loading = true;
   bool _saving = false;
@@ -39,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _load() async {
     try {
+      await FontPreferences.load();
       final db = await GroceryDatabase.open();
       final rows = await db.query(
         'app_metadata',
@@ -67,6 +72,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       setState(() {
         _storeName.text = values['store_name'] ?? '';
+        _uiFont = FontPreferences.uiFont;
+        _documentFont = FontPreferences.documentFont;
         _clock24 = values['clock_24h'] != 'false';
         _occasionEnabled = values['occasion_enabled'] == 'true';
         _occasionText.text = values['occasion_text'] ?? '';
@@ -81,6 +88,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _message = 'تعذر تحميل الإعدادات: $error';
         });
       }
+    }
+  }
+
+  Future<void> _importFont() async {
+    setState(() {
+      _importingFont = true;
+      _message = null;
+    });
+    try {
+      final name = await FontPreferences.importFont();
+      if (name != null && mounted) {
+        setState(() {
+          _uiFont = FontPreferences.importedFontFamily;
+          _documentFont = FontPreferences.importedFontFamily;
+          _message = 'تم استيراد الخط «$name». تحقق من دعمه للعربية قبل استخدامه في الفواتير.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _message = 'تعذر استيراد الخط: $error');
+    } finally {
+      if (mounted) setState(() => _importingFont = false);
     }
   }
 
@@ -126,7 +154,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         }
       });
-      if (mounted) setState(() => _message = 'تم حفظ الإعدادات. ارجع إلى الرئيسية لتحديث الاسم والساعة.');
+      await FontPreferences.save(uiFamily: _uiFont, documentFamily: _documentFont);
+      if (mounted) setState(() => _message = 'تم حفظ الإعدادات. سيُطبّق خط الواجهة بعد إعادة فتح التطبيق، وخط المستندات عند الطباعة.');
     } catch (error) {
       if (mounted) setState(() => _message = 'تعذر حفظ الإعدادات: $error');
     } finally {
@@ -238,16 +267,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Card(
+                  Card(
                     child: Padding(
-                      padding: EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text('الخطوط والطباعة',
+                          const Text('الخطوط والطباعة',
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 8),
-                          Text('Cairo وAmiri متاحان ضمن ملفات البرنامج. إعداد اختيار الخط وتطبيقه على الواجهة والفواتير قيد الاستكمال. Arial سيستخدم من النظام عند توفره.'),
+                          const SizedBox(height: 8),
+                          const Text('اختر خط الواجهة وخط الفواتير كلٌّ على حدة. Cairo وAmiri مضمّنان ويعملان دون إنترنت. يعتمد ظهور Arial على توفره في النظام.'),
+                          const SizedBox(height: 14),
+                          DropdownButtonFormField<String>(
+                            initialValue: _uiFont,
+                            decoration: const InputDecoration(
+                              labelText: 'خط واجهة البرنامج',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: 'Arial', child: Text('Arial (خط النظام)')),
+                              const DropdownMenuItem(value: 'Cairo', child: Text('Cairo')),
+                              const DropdownMenuItem(value: 'Amiri', child: Text('Amiri')),
+                              if (FontPreferences.importedFontPath != null)
+                                DropdownMenuItem(
+                                  value: FontPreferences.importedFontFamily,
+                                  child: Text(FontPreferences.importedFontName ?? 'الخط المستورد'),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) setState(() => _uiFont = value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            initialValue: _documentFont,
+                            decoration: const InputDecoration(
+                              labelText: 'خط الفواتير وPDF',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: 'Arial', child: Text('Arial (إذا أمكن تحميله)')),
+                              const DropdownMenuItem(value: 'Cairo', child: Text('Cairo')),
+                              const DropdownMenuItem(value: 'Amiri', child: Text('Amiri')),
+                              if (FontPreferences.importedFontPath != null)
+                                DropdownMenuItem(
+                                  value: FontPreferences.importedFontFamily,
+                                  child: Text(FontPreferences.importedFontName ?? 'الخط المستورد'),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) setState(() => _documentFont = value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _importingFont ? null : _importFont,
+                            icon: _importingFont
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.file_upload_outlined),
+                            label: Text(_importingFont ? 'جارٍ استيراد الخط…' : 'استيراد خط TTF / OTF'),
+                          ),
+                          if (FontPreferences.importedFontName != null) ...[
+                            const SizedBox(height: 4),
+                            Text('الخط المستورد: ${FontPreferences.importedFontName}'),
+                          ],
                         ],
                       ),
                     ),
