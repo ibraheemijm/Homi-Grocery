@@ -97,7 +97,7 @@ class _BackupScreenState extends State<BackupScreen> {
           trailing: IconButton(tooltip: 'حجم النسخة', icon: const Icon(Icons.info_outline_rounded), onPressed: () async {
             final file = File(_lastBackupPath!);
             final size = await file.exists() ? await file.length() : 0;
-            if (!mounted) return;
+            if (!context.mounted) return;
             showDialog<void>(context: context, builder: (context) => AlertDialog(
               title: const Text('تفاصيل النسخة'),
               content: Text(file.existsSync() ? 'الحجم: ${(size / 1024).toStringAsFixed(1)} KB' : 'الملف غير موجود.'),
