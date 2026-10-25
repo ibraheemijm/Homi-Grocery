@@ -45,7 +45,21 @@ class FontPreferences {
     documentFont = _validDocumentFont(values['document_font_family']);
     importedFontPath = values['imported_font_path'];
     importedFontName = values['imported_font_name'];
-    await registerImportedFont();
+    try {
+      await registerImportedFont();
+    } on Object {
+      // الخط المستورد بيانات اختيارية؛ لا يجوز أن يمنع فتح التطبيق إذا تلف
+      // الملف أو تعذر على Flutter تحميله. استخدم الخطوط المضمنة بدلًا منه.
+      importedFontPath = null;
+      importedFontName = null;
+      if (uiFont == importedFontFamily) {
+        uiFont = defaultUiFont;
+        uiFontNotifier.value = uiFont;
+      }
+      if (documentFont == importedFontFamily) {
+        documentFont = defaultDocumentFont;
+      }
+    }
   }
 
   static String _validUiFont(String? value) =>
