@@ -136,13 +136,43 @@ class FontPreferences {
     return importedFontName;
   }
 
+  /// يتحقق من ترويسة TTF/OpenType فقط؛ لا يثبت سلامة جداول الخط أو تغطية العربية.
+  static bool hasSupportedSignature(List<int> bytes) {
+    if (bytes.length < 4) return false;
+    final signature = String.fromCharCodes(bytes.take(4));
+    return signature == 'OTTO' ||
+        signature == 'true' ||
+        signature == 'typ1' ||
+        (bytes[0] == 0 &&
+            bytes[1] == 1 &&
+            bytes[2] == 0 &&
+            bytes[3] == 0);
+  }
+
+  static List<int>? _registeredFontBytes;
+
   static Future<void> registerImportedFont() async {
     final path = importedFontPath;
     if (path == null || !await File(path).exists()) return;
     final bytes = await File(path).readAsBytes();
+    if (!hasSupportedSignature(bytes)) {
+      throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
+    }
+    final previous = _registeredFontBytes;
+    if (previous != null && previous.length == bytes.length) {
+      var identical = true;
+      for (var index = 0; index < bytes.length; index++) {
+        if (previous[index] != bytes[index]) {
+          identical = false;
+          break;
+        }
+      }
+      if (identical) return;
+    }
     final loader = FontLoader(importedFontFamily)
       ..addFont(Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))));
     await loader.load();
+    _registeredFontBytes = List<int>.unmodifiable(bytes);
   }
 
   static Future<Uint8List?> importedFontBytes() async {
