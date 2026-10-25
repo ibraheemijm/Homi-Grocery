@@ -1,4 +1,6 @@
 // المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'data/dashboard_repository.dart';
@@ -120,11 +122,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   DashboardStats? _stats;
   String? _statsError;
+  List<RecentInvoice> _recentInvoices = const [];
+  bool _recentInvoicesLoading = true;
+  DateTime _clockNow = DateTime.now();
+  Timer? _clockTimer;
+  String _storeName = 'اسم البقالة';
+  bool _use24HourClock = true;
 
   @override
   void initState() {
     super.initState();
     _loadDashboardStats();
+    _loadRecentInvoices();
+    _loadHomePreferences();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _clockNow = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadHomePreferences() async {
+    try {
+      final database = await GroceryDatabase.open();
+      final rows = await database.query('app_metadata', columns: ['key', 'value'],
+        where: 'key IN (?, ?)', whereArgs: ['store_name', 'clock_24h']);
+      final values = {for (final row in rows) row['key'] as String: row['value'] as String};
+      if (!mounted) return;
+      setState(() {
+        final name = values['store_name']?.trim();
+        if (name != null && name.isNotEmpty) _storeName = name;
+        _use24HourClock = values['clock_24h'] != 'false';
+      });
+    } catch (_) {
+      // تبقى القيم الافتراضية إذا كانت قاعدة البيانات غير متاحة.
+    }
+  }
+
+  Future<void> _loadRecentInvoices() async {
+    try {
+      final database = await GroceryDatabase.open();
+      final rows = await DashboardRepository(database).loadRecentInvoices();
+      if (!mounted) return;
+      setState(() {
+        _recentInvoices = rows;
+        _recentInvoicesLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _recentInvoicesLoading = false);
+    }
+  }
+
+  String get _timeGreeting {
+    final hour = _clockNow.hour;
+    if (hour >= 5 && hour < 11) return 'صباح الخير';
+    if (hour >= 11 && hour < 17) return 'نهارك سعيد';
+    return 'مساء الخير';
+  }
+
+  String get _digitalClock {
+    final hour = _use24HourClock ? _clockNow.hour : ((_clockNow.hour % 12 == 0) ? 12 : _clockNow.hour % 12);
+    final time = '${hour.toString().padLeft(2, '0')}:${_clockNow.minute.toString().padLeft(2, '0')}:${_clockNow.second.toString().padLeft(2, '0')}';
+    return _use24HourClock ? time : '$time ${_clockNow.hour < 12 ? 'ص' : 'م'}';
   }
 
   // تحميل إحصاءات فعلية من قاعدة البيانات المحلية.
@@ -389,7 +452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'الرئيسية',
+                          _storeName,
                           style: theme.textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: theme.colorScheme.onSurface,
@@ -397,7 +460,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 5),
                         Text(
-                          'ملخص نشاط البقالة اليوم',
+                          '$_timeGreeting  •  $_digitalClock',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -547,7 +610,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // مساحة عرض آخر الفواتير؛ ستُربط لاحقًا ببيانات قاعدة البيانات.
+  // عرض أحدث الفواتير الحقيقية، مع إعادة المحاولة وحالة فارغة واضحة.
   Widget _buildRecentSales(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
@@ -559,10 +622,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               children: [
                 const Expanded(
-                  child: Text(
-                    'آخر الفواتير',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                  ),
+                  child: Text('آخر الفواتير', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                ),
+                IconButton(
+                  tooltip: 'تحديث آخر الفواتير',
+                  onPressed: () {
+                    setState(() => _recentInvoicesLoading = true);
+                    _loadRecentInvoices();
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
                 ),
                 TextButton(
                   onPressed: () => setState(() => _selectedIndex = 2),
@@ -571,26 +639,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Icon(Icons.receipt_long_outlined,
-                size: 42, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
-            const SizedBox(height: 10),
-            const Text(
-              'لا توجد فواتير حتى الآن',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              'ستظهر هنا أحدث عمليات البيع بعد تسجيل أول فاتورة.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: () => setState(() => _selectedIndex = 1),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('بدء عملية بيع'),
-            ),
+            if (_recentInvoicesLoading)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_recentInvoices.isEmpty)
+              Column(
+                children: [
+                  Icon(Icons.receipt_long_outlined, size: 42,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
+                  const SizedBox(height: 10),
+                  const Text('لا توجد فواتير حتى الآن',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
+                  Text('ستظهر هنا أحدث عمليات البيع بعد تسجيل فاتورة.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _selectedIndex = 1),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('بدء عملية بيع'),
+                  ),
+                ],
+              )
+            else
+              ..._recentInvoices.map((invoice) {
+                final parsed = DateTime.tryParse(invoice.createdAt)?.toLocal();
+                final date = parsed == null ? invoice.createdAt :
+                  '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.receipt_long_rounded, color: brandGreen),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(invoice.invoiceNumber,
+                                style: const TextStyle(fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 3),
+                              Text('${invoice.customerName} • $date',
+                                style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('${invoice.total} ج.س',
+                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                            Text(invoice.remaining == 0 ? 'مدفوعة' : 'متبقي ${invoice.remaining} ج.س',
+                              style: TextStyle(fontSize: 11,
+                                color: invoice.remaining == 0 ? Colors.green : theme.colorScheme.error)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
       ),
