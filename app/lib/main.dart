@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
 
-import 'screens/backup_screen.dart';
 import 'screens/invoices_screen.dart';
 import 'screens/cashbox_screen.dart';
 import 'screens/customers_screen.dart';
@@ -188,7 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String get _timeGreeting {
     if (_occasionEnabled && _occasionText.trim().isNotEmpty) {
-      final today = '\${_clockNow.year.toString().padLeft(4, '0')}-\${_clockNow.month.toString().padLeft(2, '0')}-\${_clockNow.day.toString().padLeft(2, '0')}';
+      final today = '${_clockNow.year.toString().padLeft(4, '0')}-${_clockNow.month.toString().padLeft(2, '0')}-${_clockNow.day.toString().padLeft(2, '0')}';
       if (_occasionStart.isNotEmpty && _occasionEnd.isNotEmpty &&
           today.compareTo(_occasionStart) >= 0 && today.compareTo(_occasionEnd) <= 0) {
         return _occasionText;
