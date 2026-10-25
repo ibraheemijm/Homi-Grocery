@@ -234,3 +234,5 @@ CI: https://github.com/ibraheemijm/Homi-Grocery/actions
 - فشل CI رقم 40159154708 في خطوة `flutter analyze` فقط، بسبب lint `use_build_context_synchronously` في `backup_screen.dart:101` عند فتح حوار تفاصيل النسخة بعد انتظار قراءة الملف.
 - الإصلاح: فحص `context.mounted` مباشرة قبل استخدام BuildContext الخاص بالواجهة. الاختبارات والبناء لم يُنفذا في ذلك التشغيل بسبب توقف التحليل.
 - إعادة التحقق مطلوبة على commit الإصلاح؛ لا تُعلن ميزة النسخ الاحتياطي جاهزة حتى ينجح التحليل والاختبارات وبناء Linux.
+
+- ملاحظة متابعة: أُصلح فحص `BuildContext` في commit `1f13251a234957ba6afc8f94f7046478fdbe32b3`؛ يلزم CI جديد للتحقق من الإصلاح قبل إكمال المرحلة.
