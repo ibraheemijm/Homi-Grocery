@@ -17,4 +17,20 @@ void main() {
       expect(FontPreferences.hasSupportedSignature([]), isFalse);
     });
   });
+
+  group('FontPreferences.familyForBytes', () {
+    test('returns a stable family for identical font bytes', () {
+      expect(
+        FontPreferences.familyForBytes([0, 1, 0, 0, 1, 2, 3]),
+        FontPreferences.familyForBytes([0, 1, 0, 0, 1, 2, 3]),
+      );
+    });
+
+    test('uses distinct families for different font contents', () {
+      expect(
+        FontPreferences.familyForBytes([0, 1, 0, 0, 1, 2, 3]),
+        isNot(FontPreferences.familyForBytes([0, 1, 0, 0, 1, 2, 4])),
+      );
+    });
+  });
 }
