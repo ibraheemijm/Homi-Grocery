@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
+import 'data/font_preferences.dart';
 
 import 'screens/invoices_screen.dart';
 import 'screens/cashbox_screen.dart';
@@ -19,7 +20,13 @@ import 'screens/settings_screen.dart';
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
 
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await FontPreferences.load();
+  } catch (_) {
+    // تبقى الواجهة على الخط الافتراضي إذا تعذر تحميل التفضيلات.
+  }
   runApp(const HomiGroceryApp());
 }
 
@@ -50,15 +57,18 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Homi Grocery',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: _buildTheme(Brightness.light),
-      darkTheme: _buildTheme(Brightness.dark),
-      home: DashboardScreen(
-        isDark: _themeMode == ThemeMode.dark,
-        onToggleTheme: _toggleTheme,
+    return AnimatedBuilder(
+      animation: FontPreferences.uiFontNotifier,
+      builder: (context, _) => MaterialApp(
+        title: 'Homi Grocery',
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: _buildTheme(Brightness.light),
+        darkTheme: _buildTheme(Brightness.dark),
+        home: DashboardScreen(
+          isDark: _themeMode == ThemeMode.dark,
+          onToggleTheme: _toggleTheme,
+        ),
       ),
     );
   }
@@ -75,7 +85,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
     );
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Cairo',
+      fontFamily: FontPreferences.uiFont,
       colorScheme: scheme,
       scaffoldBackgroundColor:
           isDark ? const Color(0xFF101915) : brandCream,
