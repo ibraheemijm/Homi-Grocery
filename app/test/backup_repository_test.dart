@@ -25,7 +25,7 @@ void main() {
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
     await database.insert('products', {'name': 'سكر', 'purchase_price': 100, 'selling_price': 150, 'stock_quantity': 12, 'created_at': DateTime.now().toUtc().toIso8601String()});
   });
-  tearDown(() async { await database.close(); await directory.delete(recursive: true); });
+  tearDown(() async { if (database.isOpen) await database.close(); await directory.delete(recursive: true); });
 
   test('يفحص نسخة SQLite سليمة ويقرأ بياناتها', () async {
     final path = '${directory.path}/backup.db';
@@ -55,6 +55,71 @@ void main() {
     await legacy.close();
 
     await BackupRepository(database).validateBackup(path);
+  });
+
+
+  test('يعيد النسخة السليمة ويستبدل البيانات الحالية بالبيانات المحفوظة', () async {
+    final backupPath = '${directory.path}/restore-source.db';
+    await database.execute("VACUUM INTO '$backupPath'");
+    await database.update('products', {'name': 'طحين'});
+
+    final targetPath = database.path;
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        if (database.isOpen) await database.close();
+      },
+      openRestoredDatabase: () async {
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(version: 11),
+        );
+        return database;
+      },
+    );
+
+    await repository.restoreBackup(backupPath);
+
+    final rows = await database.query('products');
+    expect(rows.single['name'], 'سكر');
+    expect(rows.single['stock_quantity'], 12);
+  });
+
+  test('يحافظ على البيانات الحالية ويعيد فتح القاعدة إذا فشل فتح النسخة المستعادة', () async {
+    final backupPath = '${directory.path}/restore-source-failure.db';
+    await database.execute("VACUUM INTO '$backupPath'");
+    await database.update('products', {'name': 'طحين'});
+
+    final targetPath = database.path;
+    var openAttempts = 0;
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        if (database.isOpen) await database.close();
+      },
+      openRestoredDatabase: () async {
+        openAttempts++;
+        if (openAttempts == 1) {
+          throw StateError('محاكاة فشل فتح النسخة المستعادة');
+        }
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(version: 11),
+        );
+        return database;
+      },
+    );
+
+    await expectLater(
+      repository.restoreBackup(backupPath),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(openAttempts, 2);
+    expect(database.isOpen, isTrue);
+    final rows = await database.query('products');
+    expect(rows.single['name'], 'طحين');
+    expect(rows.single['stock_quantity'], 12);
   });
 
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
