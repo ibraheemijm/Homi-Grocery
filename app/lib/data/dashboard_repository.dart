@@ -56,3 +56,50 @@ class DashboardRepository {
     );
   }
 }
+
+
+/// فاتورة مختصرة لعرض أحدث عمليات البيع في لوحة التحكم.
+class RecentInvoice {
+  const RecentInvoice({
+    required this.id,
+    required this.invoiceNumber,
+    required this.customerName,
+    required this.total,
+    required this.paidAmount,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String invoiceNumber;
+  final String customerName;
+  final int total;
+  final int paidAmount;
+  final String createdAt;
+
+  int get remaining => (total - paidAmount).clamp(0, 1 << 62);
+
+  static RecentInvoice fromRow(Map<String, Object?> row) => RecentInvoice(
+        id: row['id'] as int,
+        invoiceNumber: row['invoice_number'] as String,
+        customerName: (row['customer_name'] as String?)?.trim().isNotEmpty == true
+            ? (row['customer_name'] as String).trim()
+            : 'زبون نقدي',
+        total: (row['total'] as num).toInt(),
+        paidAmount: (row['paid_amount'] as num).toInt(),
+        createdAt: row['created_at'] as String,
+      );
+}
+
+/// قراءة أحدث الفواتير الحقيقية بدل عرض حالة فارغة ثابتة.
+extension RecentInvoicesLoader on DashboardRepository {
+  Future<List<RecentInvoice>> loadRecentInvoices({int limit = 5}) async {
+    final safeLimit = limit.clamp(1, 20);
+    final rows = await _database.rawQuery('''
+      SELECT id, invoice_number, customer_name, total, paid_amount, created_at
+      FROM sales
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    ''', [safeLimit]);
+    return rows.map(RecentInvoice.fromRow).toList(growable: false);
+  }
+}
