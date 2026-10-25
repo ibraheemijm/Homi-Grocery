@@ -120,24 +120,41 @@ class FontPreferences {
         ? '.otf'
         : '.ttf';
     final destination = File(p.join(fontDirectory.path, 'homi_imported$extension'));
-    await destination.writeAsBytes(bytes, flush: true);
+    final previousPath = importedFontPath;
+    final previousName = importedFontName;
+    final previousBytes =
+        await destination.exists() ? await destination.readAsBytes() : null;
 
-    final db = await GroceryDatabase.open();
-    await db.transaction((txn) async {
-      for (final entry in <String, String>{
-        'imported_font_path': destination.path,
-        'imported_font_name': p.basenameWithoutExtension(picked.name),
-      }.entries) {
-        await txn.insert(
-          'app_metadata',
-          {'key': entry.key, 'value': entry.value},
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-    });
+    // اكتب الملف الجديد أولًا، لكن لا تعتمد بياناته الوصفية إلا بعد نجاح التسجيل.
+    await destination.writeAsBytes(bytes, flush: true);
     importedFontPath = destination.path;
     importedFontName = p.basenameWithoutExtension(picked.name);
-    await registerImportedFont();
+    try {
+      await registerImportedFont();
+      final db = await GroceryDatabase.open();
+      await db.transaction((txn) async {
+        for (final entry in <String, String>{
+          'imported_font_path': destination.path,
+          'imported_font_name': importedFontName!,
+        }.entries) {
+          await txn.insert(
+            'app_metadata',
+            {'key': entry.key, 'value': entry.value},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+    } on Object {
+      // أعد الملف والاختيارات السابقة إن فشل التسجيل أو حفظ الإعدادات.
+      if (previousBytes == null) {
+        if (await destination.exists()) await destination.delete();
+      } else {
+        await destination.writeAsBytes(previousBytes, flush: true);
+      }
+      importedFontPath = previousPath;
+      importedFontName = previousName;
+      rethrow;
+    }
     return importedFontName;
   }
 
