@@ -155,7 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
       await FontPreferences.save(uiFamily: _uiFont, documentFamily: _documentFont);
-      if (mounted) setState(() => _message = 'تم حفظ الإعدادات. سيُطبّق خط الواجهة بعد إعادة فتح التطبيق، وخط المستندات عند الطباعة.');
+      if (mounted) setState(() => _message = 'تم حفظ الإعدادات. طُبّق خط الواجهة، وسيُستخدم خط المستندات عند إنشاء الفواتير وملفات PDF.');
     } catch (error) {
       if (mounted) setState(() => _message = 'تعذر حفظ الإعدادات: $error');
     } finally {
