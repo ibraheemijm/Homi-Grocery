@@ -88,16 +88,20 @@ class BackupRepository {
       restoreCompleted = true;
     } catch (_) {
       await GroceryDatabase.closeForMaintenance();
-      if (hadCurrent && await rollback.exists()) {
-        // لا تستبدل الملف الحالي بنسخة تراجع لم تجتز فحص السلامة.
-        await validateBackup(rollback.path);
-        if (await target.exists()) await target.delete();
-        await rollback.copy(target.path);
-        rollbackRecovered = true;
-      } else if (!hadCurrent && await target.exists()) {
-        await target.delete();
+      try {
+        if (hadCurrent && await rollback.exists()) {
+          // لا تستبدل الملف الحالي بنسخة تراجع لم تجتز فحص السلامة.
+          await validateBackup(rollback.path);
+          if (await target.exists()) await target.delete();
+          await rollback.copy(target.path);
+          rollbackRecovered = true;
+        } else if (!hadCurrent && await target.exists()) {
+          await target.delete();
+        }
+      } finally {
+        // حتى إن فشل التراجع، أعد فتح القاعدة الأصلية إن كانت ما تزال سليمة.
+        await GroceryDatabase.open();
       }
-      await GroceryDatabase.open();
       rethrow;
     } finally {
       if (await staged.exists()) await staged.delete();
