@@ -1,17 +1,40 @@
 // اختبارات الواجهة تتحقق من ظهور العناصر الأساسية بعد تشغيل التطبيق.
-// أضف اختبارات جديدة عند تنفيذ كل وظيفة، خصوصًا الحسابات المالية والمخزون.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/main.dart';
 
 void main() {
   testWidgets('تظهر اللوحة الرئيسية باللغة العربية على شاشة الهاتف',
       (tester) async {
-    // تشغيل التطبيق داخل بيئة الاختبار دون الحاجة إلى جهاز فعلي.
     await tester.pumpWidget(const HomiGroceryApp());
 
-    // التحقق من أهم العناصر التي يجب ألا تختفي أثناء تعديل التصميم.
     expect(find.text('الرئيسية'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsOneWidget);
     expect(find.text('بدء عملية بيع'), findsWidgets);
+  });
+
+  testWidgets('يحافظ عنصر التنقل المحدد على تباين واضح في المظهر الداكن',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('المظهر الداكن'));
+    await tester.pump();
+
+    final selectedTileFinder = find.widgetWithText(ListTile, 'الرئيسية');
+    final selectedTile = tester.widget<ListTile>(selectedTileFinder);
+    expect(selectedTile.selectedTileColor, const Color(0xFF315047));
+
+    final selectedTextFinder = find.descendant(
+      of: selectedTileFinder,
+      matching: find.text('الرئيسية'),
+    );
+    final selectedText = tester.widget<Text>(selectedTextFinder);
+    expect(selectedText.style?.color, Colors.white);
   });
 }

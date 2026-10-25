@@ -313,20 +313,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: ListTile(
                     selected: selected,
-                    selectedTileColor: brandMint,
+                    selectedTileColor: widget.isDark
+                        ? const Color(0xFF315047)
+                        : brandMint,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                     leading: Icon(
                       item.icon,
-                      color: selected ? brandGreen : theme.colorScheme.onSurfaceVariant,
+                      color: selected
+                          ? (widget.isDark ? Colors.white : brandGreen)
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                     title: Text(
                       item.label,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? brandGreen : null,
+                        color: selected
+                            ? (widget.isDark ? Colors.white : brandGreen)
+                            : null,
                       ),
                     ),
                     onTap: () {
