@@ -1,4 +1,5 @@
 // خدمة طباعة فواتير المبيعات بصيغتي A4 والإيصال الحراري.
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -67,9 +68,9 @@ class InvoicePrintService {
       orderBy: 'id ASC',
     );
 
-    // تضمين خط عربي يدعم الحروف المتصلة داخل PDF بدل الاعتماد على خط النظام.
-    final arabicFont = await PdfGoogleFonts.cairoRegular();
-    final arabicBold = await PdfGoogleFonts.cairoBold();
+    // تحميل الخطوط من حزمة التطبيق لتعمل الطباعة دون اتصال بالإنترنت.
+    final arabicFont = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Regular.ttf'));
+    final arabicBold = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Bold.ttf'));
     final document = pw.Document(
       theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBold),
     );
