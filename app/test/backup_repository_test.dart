@@ -38,6 +38,25 @@ void main() {
     await copy.close();
   });
 
+  test('يقبل نسخة قديمة مدعومة قبل إضافة سجل الخزينة', () async {
+    final path = '${directory.path}/legacy-v7.db';
+    final legacy = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(version: 7),
+    );
+    await GroceryDatabase.createSchema(legacy);
+    await GroceryDatabase.createSalesSchema(legacy);
+    await GroceryDatabase.createCustomersSchema(legacy);
+    await GroceryDatabase.createStockMovementsSchema(legacy);
+    await GroceryDatabase.createSalesReturnsSchema(legacy);
+    await GroceryDatabase.createPurchasesSchema(legacy);
+    await GroceryDatabase.createSaleReturnRefundsSchema(legacy);
+    await legacy.execute('PRAGMA user_version = 7');
+    await legacy.close();
+
+    await BackupRepository(database).validateBackup(path);
+  });
+
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
     final invalid = File('${directory.path}/invalid.db');
     await invalid.writeAsString('not a sqlite database');
