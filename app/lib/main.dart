@@ -75,6 +75,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
     );
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Cairo',
       colorScheme: scheme,
       scaffoldBackgroundColor:
           isDark ? const Color(0xFF101915) : brandCream,
