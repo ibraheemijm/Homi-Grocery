@@ -38,16 +38,33 @@ class BackupRepository {
       if (integrity.isEmpty || integrity.first.values.first != 'ok') {
         throw const FormatException('فشل فحص سلامة قاعدة البيانات.');
       }
-      final tables = await candidate.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
-      final names = tables.map((row) => row['name']).whereType<String>().toSet();
-      const required = {'products', 'sales', 'sale_items', 'cash_transactions', 'app_metadata'};
-      if (!names.containsAll(required)) {
-        throw const FormatException('الملف ليس نسخة كاملة من قاعدة Homi Grocery.');
-      }
       final versionRows = await candidate.rawQuery('PRAGMA user_version');
+      if (versionRows.isEmpty || versionRows.first.isEmpty) {
+        throw const FormatException('تعذر قراءة إصدار مخطط قاعدة البيانات.');
+      }
       final version = (versionRows.first.values.first as num).toInt();
       if (version < 1 || version > GroceryDatabase.schemaVersion) {
         throw FormatException('إصدار مخطط قاعدة البيانات غير مدعوم: $version');
+      }
+
+      final tables = await candidate.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
+      final names = tables.map((row) => row['name']).whereType<String>().toSet();
+      // اسمح بالنسخ القديمة المدعومة؛ ستُرحّل عند فتحها بدل رفضها بسبب جداول أضيفت لاحقًا.
+      final required = <String>{'products', 'sales', 'sale_items', 'app_metadata'};
+      if (version >= 7) required.add('sale_return_refunds');
+      if (version >= 8) required.add('cash_transactions');
+      if (version >= 9) {
+        required.addAll({'supplier_returns', 'supplier_return_items'});
+      }
+      if (version >= 11) required.add('supplier_return_refunds');
+      if (!names.containsAll(required)) {
+        throw const FormatException('الملف لا يحتوي على جداول قاعدة Homi Grocery المتوقعة لإصداره.');
+      }
+      if (version >= 10) {
+        final saleItemColumns = await candidate.rawQuery('PRAGMA table_info(sale_items)');
+        if (!saleItemColumns.any((column) => column['name'] == 'cost_price')) {
+          throw const FormatException('النسخة لا تحتوي على عمود تكلفة الصنف المتوقع لإصدارها.');
+        }
       }
     } on FormatException {
       rethrow;
