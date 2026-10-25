@@ -152,8 +152,25 @@ class InvoicePrintService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: pw.TextStyle(fontSize: thermal ? 9 : 11, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-          pw.Text('$amount ج.س', style: pw.TextStyle(fontSize: thermal ? 9 : 11, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          pw.Expanded(
+            child: pw.Text(
+              label,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                fontSize: thermal ? 9 : 11,
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ),
+          pw.SizedBox(width: 4),
+          pw.Text(
+            '$amount ج.س',
+            textAlign: pw.TextAlign.left,
+            style: pw.TextStyle(
+              fontSize: thermal ? 9 : 11,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
+          ),
         ],
       ),
     );
