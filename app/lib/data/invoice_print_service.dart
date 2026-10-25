@@ -188,9 +188,20 @@ class InvoicePrintService {
     // Arial غير موجود على بعض الأنظمة، لذا نعود إلى Amiri بدل إنتاج PDF عربي بخط غير مناسب.
     baseBytes ??= (await rootBundle.load('assets/fonts/Amiri-Regular.ttf')).buffer.asUint8List();
     boldBytes ??= (await rootBundle.load('assets/fonts/Amiri-Bold.ttf')).buffer.asUint8List();
-    final base = pw.Font.ttf(ByteData.sublistView(baseBytes));
-    final bold = pw.Font.ttf(ByteData.sublistView(boldBytes));
-    return pw.ThemeData.withFont(base: base, bold: bold);
+    try {
+      final base = pw.Font.ttf(ByteData.sublistView(baseBytes));
+      final bold = pw.Font.ttf(ByteData.sublistView(boldBytes));
+      return pw.ThemeData.withFont(base: base, bold: bold);
+    } catch (_) {
+      // بعض ملفات OTF لا يقبلها محرك PDF؛ لا نفشل طباعة الفاتورة بسبب خط مستورد.
+      final fallbackBase = pw.Font.ttf(
+        await rootBundle.load('assets/fonts/Amiri-Regular.ttf'),
+      );
+      final fallbackBold = pw.Font.ttf(
+        await rootBundle.load('assets/fonts/Amiri-Bold.ttf'),
+      );
+      return pw.ThemeData.withFont(base: fallbackBase, bold: fallbackBold);
+    }
   }
 
   pw.Widget _amountRow(String label, int amount, bool thermal, {bool bold = false}) {
