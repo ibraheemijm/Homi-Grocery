@@ -193,8 +193,18 @@ class FontPreferences {
 
   static Future<void> registerImportedFont() async {
     final path = importedFontPath;
-    if (path == null || !await File(path).exists()) return;
-    final bytes = await File(path).readAsBytes();
+    if (path == null) {
+      if (uiFont == importedFontFamily ||
+          documentFont == importedFontFamily) {
+        throw StateError('الخط المستورد محدد في الإعدادات لكن مساره غير محفوظ.');
+      }
+      return;
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      throw StateError('ملف الخط المستورد المحدد لم يعد موجودًا.');
+    }
+    final bytes = await file.readAsBytes();
     if (!hasSupportedSignature(bytes)) {
       throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
     }
