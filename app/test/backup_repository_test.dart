@@ -215,6 +215,46 @@ void main() {
     expect(rows.single['stock_quantity'], 12);
   });
 
+  test('ينظف ملف الاستعادة المؤقت إذا فشل إغلاق القاعدة قبل الاستعادة', () async {
+    final backupPath = '${directory.path}/restore-close-failure.db';
+    await database.execute("VACUUM INTO '$backupPath'");
+    final targetPath = database.path;
+    var closeAttempts = 0;
+
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        closeAttempts++;
+        if (database.isOpen) await database.close();
+        if (closeAttempts == 1) {
+          throw StateError('محاكاة فشل إعداد الصيانة بعد إغلاق الاتصال');
+        }
+      },
+      openRestoredDatabase: () async {
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(version: 11),
+        );
+        return database;
+      },
+    );
+
+    await expectLater(
+      repository.restoreBackup(backupPath),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(database.isOpen, isTrue);
+    expect((await database.query('products')).single['name'], 'سكر');
+    final temporaryFiles = directory
+        .listSync()
+        .whereType<File>()
+        .where((file) =>
+            file.uri.pathSegments.last.startsWith('.homi-restore-') ||
+            file.uri.pathSegments.last.startsWith('.homi-rollback-'));
+    expect(temporaryFiles, isEmpty);
+  });
+
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
     final invalid = File('${directory.path}/invalid.db');
     await invalid.writeAsString('not a sqlite database');
