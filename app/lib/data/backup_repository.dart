@@ -72,25 +72,39 @@ class BackupRepository {
     final rollback = File(p.join(parent.path, '.homi-rollback-$stamp.db'));
     await source.copy(staged.path);
     final hadCurrent = await target.exists();
-    if (hadCurrent) await target.copy(rollback.path);
+    var rollbackRecovered = false;
+    var restoreCompleted = false;
     await GroceryDatabase.closeForMaintenance();
     try {
+      // لا تنسخ قاعدة البيانات الحية: أغلق اتصال SQLite أولًا لتفادي نسخة غير متسقة.
+      if (hadCurrent) {
+        await target.copy(rollback.path);
+        await validateBackup(rollback.path);
+      }
       if (await target.exists()) await target.delete();
       await staged.copy(target.path);
       final restored = await GroceryDatabase.open();
       await _validateOpenedDatabase(restored);
-      if (await rollback.exists()) await rollback.delete();
+      restoreCompleted = true;
     } catch (_) {
       await GroceryDatabase.closeForMaintenance();
       if (hadCurrent && await rollback.exists()) {
+        // لا تستبدل الملف الحالي بنسخة تراجع لم تجتز فحص السلامة.
+        await validateBackup(rollback.path);
         if (await target.exists()) await target.delete();
         await rollback.copy(target.path);
+        rollbackRecovered = true;
+      } else if (!hadCurrent && await target.exists()) {
+        await target.delete();
       }
       await GroceryDatabase.open();
       rethrow;
     } finally {
       if (await staged.exists()) await staged.delete();
-      if (await rollback.exists()) await rollback.delete();
+      // احتفظ بنسخة التراجع إذا تعذر استرجاعها؛ قد تكون آخر نسخة قابلة للإنقاذ.
+      if ((restoreCompleted || rollbackRecovered) && await rollback.exists()) {
+        await rollback.delete();
+      }
     }
   }
 
