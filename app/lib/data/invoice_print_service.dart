@@ -1,5 +1,4 @@
 // خدمة طباعة فواتير المبيعات بصيغتي A4 والإيصال الحراري.
-import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
