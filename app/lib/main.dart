@@ -15,6 +15,7 @@ import 'screens/reports_screen.dart';
 import 'screens/sales_screen.dart';
 import 'screens/stock_movements_screen.dart';
 import 'screens/suppliers_screen.dart';
+import 'screens/settings_screen.dart';
 
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
 
@@ -247,7 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             : _selectedIndex == 7
                                                 ? const ReportsScreen()
                                                 : _selectedIndex == 8
-                                                    ? const BackupScreen()
+                                                    ? const SettingsScreen()
                                                     : _selectedIndex == 9
                                         ? const StockMovementsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
