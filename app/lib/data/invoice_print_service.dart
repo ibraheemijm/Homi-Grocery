@@ -33,7 +33,7 @@ class InvoicePrintService {
       theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBold),
     );
     final pageFormat = thermal
-        ? PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm,
+        ? const PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm,
             marginAll: 4 * PdfPageFormat.mm)
         : PdfPageFormat.a4.copyWith(
             marginLeft: 18 * PdfPageFormat.mm,
@@ -73,7 +73,7 @@ class InvoicePrintService {
             cellStyle: pw.TextStyle(fontSize: thermal ? 8 : 10),
             cellAlignment: pw.Alignment.centerRight,
             headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE8EFEA)),
-            border: pw.TableBorder.all(color: PdfColor.fromInt(0xFFB8C6BE), width: 0.5),
+            border: const pw.TableBorder.all(color: PdfColor.fromInt(0xFFB8C6BE), width: 0.5),
             cellPadding: pw.EdgeInsets.all(thermal ? 3 : 6),
           ),
           pw.SizedBox(height: 12),
