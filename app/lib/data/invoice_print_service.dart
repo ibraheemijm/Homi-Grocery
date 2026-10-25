@@ -66,7 +66,7 @@ class InvoicePrintService {
   /// يفتح نافذة الطباعة بعد بناء PDF مستقل قابل للاختبار.
   Future<void> printInvoice(int saleId, {required bool thermal}) async {
     final summary = await loadSummary(saleId);
-    final bytes = await _buildInvoicePdfFromSummary(summary, thermal: thermal);
+    final bytes = await _buildInvoicePdfFromSummary(saleId, summary, thermal: thermal);
     final sale = summary.sale;
     await Printing.layoutPdf(
       name: 'invoice-${sale['invoice_number']}${thermal ? '-thermal' : '-A4'}.pdf',
@@ -78,10 +78,11 @@ class InvoicePrintService {
   /// يبني ملف PDF دون استدعاء واجهة الطباعة، لتسهيل اختباره آليًا.
   Future<Uint8List> buildInvoicePdf(int saleId, {required bool thermal}) async {
     final summary = await loadSummary(saleId);
-    return _buildInvoicePdfFromSummary(summary, thermal: thermal);
+    return _buildInvoicePdfFromSummary(saleId, summary, thermal: thermal);
   }
 
   Future<Uint8List> _buildInvoicePdfFromSummary(
+    int saleId,
     InvoicePrintSummary summary, {
     required bool thermal,
   }) async {
