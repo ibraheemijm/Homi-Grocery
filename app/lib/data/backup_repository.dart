@@ -58,7 +58,10 @@ class BackupRepository {
       final tables = await candidate.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
       final names = tables.map((row) => row['name']).whereType<String>().toSet();
       // اسمح بالنسخ القديمة المدعومة؛ ستُرحّل عند فتحها بدل رفضها بسبب جداول أضيفت لاحقًا.
-      final required = <String>{'products', 'sales', 'sale_items', 'app_metadata'};
+      final required = <String>{'products', 'app_metadata'};
+      // sales and sale_items first entered the schema in version 2; older
+      // backups must be validated against the schema they actually contain.
+      if (version >= 2) required.addAll({'sales', 'sale_items'});
       if (version >= 7) required.add('sale_return_refunds');
       if (version >= 8) required.add('cash_transactions');
       if (version >= 9) {
