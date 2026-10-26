@@ -204,6 +204,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   ),
                                 ),
                               ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.trending_up_rounded),
+                                title: const Text('مجمل الربح للفترة'),
+                                subtitle: Text(period.grossProfit == null
+                                    ? 'غير متاح: توجد فواتير أو مرتجعات بتكلفة تاريخية غير محفوظة.'
+                                    : 'بعد خصم تكلفة البضاعة المباعة وإضافة تكلفة البضاعة المرتجعة'),
+                                trailing: Text(
+                                  period.grossProfit == null ? '—' : _money(period.grossProfit!),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: period.grossProfit != null && period.grossProfit! < 0
+                                        ? Colors.red
+                                        : Colors.green,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
