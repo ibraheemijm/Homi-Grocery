@@ -10,6 +10,7 @@ class StockMovement {
     required this.stockBefore,
     required this.stockAfter,
     required this.createdAt,
+    this.productName,
     this.note,
     this.referenceType,
     this.referenceId,
@@ -22,6 +23,7 @@ class StockMovement {
   final double stockBefore;
   final double stockAfter;
   final String createdAt;
+  final String? productName;
   final String? note;
   final String? referenceType;
   final int? referenceId;
@@ -34,6 +36,7 @@ class StockMovement {
         stockBefore: (row['stock_before'] as num).toDouble(),
         stockAfter: (row['stock_after'] as num).toDouble(),
         createdAt: row['created_at'] as String,
+        productName: row['product_name'] as String?,
         note: row['note'] as String?,
         referenceType: row['reference_type'] as String?,
         referenceId: row['reference_id'] as int?,
@@ -114,15 +117,20 @@ class StockRepository {
     });
   }
 
-  /// يعرض سجل صنف واحد من الأحدث إلى الأقدم.
-  Future<List<StockMovement>> history(int productId, {int limit = 100}) async {
+  /// يعرض سجل صنف محدد أو سجل جميع الأصناف من الأحدث إلى الأقدم.
+  /// تمرير null يعرض كل الأصناف دون تعديل أي رصيد.
+  Future<List<StockMovement>> history(int? productId, {int limit = 100}) async {
     if (limit < 1) throw ArgumentError('عدد الحركات يجب أن يكون أكبر من صفر.');
-    final rows = await _database.query(
-      'stock_movements',
-      where: 'product_id = ?',
-      whereArgs: [productId],
-      orderBy: 'id DESC',
-      limit: limit,
+    final rows = await _database.rawQuery(
+      '''
+      SELECT sm.*, p.name AS product_name
+      FROM stock_movements sm
+      LEFT JOIN products p ON p.id = sm.product_id
+      ${productId == null ? '' : 'WHERE sm.product_id = ?'}
+      ORDER BY sm.id DESC
+      LIMIT ?
+      ''',
+      productId == null ? [limit] : [productId, limit],
     );
     return rows.map(StockMovement.fromMap).toList(growable: false);
   }
