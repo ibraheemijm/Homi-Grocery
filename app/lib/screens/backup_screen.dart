@@ -90,6 +90,36 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
+  Future<void> _deleteBackup(File file) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف النسخة الاحتياطية؟'),
+        content: Text('سيُحذف هذا الملف المحلي فقط ولن تتغير قاعدة بيانات المتجر الحالية.\n\n${file.uri.pathSegments.last}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('حذف النسخة'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() { _working = true; _message = null; });
+    try {
+      await (await _repo()).deleteBackup(file.path);
+      if (!mounted) return;
+      setState(() { _message = 'تم حذف النسخة المحلية المحددة.'; _isError = false; });
+      await _loadBackups();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() { _message = 'تعذر حذف النسخة: $error'; _isError = true; });
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _showFolder() async {
     final directory = await (await _repo()).backupDirectory();
     if (!mounted) return;
@@ -172,10 +202,20 @@ class _BackupScreenState extends State<BackupScreen> {
                       leading: const Icon(Icons.backup_rounded),
                       title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text('$stamp • ${(file.lengthSync() / 1024).toStringAsFixed(1)} KB'),
-                      trailing: IconButton(
-                        tooltip: 'استعادة هذه النسخة',
-                        onPressed: _working ? null : () => _restorePath(file.path),
-                        icon: const Icon(Icons.settings_backup_restore_rounded),
+                      trailing: Wrap(
+                        spacing: 0,
+                        children: [
+                          IconButton(
+                            tooltip: 'استعادة هذه النسخة',
+                            onPressed: _working ? null : () => _restorePath(file.path),
+                            icon: const Icon(Icons.settings_backup_restore_rounded),
+                          ),
+                          IconButton(
+                            tooltip: 'حذف هذه النسخة',
+                            onPressed: _working ? null : () => _deleteBackup(file),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          ),
+                        ],
                       ),
                     );
                   }),
