@@ -48,6 +48,36 @@ void main() {
     expect((await stock.history(id)).length, 2);
   });
 
+  test('يعرض سجل جميع الأصناف مع اسم كل صنف وبترتيب الأحدث', () async {
+    final sugarId = await products.add(const GroceryProduct(
+      name: 'سكر',
+      stockQuantity: 5,
+    ));
+    final oilId = await products.add(const GroceryProduct(
+      name: 'زيت',
+      stockQuantity: 8,
+    ));
+
+    await stock.recordMovement(
+      productId: sugarId,
+      movementType: 'إضافة',
+      quantityDelta: 2,
+    );
+    await stock.recordMovement(
+      productId: oilId,
+      movementType: 'تسوية',
+      quantityDelta: -1,
+    );
+
+    final movements = await stock.history(null);
+
+    expect(movements, hasLength(2));
+    expect(movements.first.productId, oilId);
+    expect(movements.first.productName, 'زيت');
+    expect(movements.last.productId, sugarId);
+    expect(movements.last.productName, 'سكر');
+  });
+
   test('يرفض الحركة الصفرية وغير المحدودة دون تغيير الرصيد', () async {
     final id = await products.add(const GroceryProduct(
       name: 'زيت',
