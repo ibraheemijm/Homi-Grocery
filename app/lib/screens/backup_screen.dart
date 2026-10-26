@@ -12,10 +12,30 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool _working = false;
+  bool _loadingBackups = true;
+  List<File> _backups = [];
   String? _lastBackupPath;
   String? _message;
   bool _isError = false;
   Future<BackupRepository> _repo() async => BackupRepository(await GroceryDatabase.open());
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackups();
+  }
+
+  Future<void> _loadBackups() async {
+    if (mounted) setState(() => _loadingBackups = true);
+    try {
+      final backups = await (await _repo()).listBackups();
+      if (mounted) setState(() => _backups = backups);
+    } catch (error) {
+      if (mounted) setState(() { _message = 'تعذر تحميل قائمة النسخ: $error'; _isError = true; });
+    } finally {
+      if (mounted) setState(() => _loadingBackups = false);
+    }
+  }
 
   Future<void> _createBackup() async {
     setState(() { _working = true; _message = null; });
@@ -23,6 +43,7 @@ class _BackupScreenState extends State<BackupScreen> {
       final file = await (await _repo()).createBackup();
       if (!mounted) return;
       setState(() { _lastBackupPath = file.path; _message = 'تم إنشاء النسخة وفحص سلامتها.'; _isError = false; });
+      await _loadBackups();
     } catch (error) {
       if (!mounted) return;
       setState(() { _message = 'تعذر إنشاء النسخة: $error'; _isError = true; });
@@ -32,9 +53,17 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _restore() async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: const ['db', 'sqlite', 'sqlite3'], allowMultiple: false, withData: false);
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['db', 'sqlite', 'sqlite3'],
+      allowMultiple: false,
+      withData: false,
+    );
     if (picked == null || picked.files.single.path == null || !mounted) return;
-    final path = picked.files.single.path!;
+    await _restorePath(picked.files.single.path!);
+  }
+
+  Future<void> _restorePath(String path) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -52,6 +81,7 @@ class _BackupScreenState extends State<BackupScreen> {
       await (await _repo()).restoreBackup(path);
       if (!mounted) return;
       setState(() { _message = 'اكتملت الاستعادة واجتازت قاعدة البيانات فحص السلامة.'; _isError = false; });
+      await _loadBackups();
     } catch (error) {
       if (!mounted) return;
       setState(() { _message = 'لم تكتمل الاستعادة: $error'; _isError = true; });
@@ -105,6 +135,54 @@ class _BackupScreenState extends State<BackupScreen> {
             ));
           }),
         )),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('النسخ المحلية المتاحة', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    ),
+                    IconButton(
+                      tooltip: 'تحديث القائمة',
+                      onPressed: _working ? null : _loadBackups,
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ],
+                ),
+                if (_loadingBackups)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_backups.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('لا توجد نسخ محلية سليمة محفوظة حتى الآن.'),
+                  )
+                else
+                  ..._backups.map((file) {
+                    final modified = file.lastModifiedSync().toLocal();
+                    final stamp = '${modified.year}-${modified.month.toString().padLeft(2, '0')}-${modified.day.toString().padLeft(2, '0')} ${modified.hour.toString().padLeft(2, '0')}:${modified.minute.toString().padLeft(2, '0')}';
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.backup_rounded),
+                      title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('$stamp • ${(file.lengthSync() / 1024).toStringAsFixed(1)} KB'),
+                      trailing: IconButton(
+                        tooltip: 'استعادة هذه النسخة',
+                        onPressed: _working ? null : () => _restorePath(file.path),
+                        icon: const Icon(Icons.settings_backup_restore_rounded),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         const Text('احتفظ بنسخة خارج الجهاز أيضًا؛ فالنسخ المحلية وحدها لا تحمي من فقدان الجهاز أو تلف القرص.'),
       ]),
