@@ -70,6 +70,7 @@ class PeriodReport {
     required this.salesCount,
     required this.returnsTotal,
     required this.products,
+    required this.grossProfit,
   });
 
   final DateTime start;
@@ -79,6 +80,8 @@ class PeriodReport {
   final int salesCount;
   final int returnsTotal;
   final List<BestSellingProduct> products;
+  /// null عندما تتضمن الفترة تكلفة تاريخية مجهولة لأي بيع أو مرتجع.
+  final int? grossProfit;
   int get netSalesTotal => salesTotal - returnsTotal;
 }
 
@@ -111,6 +114,23 @@ class ReportsRepository {
         COALESCE((SELECT SUM(amount) FROM sale_returns
           WHERE created_at >= ? AND created_at < ?), 0) AS returns_total
     ''', [utcStart, utcEnd, utcStart, utcEnd, utcStart, utcEnd]);
+    final cost = await _database.rawQuery('''
+      SELECT
+        COALESCE(SUM(si.cost_price * si.quantity), 0) AS sold_cost,
+        SUM(CASE WHEN si.cost_price IS NULL THEN 1 ELSE 0 END) AS missing_costs
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.created_at >= ? AND s.created_at < ?
+    ''', [utcStart, utcEnd]);
+    final returnedCost = await _database.rawQuery('''
+      SELECT
+        COALESCE(SUM(sri.quantity * si.cost_price), 0) AS cost,
+        SUM(CASE WHEN si.cost_price IS NULL THEN 1 ELSE 0 END) AS missing_costs
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id = sri.return_id
+      JOIN sale_items si ON si.id = sri.sale_item_id
+      WHERE sr.created_at >= ? AND sr.created_at < ?
+    ''', [utcStart, utcEnd]);
     final rows = await _database.rawQuery('''
       WITH activity AS (
         SELECT
@@ -154,6 +174,13 @@ class ReportsRepository {
       salesTotal: (totals.single['sales_total'] as num).toInt(),
       salesCount: (totals.single['sales_count'] as num).toInt(),
       returnsTotal: (totals.single['returns_total'] as num).toInt(),
+      grossProfit: ((cost.single['missing_costs'] as num? ?? 0).toInt() > 0 ||
+              (returnedCost.single['missing_costs'] as num? ?? 0).toInt() > 0)
+          ? null
+          : (totals.single['sales_total'] as num).toInt() -
+              (totals.single['returns_total'] as num).toInt() -
+              (cost.single['sold_cost'] as num).round() +
+              (returnedCost.single['cost'] as num).round(),
       products: rows.map((row) => BestSellingProduct(
         productId: (row['product_id'] as num).toInt(),
         name: row['product_name'] as String,
