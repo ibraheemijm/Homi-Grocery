@@ -88,6 +88,7 @@ class ReportsRepository {
 
   /// تقرير فترة تقويمية؛ الكميات الصافية = المبيعات خلال الفترة ناقص
   /// المرتجعات المسجلة خلالها، مع إبقاء المرتجعات ظاهرة حتى إن تجاوزت المبيعات.
+  /// يجمع سجل الأصناف بمعرّف الصنف والوحدة، لا بالاسم التاريخي وحده.
   Future<PeriodReport> loadPeriod({
     required DateTime start,
     required DateTime end,
