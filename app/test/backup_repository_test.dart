@@ -27,6 +27,50 @@ void main() {
   });
   tearDown(() async { if (database.isOpen) await database.close(); await directory.delete(recursive: true); });
 
+  test('يعرض النسخ المحلية السليمة من الأحدث ويتجاهل الملفات غير المدارة', () async {
+    final backupsDir = Directory('${directory.path}/managed-backups');
+    await backupsDir.create();
+    final older = File('${backupsDir.path}/homi-grocery-older.db');
+    final newer = File('${backupsDir.path}/homi-grocery-newer.db');
+    final unrelated = File('${backupsDir.path}/notes.db');
+    final corrupt = File('${backupsDir.path}/homi-grocery-corrupt.db');
+    await database.execute("VACUUM INTO '${older.path}'");
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await database.execute("VACUUM INTO '${newer.path}'");
+    await unrelated.writeAsString('not a backup');
+    await corrupt.writeAsString('not a sqlite database');
+
+    final repository = BackupRepository(
+      database,
+      resolveBackupDirectory: () async => backupsDir,
+    );
+    final backups = await repository.listBackups();
+
+    expect(backups.map((file) => file.path).toList(), [newer.path, older.path]);
+  });
+
+  test('يسمح بحذف نسخة مدارة فقط ويرفض المسارات الخارجية', () async {
+    final backupsDir = Directory('${directory.path}/managed-backups');
+    await backupsDir.create();
+    final backup = File('${backupsDir.path}/homi-grocery-test.db');
+    await database.execute("VACUUM INTO '${backup.path}'");
+    final unrelated = File('${directory.path}/important.db');
+    await database.execute("VACUUM INTO '${unrelated.path}'");
+
+    final repository = BackupRepository(
+      database,
+      resolveBackupDirectory: () async => backupsDir,
+    );
+    await expectLater(
+      repository.deleteBackup(unrelated.path),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(await unrelated.exists(), isTrue);
+
+    await repository.deleteBackup(backup.path);
+    expect(await backup.exists(), isFalse);
+  });
+
   test('يفحص نسخة SQLite سليمة ويقرأ بياناتها', () async {
     final path = '${directory.path}/backup.db';
     await database.execute("VACUUM INTO '$path'");
