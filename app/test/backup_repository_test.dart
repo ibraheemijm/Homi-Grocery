@@ -35,8 +35,9 @@ void main() {
     final unrelated = File('${backupsDir.path}/notes.db');
     final corrupt = File('${backupsDir.path}/homi-grocery-corrupt.db');
     await database.execute("VACUUM INTO '${older.path}'");
-    await Future<void>.delayed(const Duration(milliseconds: 20));
     await database.execute("VACUUM INTO '${newer.path}'");
+    await older.setLastModified(DateTime.utc(2020, 1, 1));
+    await newer.setLastModified(DateTime.utc(2021, 1, 1));
     await unrelated.writeAsString('not a backup');
     await corrupt.writeAsString('not a sqlite database');
 
