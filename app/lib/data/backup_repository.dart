@@ -10,18 +10,64 @@ class BackupRepository {
     this._database, {
     Future<void> Function()? closeForMaintenance,
     Future<Database> Function()? openRestoredDatabase,
+    Future<Directory> Function()? resolveBackupDirectory,
   })  : _closeForMaintenance = closeForMaintenance ?? GroceryDatabase.closeForMaintenance,
-        _openRestoredDatabase = openRestoredDatabase ?? GroceryDatabase.open;
+        _openRestoredDatabase = openRestoredDatabase ?? GroceryDatabase.open,
+        _resolveBackupDirectory = resolveBackupDirectory;
 
   final Database _database;
   final Future<void> Function() _closeForMaintenance;
   final Future<Database> Function() _openRestoredDatabase;
+  final Future<Directory> Function()? _resolveBackupDirectory;
 
   Future<Directory> backupDirectory() async {
+    if (_resolveBackupDirectory != null) {
+      final directory = await _resolveBackupDirectory();
+      await directory.create(recursive: true);
+      return directory;
+    }
     final support = await getApplicationSupportDirectory();
     final directory = Directory(p.join(support.path, 'backups'));
     await directory.create(recursive: true);
     return directory;
+  }
+
+  /// Returns managed local backups newest first; unrelated files are ignored.
+  Future<List<File>> listBackups() async {
+    final directory = await backupDirectory();
+    final files = <File>[];
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basename(entity.path);
+      if (!name.startsWith('homi-grocery-') || !name.endsWith('.db')) continue;
+      try {
+        await validateBackup(entity.path);
+        files.add(entity);
+      } on FormatException {
+        // Do not present corrupt or unsupported files as restorable backups.
+      } on FileSystemException {
+        // Ignore files that disappear while the list is being read.
+      }
+    }
+    files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    return files;
+  }
+
+  /// Deletes only a managed backup in the application's backup directory.
+  Future<void> deleteBackup(String path) async {
+    final directory = await backupDirectory();
+    final file = File(path);
+    final normalizedParent = p.normalize(directory.absolute.path);
+    final normalizedFile = p.normalize(file.absolute.path);
+    if (p.dirname(normalizedFile) != normalizedParent ||
+        !p.basename(normalizedFile).startsWith('homi-grocery-') ||
+        !p.basename(normalizedFile).endsWith('.db')) {
+      throw ArgumentError('يمكن حذف النسخ الاحتياطية التي يديرها التطبيق فقط.');
+    }
+    if (!await file.exists()) {
+      throw const FileSystemException('ملف النسخة الاحتياطية غير موجود.');
+    }
+    await file.delete();
   }
 
   Future<File> createBackup() async {
