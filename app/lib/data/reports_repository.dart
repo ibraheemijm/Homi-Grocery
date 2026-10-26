@@ -45,9 +45,123 @@ class DailyReport {
   int get cashNet => cashIncome - cashExpense;
 }
 
+class BestSellingProduct {
+  const BestSellingProduct({
+    required this.productId,
+    required this.name,
+    required this.unit,
+    required this.soldQuantity,
+    required this.returnedQuantity,
+  });
+
+  final int productId;
+  final String name;
+  final String unit;
+  final double soldQuantity;
+  final double returnedQuantity;
+  double get netQuantity => soldQuantity - returnedQuantity;
+}
+
+class PeriodReport {
+  const PeriodReport({
+    required this.start,
+    required this.end,
+    required this.salesTotal,
+    required this.salesCount,
+    required this.returnsTotal,
+    required this.products,
+  });
+
+  final DateTime start;
+  /// Exclusive end boundary.
+  final DateTime end;
+  final int salesTotal;
+  final int salesCount;
+  final int returnsTotal;
+  final List<BestSellingProduct> products;
+  int get netSalesTotal => salesTotal - returnsTotal;
+}
+
 class ReportsRepository {
   ReportsRepository(this._database);
   final Database _database;
+
+  /// تقرير فترة تقويمية؛ الكميات الصافية = المبيعات خلال الفترة ناقص
+  /// المرتجعات المسجلة خلالها، مع إبقاء المرتجعات ظاهرة حتى إن تجاوزت المبيعات.
+  Future<PeriodReport> loadPeriod({
+    required DateTime start,
+    required DateTime end,
+    int topLimit = 10,
+  }) async {
+    if (!end.isAfter(start)) {
+      throw ArgumentError('نهاية الفترة يجب أن تأتي بعد بدايتها.');
+    }
+    if (topLimit < 1) {
+      throw ArgumentError('عدد الأصناف المعروضة يجب أن يكون أكبر من صفر.');
+    }
+    final utcStart = start.toUtc().toIso8601String();
+    final utcEnd = end.toUtc().toIso8601String();
+    final totals = await _database.rawQuery('''
+      SELECT
+        COALESCE((SELECT SUM(total) FROM sales
+          WHERE created_at >= ? AND created_at < ?), 0) AS sales_total,
+        (SELECT COUNT(*) FROM sales
+          WHERE created_at >= ? AND created_at < ?) AS sales_count,
+        COALESCE((SELECT SUM(amount) FROM sale_returns
+          WHERE created_at >= ? AND created_at < ?), 0) AS returns_total
+    ''', [utcStart, utcEnd, utcStart, utcEnd, utcStart, utcEnd]);
+    final rows = await _database.rawQuery('''
+      WITH activity AS (
+        SELECT
+          si.product_id AS product_id,
+          si.product_name AS product_name,
+          si.unit AS unit,
+          SUM(si.quantity) AS sold_quantity,
+          0.0 AS returned_quantity
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        WHERE s.created_at >= ? AND s.created_at < ?
+        GROUP BY si.product_id, si.product_name, si.unit
+
+        UNION ALL
+
+        SELECT
+          si.product_id AS product_id,
+          si.product_name AS product_name,
+          si.unit AS unit,
+          0.0 AS sold_quantity,
+          SUM(sri.quantity) AS returned_quantity
+        FROM sale_return_items sri
+        JOIN sale_returns sr ON sr.id = sri.return_id
+        JOIN sale_items si ON si.id = sri.sale_item_id
+        WHERE sr.created_at >= ? AND sr.created_at < ?
+        GROUP BY si.product_id, si.product_name, si.unit
+      )
+      SELECT product_id, product_name, unit,
+        SUM(sold_quantity) AS sold_quantity,
+        SUM(returned_quantity) AS returned_quantity
+      FROM activity
+      GROUP BY product_id, product_name, unit
+      ORDER BY (SUM(sold_quantity) - SUM(returned_quantity)) DESC,
+        SUM(sold_quantity) DESC, product_name COLLATE NOCASE ASC
+      LIMIT ?
+    ''', [utcStart, utcEnd, utcStart, utcEnd, topLimit]);
+
+    return PeriodReport(
+      start: start,
+      end: end,
+      salesTotal: (totals.single['sales_total'] as num).toInt(),
+      salesCount: (totals.single['sales_count'] as num).toInt(),
+      returnsTotal: (totals.single['returns_total'] as num).toInt(),
+      products: rows.map((row) => BestSellingProduct(
+        productId: (row['product_id'] as num).toInt(),
+        name: row['product_name'] as String,
+        unit: row['unit'] as String,
+        soldQuantity: (row['sold_quantity'] as num).toDouble(),
+        returnedQuantity: (row['returned_quantity'] as num).toDouble(),
+      )).toList(growable: false),
+    );
+  }
 
   Future<DailyReport> load({DateTime? day}) async {
     final selected = day ?? DateTime.now();
