@@ -13,7 +13,10 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   DateTime _day = DateTime.now();
+  DateTime _periodDate = DateTime.now();
+  String _periodMode = 'month';
   late Future<DailyReport> _report;
+  late Future<PeriodReport> _periodReport;
 
   @override
   void initState() {
@@ -23,6 +26,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   void _reload() {
     _report = _load();
+    _periodReport = _loadPeriod();
+  }
+
+  Future<PeriodReport> _loadPeriod() async {
+    final db = await GroceryDatabase.open();
+    final start = _periodMode == 'month'
+        ? DateTime(_periodDate.year, _periodDate.month)
+        : DateTime(_periodDate.year);
+    final end = _periodMode == 'month'
+        ? DateTime(_periodDate.year, _periodDate.month + 1)
+        : DateTime(_periodDate.year + 1);
+    return ReportsRepository(db).loadPeriod(start: start, end: end);
   }
 
   Future<DailyReport> _load() async {
@@ -34,6 +49,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   String _dateLabel(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _choosePeriodDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _periodDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      helpText: _periodMode == 'month' ? 'اختر شهر التقرير' : 'اختر سنة التقرير',
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _periodDate = selected;
+        _reload();
+      });
+    }
+  }
+
+  String _quantity(double value) =>
+      value == value.truncateToDouble() ? value.toInt().toString() : value.toStringAsFixed(2);
+
+  String _periodLabel(PeriodReport report) {
+    if (_periodMode == 'year') return report.start.year.toString();
+    return '${report.start.year}-${report.start.month.toString().padLeft(2, '0')}';
+  }
 
   Future<void> _chooseDay() async {
     final selected = await showDatePicker(
@@ -56,7 +95,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('التقارير اليومية'),
+        title: const Text('التقارير'),
         actions: [
           IconButton(tooltip: 'اختيار التاريخ', onPressed: _chooseDay, icon: const Icon(Icons.calendar_month_rounded)),
           IconButton(tooltip: 'تحديث', onPressed: () => setState(_reload), icon: const Icon(Icons.refresh_rounded)),
@@ -78,6 +117,130 @@ class _ReportsScreenState extends State<ReportsScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
+                Text('ملخص المبيعات والأصناف الأكثر مبيعًا', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _periodMode,
+                        decoration: const InputDecoration(
+                          labelText: 'نوع الفترة',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'month', child: Text('شهري')),
+                          DropdownMenuItem(value: 'year', child: Text('سنوي')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _periodMode = value;
+                            _reload();
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _choosePeriodDate,
+                        icon: const Icon(Icons.calendar_month_rounded),
+                        label: Text(_periodMode == 'month'
+                            ? '${_periodDate.year}-${_periodDate.month.toString().padLeft(2, '0')}'
+                            : _periodDate.year.toString()),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                FutureBuilder<PeriodReport>(
+                  future: _periodReport,
+                  builder: (context, periodSnapshot) {
+                    if (periodSnapshot.hasError) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('تعذر تحميل ملخص الفترة: ${periodSnapshot.error}'),
+                        ),
+                      );
+                    }
+                    if (!periodSnapshot.hasData) {
+                      return const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      );
+                    }
+                    final period = periodSnapshot.data!;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Card(
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.point_of_sale_rounded),
+                                title: const Text('إجمالي المبيعات'),
+                                subtitle: Text('${period.salesCount} فاتورة • ${_periodLabel(period)}'),
+                                trailing: Text(_money(period.salesTotal), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.assignment_return_outlined),
+                                title: const Text('مرتجعات المبيعات'),
+                                trailing: Text(_money(period.returnsTotal), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.account_balance_wallet_outlined),
+                                title: const Text('صافي المبيعات بعد المرتجعات'),
+                                trailing: Text(
+                                  _money(period.netSalesTotal),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: period.netSalesTotal < 0 ? Colors.red : Colors.green,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('الأكثر مبيعًا حسب صافي الكمية', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        const Text('صافي الكمية = كميات المبيعات في الفترة ناقص كميات المرتجعات المسجلة في الفترة.'),
+                        const SizedBox(height: 8),
+                        if (period.products.isEmpty)
+                          const Card(child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('لا توجد مبيعات أو مرتجعات مسجلة لهذه الفترة.'),
+                          ))
+                        else
+                          ...period.products.map((product) => Card(
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                child: Text((period.products.indexOf(product) + 1).toString()),
+                              ),
+                              title: Text(product.name),
+                              subtitle: Text('مباع: ${_quantity(product.soldQuantity)} • مرتجع: ${_quantity(product.returnedQuantity)} ${product.unit}'),
+                              trailing: Text(
+                                '${_quantity(product.netQuantity)} ${product.unit}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: product.netQuantity < 0 ? Colors.red : theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          )),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
+                Text('التقرير اليومي', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.event_note_rounded),
