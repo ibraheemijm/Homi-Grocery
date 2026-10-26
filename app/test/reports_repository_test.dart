@@ -225,5 +225,46 @@ void main() {
     expect(report.netSalesTotal, -40);
     expect(report.products.map((product) => product.name), ['سكر', 'زيت', 'دقيق']);
     expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
+
+  test('لا يعرض ربحًا عندما تكون تكلفة صنف في فاتورة قديمة غير محفوظة', () async {
+    final now = DateTime.now();
+    final createdAt = DateTime(now.year, now.month, now.day, 12)
+        .toUtc()
+        .toIso8601String();
+    final productId = await database.insert('products', {
+      'name': 'صنف تاريخي',
+      'unit': 'حبة',
+      'purchase_price': 40,
+      'selling_price': 100,
+      'stock_quantity': 0,
+      'minimum_quantity': 0,
+      'is_active': 1,
+      'created_at': createdAt,
+    });
+    final saleId = await database.insert('sales', {
+      'invoice_number': 'REPORT-MISSING-COST',
+      'subtotal': 100,
+      'discount': 0,
+      'total': 100,
+      'paid_amount': 100,
+      'payment_method': 'نقدي',
+      'created_at': createdAt,
+    });
+    await database.insert('sale_items', {
+      'sale_id': saleId,
+      'product_id': productId,
+      'product_name': 'صنف تاريخي',
+      'unit': 'حبة',
+      'quantity': 1,
+      'unit_price': 100,
+      'line_total': 100,
+      // cost_price متروك null عمدًا لمحاكاة فاتورة سابقة لترحيل التكلفة.
+    });
+
+    final report = await ReportsRepository(database).load(day: now);
+
+    expect(report.salesTotal, 100);
+    expect(report.grossProfit, isNull);
+  });
   });
 }
