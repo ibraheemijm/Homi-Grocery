@@ -136,4 +136,94 @@ void main() {
     expect(report.bankTransferExpense, 80);
     expect(report.lowStockCount, 1);
   });
+
+  test('يجمع التقرير الشهري وصافي كميات الأصناف بعد مرتجعات الفترة', () async {
+    final start = DateTime(2026, 5, 1);
+    final end = DateTime(2026, 6, 1);
+    final mayAt = DateTime(2026, 5, 10, 12).toUtc().toIso8601String();
+    final aprilAt = DateTime(2026, 4, 10, 12).toUtc().toIso8601String();
+    final juneAt = DateTime(2026, 6, 2, 12).toUtc().toIso8601String();
+
+    Future<int> addProduct(String name) => database.insert('products', {
+      'name': name,
+      'unit': 'حبة',
+      'purchase_price': 10,
+      'selling_price': 20,
+      'stock_quantity': 10,
+      'minimum_quantity': 0,
+      'is_active': 1,
+      'created_at': mayAt,
+    });
+
+    Future<int> addSale(String invoice, String date, int total) => database.insert('sales', {
+      'invoice_number': invoice,
+      'subtotal': total,
+      'discount': 0,
+      'total': total,
+      'paid_amount': total,
+      'payment_method': 'نقدي',
+      'created_at': date,
+    });
+
+    Future<int> addItem(int saleId, int productId, String name, double quantity, int total) =>
+        database.insert('sale_items', {
+          'sale_id': saleId,
+          'product_id': productId,
+          'product_name': name,
+          'unit': 'حبة',
+          'quantity': quantity,
+          'unit_price': 20,
+          'cost_price': 10,
+          'line_total': total,
+        });
+
+    final sugar = await addProduct('سكر');
+    final oil = await addProduct('زيت');
+    final flour = await addProduct('دقيق');
+
+    final maySaleA = await addSale('PERIOD-A', mayAt, 200);
+    final maySaleB = await addSale('PERIOD-B', mayAt, 120);
+    final aprilSale = await addSale('PERIOD-APRIL', aprilAt, 400);
+    await addSale('PERIOD-JUNE', juneAt, 900);
+
+    final sugarItem = await addItem(maySaleA, sugar, 'سكر', 10, 200);
+    await addItem(maySaleB, oil, 'زيت', 6, 120);
+    final flourItem = await addItem(aprilSale, flour, 'دقيق', 20, 400);
+
+    final sugarReturn = await database.insert('sale_returns', {
+      'sale_id': maySaleA,
+      'amount': 60,
+      'created_at': mayAt,
+    });
+    await database.insert('sale_return_items', {
+      'return_id': sugarReturn,
+      'sale_item_id': sugarItem,
+      'quantity': 3,
+      'amount': 60,
+    });
+
+    final flourReturn = await database.insert('sale_returns', {
+      'sale_id': aprilSale,
+      'amount': 300,
+      'created_at': mayAt,
+    });
+    await database.insert('sale_return_items', {
+      'return_id': flourReturn,
+      'sale_item_id': flourItem,
+      'quantity': 15,
+      'amount': 300,
+    });
+
+    final report = await ReportsRepository(database).loadPeriod(
+      start: start,
+      end: end,
+    );
+
+    expect(report.salesTotal, 320);
+    expect(report.salesCount, 2);
+    expect(report.returnsTotal, 360);
+    expect(report.netSalesTotal, -40);
+    expect(report.products.map((product) => product.name), ['سكر', 'زيت', 'دقيق']);
+    expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
+  });
 }
