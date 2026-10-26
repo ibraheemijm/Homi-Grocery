@@ -137,13 +137,13 @@ class ReportsRepository {
         WHERE sr.created_at >= ? AND sr.created_at < ?
         GROUP BY si.product_id, si.product_name, si.unit
       )
-      SELECT product_id, product_name, unit,
+      SELECT product_id, MAX(product_name) AS product_name, unit,
         SUM(sold_quantity) AS sold_quantity,
         SUM(returned_quantity) AS returned_quantity
       FROM activity
-      GROUP BY product_id, product_name, unit
+      GROUP BY product_id, unit
       ORDER BY (SUM(sold_quantity) - SUM(returned_quantity)) DESC,
-        SUM(sold_quantity) DESC, product_name COLLATE NOCASE ASC
+        SUM(sold_quantity) DESC, MAX(product_name) COLLATE NOCASE ASC
       LIMIT ?
     ''', [utcStart, utcEnd, utcStart, utcEnd, topLimit]);
 
