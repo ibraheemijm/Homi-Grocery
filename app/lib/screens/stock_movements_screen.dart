@@ -34,7 +34,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
       _stockRepository = StockRepository(db);
       _products = await _productsRepository!.search('');
       if (_products.isNotEmpty) {
-        _selectedProductId = _products.first.id;
+        _selectedProductId = -1; // -1 يعني عرض حركات جميع الأصناف.
         await _loadHistory();
       }
       if (mounted) {
@@ -52,18 +52,20 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
 
   Future<void> _loadHistory() async {
     final id = _selectedProductId;
-    if (id == null || _stockRepository == null) {
+    if (_stockRepository == null) {
       if (mounted) setState(() => _movements = []);
       return;
     }
-    final rows = await _stockRepository!.history(id);
+    final rows = await _stockRepository!.history(id == null || id == -1 ? null : id);
     if (mounted) setState(() => _movements = rows);
   }
 
   Future<void> _addMovement() async {
     if (_products.isEmpty || _stockRepository == null) return;
     final formKey = GlobalKey<FormState>();
-    var productId = _selectedProductId ?? _products.first.id!;
+    var productId = _selectedProductId != null && _selectedProductId! > 0
+        ? _selectedProductId!
+        : _products.first.id!;
     var type = 'إضافة';
     final quantity = TextEditingController();
     final note = TextEditingController();
@@ -155,7 +157,6 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
           quantityDelta: double.parse(quantity.text.trim()),
           note: note.text,
         );
-        _selectedProductId = productId;
         _products = await _productsRepository!.search('');
         await _loadHistory();
         if (mounted) {
@@ -207,14 +208,20 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                 initialValue: _selectedProductId,
                 isExpanded: true,
                 decoration: const InputDecoration(
-                  labelText: 'اختر الصنف لعرض سجل حركاته',
+                  labelText: 'تصفية سجل الحركات حسب الصنف',
                   prefixIcon: Icon(Icons.inventory_2_outlined),
                   border: OutlineInputBorder(),
                 ),
-                items: _products.map((product) => DropdownMenuItem(
-                  value: product.id,
-                  child: Text('${product.name} — الرصيد: ${_number(product.stockQuantity)} ${product.unit}', overflow: TextOverflow.ellipsis),
-                )).toList(),
+                items: [
+                  const DropdownMenuItem<int>(
+                    value: -1,
+                    child: Text('كل الأصناف — عرض جميع الحركات'),
+                  ),
+                  ..._products.map((product) => DropdownMenuItem<int>(
+                    value: product.id,
+                    child: Text('${product.name} — الرصيد: ${_number(product.stockQuantity)} ${product.unit}', overflow: TextOverflow.ellipsis),
+                  )),
+                ],
                 onChanged: (value) async {
                   setState(() { _selectedProductId = value; _loading = true; });
                   try {
@@ -249,7 +256,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
             else if (_products.isEmpty)
               const Expanded(child: Center(child: Text('أضف صنفًا أولًا حتى تتمكن من تسجيل حركات المخزون.', textAlign: TextAlign.center)))
             else if (_movements.isEmpty)
-              const Expanded(child: Center(child: Text('لا توجد حركات مسجلة لهذا الصنف بعد.')))
+              const Expanded(child: Center(child: Text('لا توجد حركات مسجلة ضمن هذا الاختيار بعد.')))
             else
               Expanded(child: ListView.separated(
                 itemCount: _movements.length,
@@ -264,7 +271,12 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
                       backgroundColor: positive ? const Color(0xFFDCE9DF) : const Color(0xFFF3DEDA),
                       child: Icon(positive ? Icons.south_west_rounded : Icons.north_east_rounded, color: positive ? const Color(0xFF173D32) : const Color(0xFF9B342C)),
                     ),
-                    title: Text(movement.movementType, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      _selectedProductId == -1 && movement.productName != null
+                          ? '${movement.movementType} • ${movement.productName}'
+                          : movement.movementType,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     subtitle: Text('$dateText${movement.note == null ? '' : '\n${movement.note}'}\nقبل: ${_number(movement.stockBefore)}  •  بعد: ${_number(movement.stockAfter)}'),
                     isThreeLine: true,
                     trailing: Text('${positive ? '+' : ''}${_number(movement.quantityDelta)}', style: TextStyle(fontWeight: FontWeight.w800, color: positive ? const Color(0xFF24734A) : const Color(0xFFB43B32))),
