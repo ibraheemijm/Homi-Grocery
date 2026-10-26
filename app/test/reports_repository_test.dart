@@ -226,6 +226,7 @@ void main() {
     expect(report.products.map((product) => product.name), ['سكر', 'زيت', 'دقيق']);
     expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
 
+  });
   test('لا يعرض ربحًا عندما تكون تكلفة صنف في فاتورة قديمة غير محفوظة', () async {
     final now = DateTime.now();
     final createdAt = DateTime(now.year, now.month, now.day, 12)
@@ -266,5 +267,5 @@ void main() {
     expect(report.salesTotal, 100);
     expect(report.grossProfit, isNull);
   });
-  });
+
 }
