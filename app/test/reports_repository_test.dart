@@ -229,6 +229,67 @@ void main() {
     expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
 
   });
+  test('لا يعرض ربح الفترة إذا كان المرتجع الحالي يعود إلى فاتورة أقدم بلا تكلفة محفوظة', () async {
+    final now = DateTime.now();
+    final oldSaleAt = DateTime(now.year - 1, now.month, now.day, 12)
+        .toUtc()
+        .toIso8601String();
+    final returnAt = DateTime(now.year, now.month, now.day, 12)
+        .toUtc()
+        .toIso8601String();
+    final productId = await database.insert('products', {
+      'name': 'صنف مرتجع قديم',
+      'unit': 'حبة',
+      'purchase_price': 40,
+      'selling_price': 100,
+      'stock_quantity': 0,
+      'minimum_quantity': 0,
+      'is_active': 1,
+      'created_at': oldSaleAt,
+    });
+    final saleId = await database.insert('sales', {
+      'invoice_number': 'REPORT-OLD-RETURN',
+      'subtotal': 100,
+      'discount': 0,
+      'total': 100,
+      'paid_amount': 100,
+      'payment_method': 'نقدي',
+      'created_at': oldSaleAt,
+    });
+    final saleItemId = await database.insert('sale_items', {
+      'sale_id': saleId,
+      'product_id': productId,
+      'product_name': 'صنف مرتجع قديم',
+      'unit': 'حبة',
+      'quantity': 1,
+      'unit_price': 100,
+      'line_total': 100,
+      // تكلفة البيع التاريخي غير متاحة.
+    });
+    final returnId = await database.insert('sale_returns', {
+      'sale_id': saleId,
+      'amount': 100,
+      'created_at': returnAt,
+    });
+    await database.insert('sale_return_items', {
+      'return_id': returnId,
+      'sale_item_id': saleItemId,
+      'quantity': 1,
+      'amount': 100,
+    });
+
+    final start = DateTime(now.year, now.month, 1);
+    final end = DateTime(now.year, now.month + 1, 1);
+    final report = await ReportsRepository(database).loadPeriod(
+      start: start,
+      end: end,
+    );
+
+    expect(report.salesTotal, 0);
+    expect(report.returnsTotal, 100);
+    expect(report.grossProfit, isNull);
+  });
+
   test('لا يعرض ربحًا عندما تكون تكلفة صنف في فاتورة قديمة غير محفوظة', () async {
     final now = DateTime.now();
     final createdAt = DateTime(now.year, now.month, now.day, 12)
