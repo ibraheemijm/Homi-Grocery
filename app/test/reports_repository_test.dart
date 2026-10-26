@@ -223,6 +223,8 @@ void main() {
     expect(report.salesCount, 2);
     expect(report.returnsTotal, 360);
     expect(report.netSalesTotal, -40);
+    // مجمل الربح = صافي المبيعات - تكلفة مبيعات الفترة + تكلفة المرتجعات المسجلة فيها.
+    expect(report.grossProfit, -20);
     expect(report.products.map((product) => product.name), ['سكر', 'زيت', 'دقيق']);
     expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
 
@@ -266,6 +268,13 @@ void main() {
 
     expect(report.salesTotal, 100);
     expect(report.grossProfit, isNull);
+
+    final periodStart = DateTime(now.year, now.month, now.day);
+    final periodReport = await ReportsRepository(database).loadPeriod(
+      start: periodStart,
+      end: periodStart.add(const Duration(days: 1)),
+    );
+    expect(periodReport.grossProfit, isNull);
   });
 
 }
