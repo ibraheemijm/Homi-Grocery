@@ -1,4 +1,6 @@
 // شاشة البيع السريع: اختيار الأصناف، حساب الفاتورة وحفظها مع تحديث المخزون.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
@@ -177,7 +179,9 @@ class _SalesScreenState extends State<SalesScreen> {
                               color: theme.colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(Icons.inventory_2_rounded, size: 36, color: theme.colorScheme.primary),
+                            child: product.imagePath != null && File(product.imagePath!).existsSync()
+                                ? Image.file(File(product.imagePath!), fit: BoxFit.contain)
+                                : Icon(Icons.inventory_2_rounded, size: 36, color: theme.colorScheme.primary),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -201,7 +205,16 @@ class _SalesScreenState extends State<SalesScreen> {
         else
           ..._matches.take(30).map((product) => ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: _salesViewMode == 'rowsWithIcons' ? CircleAvatar(child: Icon(Icons.inventory_2_rounded, color: theme.colorScheme.primary)) : null,
+            leading: _salesViewMode == 'rowsWithIcons'
+                ? CircleAvatar(
+                    backgroundImage: product.imagePath != null && File(product.imagePath!).existsSync()
+                        ? FileImage(File(product.imagePath!))
+                        : null,
+                    child: product.imagePath != null && File(product.imagePath!).existsSync()
+                        ? null
+                        : Icon(Icons.inventory_2_rounded, color: theme.colorScheme.primary),
+                  )
+                : null,
             title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text('السعر: ${product.sellingPrice} ج.س • المتاح: ${_quantity(product.stockQuantity)} ${product.unit}'),
             trailing: IconButton.filledTonal(
