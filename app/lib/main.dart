@@ -887,6 +887,8 @@ class _MetricCard extends StatelessWidget {
                   ),
                   child: IconButton(
                     tooltip: 'فتح $title',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                     onPressed: onTap,
                     icon: Icon(icon, color: brandGreen, size: 20),
                   ),
