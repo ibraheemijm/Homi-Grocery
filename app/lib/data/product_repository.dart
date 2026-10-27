@@ -12,6 +12,7 @@ class GroceryProduct {
     this.sellingPrice = 0,
     this.stockQuantity = 0,
     this.minimumQuantity = 0,
+    this.imagePath,
     this.isActive = true,
   });
 
@@ -23,6 +24,7 @@ class GroceryProduct {
   final int sellingPrice;
   final double stockQuantity;
   final double minimumQuantity;
+  final String? imagePath;
   final bool isActive;
 
   /// تحويل النموذج إلى صيغة تخزين SQLite.
@@ -35,6 +37,7 @@ class GroceryProduct {
         'selling_price': sellingPrice,
         'stock_quantity': stockQuantity,
         'minimum_quantity': minimumQuantity,
+        'image_path': imagePath,
         'is_active': isActive ? 1 : 0,
       };
 
@@ -49,6 +52,7 @@ class GroceryProduct {
       sellingPrice: map['selling_price'] as int,
       stockQuantity: (map['stock_quantity'] as num).toDouble(),
       minimumQuantity: (map['minimum_quantity'] as num).toDouble(),
+      imagePath: map['image_path'] as String?,
       isActive: (map['is_active'] as int) == 1,
     );
   }
