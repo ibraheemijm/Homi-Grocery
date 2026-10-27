@@ -9,6 +9,48 @@ import 'font_preferences.dart';
 import 'reports_repository.dart';
 
 class ReportPrintService {
+  /// يبني نسخة PDF للتقرير اليومي، منفصلة عن تقرير الفترة الشهري أو السنوي.
+  Future<Uint8List> buildDailyPdf({
+    required DailyReport report,
+    required String storeName,
+  }) async {
+    final document = pw.Document(theme: await _loadTheme());
+    final date = '${report.day.year.toString().padLeft(4, '0')}-${report.day.month.toString().padLeft(2, '0')}-${report.day.day.toString().padLeft(2, '0')}';
+    document.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        textDirection: pw.TextDirection.rtl,
+        build: (_) => [
+          pw.Center(child: pw.Column(children: [
+            pw.Text(storeName.trim().isEmpty ? 'Homi Grocery' : storeName.trim(),
+                style: const pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 6),
+            pw.Text('التقرير اليومي', style: const pw.TextStyle(fontSize: 17, fontWeight: pw.FontWeight.bold)),
+            pw.Text('التاريخ: $date'),
+          ])),
+          pw.SizedBox(height: 20),
+          _summaryRow('عدد فواتير البيع', report.salesCount.toString()),
+          _summaryRow('إجمالي المبيعات', '${report.salesTotal} ج.س'),
+          _summaryRow('مرتجعات المبيعات', '${report.saleReturns} ج.س'),
+          _summaryRow('صافي المبيعات بعد المرتجعات', '${report.salesTotal - report.saleReturns} ج.س'),
+          _summaryRow('إجمالي المشتريات', '${report.purchaseTotal} ج.س'),
+          _summaryRow('تحصيلات الزبائن', '${report.customerCollections} ج.س'),
+          _summaryRow('مدفوعات الموردين', '${report.supplierPayments} ج.س'),
+          _summaryRow('المبالغ المستردة من الموردين', '${report.supplierRefunds} ج.س'),
+          _summaryRow('ردود نقدية للمرتجعات', '${report.returnRefunds} ج.س'),
+          _summaryRow('مقبوضات الخزينة', '${report.cashIncome} ج.س'),
+          _summaryRow('مدفوعات الخزينة', '${report.cashExpense} ج.س'),
+          _summaryRow('صافي حركة الخزينة', '${report.cashNet} ج.س'),
+          _summaryRow('أصناف وصلت حد إعادة الطلب', report.lowStockCount.toString()),
+          pw.SizedBox(height: 16),
+          pw.Text('تحصيلات الزبائن هي المبالغ المسجلة في دفتر التحصيل. مرتجعات المبيعات هي قيمة البضاعة المرتجعة، أما ردود النقد فتظهر فقط عندما يُسجّل دفع مبلغ فعلي للزبون.'),
+        ],
+      ),
+    );
+    return document.save();
+  }
+
   /// يبني نسخة قابلة للطباعة من التقرير الشهري أو السنوي.
   Future<Uint8List> buildPeriodPdf({
     required PeriodReport report,
