@@ -126,7 +126,7 @@ void main() {
       'line_total': 500,
     });
 
-    final bytes = await printer.buildInvoicePdf(4, thermal: false);
+    final bytes = await printer.buildInvoicePdf(6, thermal: false);
 
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     expect(bytes.length, greaterThan(1000));
@@ -158,6 +158,22 @@ void main() {
   });
 
   test('يحافظ على إنشاء PDF عند تبديل خطوط المستندات أو غياب الخط المستورد', () async {
+    await database.insert('sales', {
+      'id': 6,
+      'invoice_number': 'HG-FONTS-6',
+      'subtotal': 100,
+      'discount': 0,
+      'total': 100,
+      'paid_amount': 100,
+    });
+    await database.insert('sale_items', {
+      'sale_id': 6,
+      'product_name': 'سكر',
+      'quantity': 1,
+      'unit_price': 100,
+      'line_total': 100,
+    });
+
     final previousFont = FontPreferences.documentFont;
     final previousPath = FontPreferences.importedFontPath;
     final selections = <String>[
