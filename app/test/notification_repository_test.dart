@@ -102,6 +102,58 @@ void main() {
     expect((await repo.list()).first.status, 'revoked');
   });
 
+  test('سحب الموافقة الأولية يرفض طلبات التغيير المعلقة ويمنع اعتمادها', () async {
+    final repo = DeliveryApprovalRepository(database);
+    final initial = await repo.requestInitialEnable(
+      summary: 'تفعيل الكتالوج',
+      dataScope: 'بيانات الكتالوج فقط',
+    );
+    await repo.decide(id: initial, approved: true);
+    final pendingChange = await repo.requestImportantChange(
+      changeKey: 'catalog-v3',
+      summary: 'تحديث أسعار منشورة',
+      dataScope: 'الأسعار فقط',
+    );
+
+    await repo.revokeInitialApproval();
+
+    await expectLater(
+      repo.decide(id: pendingChange, approved: true),
+      throwsStateError,
+    );
+    final approvals = await repo.list();
+    expect(approvals.first.id, pendingChange);
+    expect(approvals.first.status, 'rejected');
+    expect(approvals.first.decisionNote, contains('سُحبت'));
+  });
+
+  test('لا يسمح باعتماد تغيير مهم إذا سُحبت الموافقة الأولية قبل القرار', () async {
+    final repo = DeliveryApprovalRepository(database);
+    final initial = await repo.requestInitialEnable(
+      summary: 'تفعيل الكتالوج',
+      dataScope: 'بيانات الكتالوج فقط',
+    );
+    await repo.decide(id: initial, approved: true);
+    final pendingChange = await repo.requestImportantChange(
+      changeKey: 'catalog-v4',
+      summary: 'تحديث الأسعار',
+      dataScope: 'الأسعار فقط',
+    );
+
+    await database.update(
+      'delivery_publication_approvals',
+      {'status': 'revoked'},
+      where: 'id = ?',
+      whereArgs: [initial],
+    );
+
+    await expectLater(
+      repo.decide(id: pendingChange, approved: true),
+      throwsStateError,
+    );
+    expect((await repo.list()).first.status, 'pending');
+  });
+
   test('لا يسمح باتخاذ قرار ثانٍ على طلب حُسم مسبقًا', () async {
     final repo = DeliveryApprovalRepository(database);
     final id = await repo.requestInitialEnable(
