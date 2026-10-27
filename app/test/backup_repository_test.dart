@@ -116,6 +116,39 @@ void main() {
 
 
 
+
+  test('يرفض نسخة إصدار 12 إذا غاب جدول سجل الموافقات', () async {
+    final path = '${directory.path}/missing-approval-table-v12.db';
+    await GroceryDatabase.createNotificationsSchema(database);
+    await database.execute('PRAGMA user_version = 12');
+    await database.execute("VACUUM INTO '${path}'");
+
+    final copy = await databaseFactoryFfi.openDatabase(path);
+    await copy.execute('DROP TABLE delivery_publication_approvals');
+    await copy.close();
+
+    await expectLater(
+      BackupRepository(database).validateBackup(path),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('يرفض نسخة إصدار 12 إذا غاب جدول الإشعارات', () async {
+    final path = '${directory.path}/missing-notifications-v12.db';
+    await GroceryDatabase.createNotificationsSchema(database);
+    await database.execute('PRAGMA user_version = 12');
+    await database.execute("VACUUM INTO '${path}'");
+
+    final copy = await databaseFactoryFfi.openDatabase(path);
+    await copy.execute('DROP TABLE local_notifications');
+    await copy.close();
+
+    await expectLater(
+      BackupRepository(database).validateBackup(path),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('يستعيد نسخة إصدار 1 ويرحّلها إلى المخطط الحالي دون فقد بياناتها', () async {
     final backupPath = '${directory.path}/restore-legacy-v1.db';
     final legacy = await databaseFactoryFfi.openDatabase(
