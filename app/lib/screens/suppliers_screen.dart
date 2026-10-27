@@ -199,6 +199,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
         title: const Text('فاتورة شراء جديدة'),
         content: SizedBox(
