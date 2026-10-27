@@ -188,7 +188,7 @@ void main() {
       FontPreferences.importedFontPath = null;
       for (final selection in selections) {
         FontPreferences.documentFont = selection;
-        final bytes = await printer.buildInvoicePdf(4, thermal: false);
+        final bytes = await printer.buildInvoicePdf(6, thermal: false);
         expect(
           String.fromCharCodes(bytes.take(5)),
           '%PDF-',
