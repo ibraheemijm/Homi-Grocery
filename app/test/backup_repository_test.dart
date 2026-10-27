@@ -376,6 +376,26 @@ void main() {
     expect(temporaryFiles, isEmpty);
   });
 
+  test('يرفض نسخة تحتوي على مرجع مفتاح خارجي مكسور', () async {
+    final path = '${directory.path}/broken-foreign-key.db';
+    await database.execute('PRAGMA foreign_keys = OFF');
+    await database.insert('sale_items', {
+      'sale_id': 999999,
+      'product_id': 1,
+      'product_name': 'سكر',
+      'unit': 'حبة',
+      'quantity': 1,
+      'unit_price': 150,
+      'line_total': 150,
+    });
+    await database.execute("VACUUM INTO '${path}'");
+
+    await expectLater(
+      BackupRepository(database).validateBackup(path),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
     final invalid = File('${directory.path}/invalid.db');
     await invalid.writeAsString('not a sqlite database');
