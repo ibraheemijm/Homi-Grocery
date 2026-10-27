@@ -20,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _clock24 = true;
   String _uiFont = FontPreferences.defaultUiFont;
   String _documentFont = FontPreferences.defaultDocumentFont;
+  String _salesViewMode = 'grid';
   bool _importingFont = false;
   bool _occasionEnabled = false;
   bool _loading = true;
@@ -48,13 +49,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final rows = await db.query(
         'app_metadata',
         columns: ['key', 'value'],
-        where: 'key IN (?, ?, ?, ?, ?)',
+        where: 'key IN (?, ?, ?, ?, ?, ?)',
         whereArgs: [
           'store_name',
           'clock_24h',
           'occasion_enabled',
           'occasion_text',
           'occasion_start',
+          'sales_view_mode',
         ],
       );
       final values = {
@@ -74,6 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _storeName.text = values['store_name'] ?? '';
         _uiFont = FontPreferences.uiFont;
         _documentFont = FontPreferences.documentFont;
+        _salesViewMode = values['sales_view_mode'] ?? 'grid';
         _clock24 = values['clock_24h'] != 'false';
         _occasionEnabled = values['occasion_enabled'] == 'true';
         _occasionText.text = values['occasion_text'] ?? '';
@@ -140,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final values = <String, String>{
         'store_name': name,
         'clock_24h': _clock24.toString(),
+        'sales_view_mode': _salesViewMode,
         'occasion_enabled': _occasionEnabled.toString(),
         'occasion_text': _occasionText.text.trim(),
         'occasion_start': _occasionStart.text.trim(),
@@ -195,6 +199,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 18),
                           const Text('الساعة الرقمية',
                               style: TextStyle(fontWeight: FontWeight.w700)),
+                          DropdownButtonFormField<String>(
+                            initialValue: _salesViewMode,
+                            decoration: const InputDecoration(
+                              labelText: 'طريقة عرض الأصناف في شاشة البيع',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'grid', child: Text('شبكة بطاقات')),
+                              DropdownMenuItem(value: 'rowsWithIcons', child: Text('صفوف مع أيقونة')),
+                              DropdownMenuItem(value: 'rows', child: Text('صفوف وكتابة فقط')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) setState(() => _salesViewMode = value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
                           DropdownButtonFormField<bool>(
                             initialValue: _clock24,
                             decoration: const InputDecoration(
