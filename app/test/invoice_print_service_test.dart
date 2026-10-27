@@ -13,6 +13,12 @@ void main() {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await database.execute('''
+      CREATE TABLE app_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await database.execute('''
       CREATE TABLE sales (
         id INTEGER PRIMARY KEY,
         invoice_number TEXT NOT NULL,
@@ -66,9 +72,29 @@ void main() {
 
     final summary = await printer.loadSummary(1);
 
+    expect(summary.storeName, 'Homi Grocery');
     expect(summary.returnedAmount, 200);
     expect(summary.refundedAmount, 0);
     expect(summary.outstandingAfterReturns, 300);
+  });
+
+  test('يستخدم اسم البقالة المحفوظ في إعدادات المتجر', () async {
+    await database.insert('sales', {
+      'id': 10,
+      'invoice_number': 'HG-STORE-NAME',
+      'total': 100,
+      'paid_amount': 100,
+    });
+    await database.insert('app_metadata', {
+      'key': 'store_name',
+      'value': 'بقالة الاختبار',
+    });
+
+    final summary = await printer.loadSummary(10);
+    expect(summary.storeName, 'بقالة الاختبار');
+
+    final bytes = await printer.buildInvoicePdf(10, thermal: false);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
 
   test('يعرض رد النقد المسجل ولا يحوله إلى رصيد دين سالب', () async {

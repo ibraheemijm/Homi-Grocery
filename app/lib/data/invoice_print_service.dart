@@ -14,12 +14,14 @@ import 'font_preferences.dart';
 class InvoicePrintSummary {
   const InvoicePrintSummary({
     required this.sale,
+    required this.storeName,
     required this.returnedAmount,
     required this.refundedAmount,
     required this.outstandingAfterReturns,
   });
 
   final Map<String, Object?> sale;
+  final String storeName;
   final int returnedAmount;
   final int refundedAmount;
   final int outstandingAfterReturns;
@@ -41,6 +43,19 @@ class InvoicePrintService {
     );
     if (sales.isEmpty) throw StateError('الفاتورة غير موجودة.');
     final sale = sales.single;
+    final storeRows = await _database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['store_name'],
+      limit: 1,
+    );
+    final configuredStoreName = storeRows.isEmpty
+        ? null
+        : (storeRows.single['value'] as String?)?.trim();
+    final storeName = configuredStoreName == null || configuredStoreName.isEmpty
+        ? 'Homi Grocery'
+        : configuredStoreName;
     final returns = await _database.rawQuery(
       'SELECT COALESCE(SUM(amount), 0) AS amount FROM sale_returns WHERE sale_id = ?',
       [saleId],
@@ -57,6 +72,7 @@ class InvoicePrintService {
     final debtCoveredByReturns = returnedAmount.clamp(0, originalBalance).toInt();
     return InvoicePrintSummary(
       sale: sale,
+      storeName: storeName,
       returnedAmount: returnedAmount,
       refundedAmount: refundedAmount,
       outstandingAfterReturns: originalBalance - debtCoveredByReturns,
@@ -105,7 +121,7 @@ class InvoicePrintService {
         build: (context) => [
           pw.Center(
             child: pw.Column(children: [
-              pw.Text('Homi Grocery',
+              pw.Text(summary.storeName,
                   style: pw.TextStyle(fontSize: thermal ? 16 : 24, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 4),
               pw.Text('فاتورة مبيعات', style: pw.TextStyle(fontSize: thermal ? 12 : 18, fontWeight: pw.FontWeight.bold)),
