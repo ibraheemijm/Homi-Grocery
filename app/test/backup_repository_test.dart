@@ -121,7 +121,7 @@ void main() {
     final path = '${directory.path}/missing-approval-table-v12.db';
     await GroceryDatabase.createNotificationsSchema(database);
     await database.execute('PRAGMA user_version = 12');
-    await database.execute("VACUUM INTO '${path}'");
+    await database.execute("VACUUM INTO '$path'");
 
     final copy = await databaseFactoryFfi.openDatabase(path);
     await copy.execute('DROP TABLE delivery_publication_approvals');
@@ -137,7 +137,7 @@ void main() {
     final path = '${directory.path}/missing-notifications-v12.db';
     await GroceryDatabase.createNotificationsSchema(database);
     await database.execute('PRAGMA user_version = 12');
-    await database.execute("VACUUM INTO '${path}'");
+    await database.execute("VACUUM INTO '$path'");
 
     final copy = await databaseFactoryFfi.openDatabase(path);
     await copy.execute('DROP TABLE local_notifications');
