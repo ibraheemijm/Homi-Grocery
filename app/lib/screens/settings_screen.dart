@@ -197,7 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           const SizedBox(height: 18),
-                          const Text('الساعة الرقمية',
+                          const Text('إعدادات العرض',
                               style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<String>(
                             initialValue: _salesViewMode,
@@ -206,8 +206,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               border: OutlineInputBorder(),
                             ),
                             items: const [
-                              DropdownMenuItem(value: 'grid', child: Text('شبكة بطاقات')),
-                              DropdownMenuItem(value: 'rowsWithIcons', child: Text('صفوف مع أيقونة')),
+                              DropdownMenuItem(value: 'grid', child: Text('شبكة مع صور الأصناف')),
+                              DropdownMenuItem(value: 'rowsWithIcons', child: Text('صفوف مع صور الأصناف')),
                               DropdownMenuItem(value: 'rows', child: Text('صفوف وكتابة فقط')),
                             ],
                             onChanged: (value) {
@@ -215,6 +215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                           ),
                           const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                          const Text('الساعة الرقمية', style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<bool>(
                             initialValue: _clock24,
                             decoration: const InputDecoration(
