@@ -244,6 +244,49 @@ void main() {
     expect(rows.single['stock_quantity'], 12);
   });
 
+  test('يستعيد النسخة الأصلية إذا رمى إغلاق القاعدة خطأ أثناء مسار التراجع', () async {
+    final backupPath = '${directory.path}/restore-rollback-close-failure.db';
+    await database.execute("VACUUM INTO '${backupPath}'");
+    await database.update('products', {'name': 'طحين'});
+
+    final targetPath = database.path;
+    var closeAttempts = 0;
+    var openAttempts = 0;
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        closeAttempts++;
+        if (database.isOpen) await database.close();
+        if (closeAttempts == 2) {
+          throw StateError('محاكاة خطأ إغلاق أثناء التراجع بعد إغلاق الاتصال');
+        }
+      },
+      openRestoredDatabase: () async {
+        openAttempts++;
+        if (openAttempts == 1) {
+          throw StateError('محاكاة فشل فتح النسخة الجديدة');
+        }
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(version: 11),
+        );
+        return database;
+      },
+    );
+
+    await expectLater(
+      repository.restoreBackup(backupPath),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(closeAttempts, 2);
+    expect(openAttempts, 2);
+    expect(database.isOpen, isTrue);
+    final rows = await database.query('products');
+    expect(rows.single['name'], 'سكر');
+    expect(rows.single['stock_quantity'], 12);
+  });
+
   test('يرفض استعادة ملف غير صالح ويحافظ على قاعدة البيانات الحالية', () async {
     final invalid = File('${directory.path}/invalid-restore.db');
     await invalid.writeAsString('not a sqlite database');
