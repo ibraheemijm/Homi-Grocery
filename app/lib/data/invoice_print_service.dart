@@ -85,7 +85,9 @@ class InvoicePrintService {
     final bytes = await _buildInvoicePdfFromSummary(saleId, summary, thermal: thermal);
     final sale = summary.sale;
     await Printing.layoutPdf(
-      name: 'invoice-${sale['invoice_number']}${thermal ? '-thermal' : '-A4'}.pdf',
+      name: thermal
+          ? 'إيصال-حراري-${sale['invoice_number']}.pdf'
+          : 'فاتورة-${sale['invoice_number']}.pdf',
       format: _pageFormat(thermal),
       onLayout: (_) async => bytes,
     );
