@@ -695,9 +695,10 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 }
 
 class _PurchaseDraftLine {
-  _PurchaseDraftLine({required this.productId, String quantity = '1', String cost = '0'})
+  _PurchaseDraftLine({required this.productId, String quantity = '1', String cost = '0', String sellingPrice = '0'})
       : quantity = TextEditingController(text: quantity),
-        cost = TextEditingController(text: cost);
+        cost = TextEditingController(text: cost),
+        sellingPrice = TextEditingController(text: sellingPrice);
 
   int productId;
   final TextEditingController quantity;
