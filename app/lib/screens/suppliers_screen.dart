@@ -703,9 +703,11 @@ class _PurchaseDraftLine {
   int productId;
   final TextEditingController quantity;
   final TextEditingController cost;
+  final TextEditingController sellingPrice;
 
   void dispose() {
     quantity.dispose();
     cost.dispose();
+    sellingPrice.dispose();
   }
 }
