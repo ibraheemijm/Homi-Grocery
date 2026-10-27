@@ -544,6 +544,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         note: 'إجمالي الفواتير اليوم',
                         icon: Icons.trending_up_rounded,
                         tint: const Color(0xFFDCE9DF),
+                        onTap: () => setState(() => _selectedIndex = 1),
                       ),
                       _MetricCard(
                         title: 'المقبوض اليوم',
@@ -551,6 +552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         note: 'المبالغ المسجلة في فواتير اليوم',
                         icon: Icons.payments_rounded,
                         tint: const Color(0xFFF1E6CC),
+                        onTap: () => setState(() => _selectedIndex = 6),
                       ),
                       _MetricCard(
                         title: 'ديون الزبائن',
@@ -558,6 +560,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         note: 'الرصيد المستحق بعد التحصيلات',
                         icon: Icons.account_balance_wallet_rounded,
                         tint: const Color(0xFFF3DEDA),
+                        onTap: () => setState(() => _selectedIndex = 3),
                       ),
                       _MetricCard(
                         title: 'أصناف منخفضة',
@@ -565,6 +568,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         note: 'وصلت إلى حد التنبيه أو أقل',
                         icon: Icons.inventory_2_rounded,
                         tint: const Color(0xFFDDE7F2),
+                        onTap: () => setState(() => _selectedIndex = 4),
                       ),
                     ],
                   );
@@ -843,6 +847,7 @@ class _MetricCard extends StatelessWidget {
     required this.note,
     required this.icon,
     required this.tint,
+    required this.onTap,
   });
 
   final String title;
@@ -850,6 +855,7 @@ class _MetricCard extends StatelessWidget {
   final String note;
   final IconData icon;
   final Color tint;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -879,7 +885,11 @@ class _MetricCard extends StatelessWidget {
                     color: tint,
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: Icon(icon, color: brandGreen, size: 20),
+                  child: IconButton(
+                    tooltip: 'فتح $title',
+                    onPressed: onTap,
+                    icon: Icon(icon, color: brandGreen, size: 20),
+                  ),
                 ),
               ],
             ),
