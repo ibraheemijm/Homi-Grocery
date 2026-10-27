@@ -157,6 +157,34 @@ void main() {
     expect(bytes.length, greaterThan(1000));
   });
 
+  test('يحافظ على إنشاء PDF عند تبديل خطوط المستندات أو غياب الخط المستورد', () async {
+    final previousFont = FontPreferences.documentFont;
+    final previousPath = FontPreferences.importedFontPath;
+    final selections = <String>[
+      'Cairo',
+      'Amiri',
+      'Arial',
+      FontPreferences.importedFontFamily,
+    ];
+
+    try {
+      FontPreferences.importedFontPath = null;
+      for (final selection in selections) {
+        FontPreferences.documentFont = selection;
+        final bytes = await printer.buildInvoicePdf(4, thermal: false);
+        expect(
+          String.fromCharCodes(bytes.take(5)),
+          '%PDF-',
+          reason: 'يجب أن يعمل PDF عند اختيار الخط: $selection',
+        );
+        expect(bytes.length, greaterThan(1000));
+      }
+    } finally {
+      FontPreferences.documentFont = previousFont;
+      FontPreferences.importedFontPath = previousPath;
+    }
+  });
+
   test('يرفض طباعة ملخص فاتورة غير موجودة', () async {
     await expectLater(printer.loadSummary(999), throwsStateError);
   });
