@@ -34,6 +34,37 @@ void main() {
     expect(bytes.length, greaterThan(1000));
   });
 
+  test('ينشئ PDF للتقرير اليومي مع التحصيلات والمرتجعات والخزينة', () async {
+    final report = DailyReport(
+      day: DateTime(2026, 10, 28),
+      salesTotal: 1200,
+      salesCount: 4,
+      purchaseTotal: 500,
+      purchaseCount: 2,
+      customerCollections: 150,
+      supplierPayments: 100,
+      supplierRefunds: 20,
+      returnRefunds: 40,
+      saleReturns: 75,
+      grossProfit: 250,
+      cashIncome: 500,
+      cashExpense: 200,
+      cashOnlyIncome: 300,
+      cashOnlyExpense: 150,
+      bankTransferIncome: 200,
+      bankTransferExpense: 50,
+      lowStockCount: 3,
+    );
+
+    final bytes = await ReportPrintService().buildDailyPdf(
+      report: report,
+      storeName: 'بقالة الاختبار',
+    );
+
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    expect(bytes.length, greaterThan(1000));
+  });
+
   test('يتعامل مع فترة بلا أصناف وربح غير متاح', () async {
     final report = PeriodReport(
       start: DateTime(2026, 1, 1),
