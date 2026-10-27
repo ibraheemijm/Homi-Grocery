@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 11;
+  static const int _version = 12;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -46,6 +46,7 @@ class GroceryDatabase {
         await createSupplierReturnsSchema(db);
         await createCostOfGoodsSchema(db);
         await createSupplierReturnRefundsSchema(db);
+        await createNotificationsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -78,6 +79,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 11) {
           await createSupplierReturnRefundsSchema(db);
+        }
+        if (oldVersion < 12) {
+          await createNotificationsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -406,6 +410,45 @@ class GroceryDatabase {
       )
     ''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_return_refunds_return ON supplier_return_refunds(supplier_return_id, created_at)');
+  }
+
+
+  // سجل الإشعارات المحلي وسجل موافقات نشر الدليفري؛ لا يرسل أي بيانات للخارج.
+  static Future<void> createNotificationsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS local_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '',
+        event_key TEXT UNIQUE,
+        related_id TEXT,
+        created_at TEXT NOT NULL,
+        read_at TEXT
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_local_notifications_created ON local_notifications(created_at DESC, id DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_local_notifications_unread ON local_notifications(read_at, created_at DESC)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS delivery_publication_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_type TEXT NOT NULL CHECK (request_type IN ('initial_enable', 'important_change')),
+        change_key TEXT,
+        summary TEXT NOT NULL,
+        data_scope TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'revoked')),
+        created_at TEXT NOT NULL,
+        decided_at TEXT,
+        decision_note TEXT
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_delivery_approvals_status ON delivery_publication_approvals(status, created_at DESC)',
+    );
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.

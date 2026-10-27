@@ -14,6 +14,7 @@ import 'screens/products_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/sales_screen.dart';
 import 'screens/stock_movements_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'screens/suppliers_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -241,6 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _NavigationItem('التقارير', Icons.analytics_rounded),
     _NavigationItem('الإعدادات', Icons.settings_rounded),
     _NavigationItem('حركات المخزون', Icons.history_rounded),
+    _NavigationItem('الإشعارات وسجل الموافقات', Icons.notifications_active_rounded),
   ];
 
   @override
@@ -281,6 +283,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                     ? const SettingsScreen()
                                                     : _selectedIndex == 9
                                         ? const StockMovementsScreen()
+                                        : _selectedIndex == 10
+                                            ? const NotificationsScreen()
                                 : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
                 ],
