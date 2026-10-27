@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 
 import '../data/grocery_database.dart';
+import '../data/report_print_service.dart';
 import '../data/reports_repository.dart';
 
 /// تقارير حسب اليوم؛ لا يعرض ربحًا تقديريًا قبل حفظ تكلفة الصنف وقت البيع.
@@ -63,6 +65,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _periodDate = selected;
         _reload();
       });
+    }
+  }
+
+  Future<void> _printPeriodReport(PeriodReport report) async {
+    try {
+      final database = await GroceryDatabase.open();
+      final rows = await database.query(
+        'app_metadata',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: ['store_name'],
+        limit: 1,
+      );
+      final storeName = rows.isEmpty ? 'Homi Grocery' : (rows.single['value'] as String).trim();
+      final bytes = await ReportPrintService().buildPeriodPdf(
+        report: report,
+        storeName: storeName.isEmpty ? 'Homi Grocery' : storeName,
+        periodLabel: _periodLabel(report),
+      );
+      if (!mounted) return;
+      await Printing.layoutPdf(
+        name: 'homi-grocery-report-${report.start.year}-${report.start.month.toString().padLeft(2, '0')}.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر إنشاء التقرير PDF: $error')),
+      );
     }
   }
 
@@ -177,6 +208,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _printPeriodReport(period),
+                          icon: const Icon(Icons.picture_as_pdf_rounded),
+                          label: const Text('طباعة / حفظ تقرير الفترة PDF'),
+                        ),
+                        const SizedBox(height: 8),
                         Card(
                           child: Column(
                             children: [
