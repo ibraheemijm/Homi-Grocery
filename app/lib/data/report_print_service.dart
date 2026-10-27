@@ -28,10 +28,10 @@ class ReportPrintService {
               children: [
                 pw.Text(
                   storeName.trim().isEmpty ? 'Homi Grocery' : storeName.trim(),
-                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                  style: const pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.SizedBox(height: 6),
-                pw.Text('تقرير المبيعات والأصناف', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                pw.Text('تقرير المبيعات والأصناف', style: const pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
                 pw.Text('الفترة: $periodLabel'),
               ],
             ),
@@ -46,7 +46,7 @@ class ReportPrintService {
             report.grossProfit == null ? 'غير متاح — توجد تكاليف تاريخية مفقودة' : '${report.grossProfit} ج.س',
           ),
           pw.SizedBox(height: 18),
-          pw.Text('الأصناف الأكثر مبيعًا', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+          pw.Text('الأصناف الأكثر مبيعًا', style: const pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 8),
           if (report.products.isEmpty)
             pw.Text('لا توجد مبيعات أو مرتجعات مسجلة لهذه الفترة.')
@@ -60,7 +60,7 @@ class ReportPrintService {
                 _quantity(product.returnedQuantity),
                 _quantity(product.netQuantity),
               ]).toList(growable: false),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerStyle: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
               cellAlignment: pw.Alignment.centerRight,
               headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE8EFEA)),
               border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFFB8C6BE), width: 0.5),
