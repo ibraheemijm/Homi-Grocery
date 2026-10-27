@@ -117,7 +117,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   return Card(child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: low ? const Color(0xFFF3DEDA) : const Color(0xFFDCE9DF),
-                      child: Icon(low ? Icons.warning_amber_rounded : Icons.inventory_2_rounded, color: const Color(0xFF173D32)),
+                      backgroundImage: item.imagePath != null && File(item.imagePath!).existsSync()
+                          ? FileImage(File(item.imagePath!))
+                          : null,
+                      child: item.imagePath != null && File(item.imagePath!).existsSync()
+                          ? null
+                          : Icon(low ? Icons.warning_amber_rounded : Icons.inventory_2_rounded, color: const Color(0xFF173D32)),
                     ),
                     title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}$barcodeText'),
