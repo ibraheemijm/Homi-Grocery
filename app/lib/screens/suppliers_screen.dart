@@ -356,6 +356,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           paymentChannel: paymentChannel,
           note: note.text,
         );
+        for (final draft in drafts) {
+          await _productsRepository!.updateSellingPrice(
+            productId: draft.productId,
+            sellingPrice: int.parse(draft.sellingPrice.text.trim()),
+          );
+        }
         await _load();
         _products = await _productsRepository!.search('');
         _message('تم حفظ فاتورة الشراء بجميع أصنافها وتحديث المخزون.');
