@@ -68,6 +68,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  Future<void> _printDailyReport(DailyReport report) async {
+    try {
+      final database = await GroceryDatabase.open();
+      final rows = await database.query(
+        'app_metadata',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: ['store_name'],
+        limit: 1,
+      );
+      final storeName = rows.isEmpty ? 'Homi Grocery' : (rows.single['value'] as String).trim();
+      final bytes = await ReportPrintService().buildDailyPdf(
+        report: report,
+        storeName: storeName.isEmpty ? 'Homi Grocery' : storeName,
+      );
+      if (!mounted) return;
+      await Printing.layoutPdf(
+        name: 'تقرير-يومي-${_dateLabel(report.day)}.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر إنشاء التقرير اليومي PDF: $error')),
+      );
+    }
+  }
+
   Future<void> _printPeriodReport(PeriodReport report) async {
     try {
       final database = await GroceryDatabase.open();
@@ -308,6 +336,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     onTap: _chooseDay,
                   ),
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _printDailyReport(report),
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  label: const Text('حفظ التقرير اليومي PDF'),
+                ),
                 const SizedBox(height: 16),
                 Text('حركة البيع والشراء', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
@@ -332,6 +366,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _ReportTile(title: 'إجمالي المشتريات', amount: report.purchaseTotal, note: '${report.purchaseCount} فاتورة شراء', icon: Icons.local_shipping_rounded, money: _money),
                 const SizedBox(height: 18),
                 Text('التحصيلات والمرتجعات', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                const Text('التحصيلات = مبالغ قبضها من الزبائن وسُجلت في دفتر التحصيل. مرتجعات المبيعات = قيمة البضاعة التي أُعيدت. أما «ردود نقدية للمرتجعات» فلا تزيد إلا عند تسجيل مبلغ دُفع فعليًا للزبون؛ لذلك قد تكون صفرًا رغم وجود مرتجع إذا خُصم من الدين بدل رد النقد.'),
                 const SizedBox(height: 10),
                 _ReportTile(title: 'تحصيلات الزبائن', amount: report.customerCollections, note: 'المبالغ المسجلة في دفتر التحصيل', icon: Icons.call_received_rounded, money: _money),
                 _ReportTile(title: 'مدفوعات الموردين', amount: report.supplierPayments, note: 'المبالغ المسجلة للموردين', icon: Icons.call_made_rounded, money: _money),
