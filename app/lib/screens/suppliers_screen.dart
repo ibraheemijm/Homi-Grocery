@@ -247,7 +247,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         if (v != null) {
                           refresh(() {
                             draft.productId = v;
-                            draft.cost.text = _products.firstWhere((p) => p.id == v).purchasePrice.toString();
+                            final selectedProduct = _products.firstWhere((p) => p.id == v);
+                            draft.cost.text = selectedProduct.purchasePrice.toString();
+                            draft.sellingPrice.text = selectedProduct.sellingPrice.toString();
                           });
                         }
                       },
