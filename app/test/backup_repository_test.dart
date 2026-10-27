@@ -283,7 +283,7 @@ void main() {
     expect(openAttempts, 2);
     expect(database.isOpen, isTrue);
     final rows = await database.query('products');
-    expect(rows.single['name'], 'سكر');
+    expect(rows.single['name'], 'طحين');
     expect(rows.single['stock_quantity'], 12);
   });
 
