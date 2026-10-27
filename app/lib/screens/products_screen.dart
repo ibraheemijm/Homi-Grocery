@@ -1,5 +1,10 @@
 // شاشة إدارة الأصناف والمخزون، متصلة بقاعدة SQLite المحلية.
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
 
@@ -145,10 +150,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final sell = TextEditingController(text: '${old?.sellingPrice ?? 0}');
     final stock = TextEditingController(text: '${old?.stockQuantity ?? 0}');
     final minimum = TextEditingController(text: '${old?.minimumQuantity ?? 0}');
+    String? imagePath = old?.imagePath;
 
     final result = await showDialog<GroceryProduct>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, refreshDialog) => AlertDialog(
         title: Text(old == null ? 'إضافة صنف جديد' : 'تعديل بيانات الصنف'),
         content: SizedBox(width: 440, child: SingleChildScrollView(child: Form(
           key: key,
@@ -158,6 +165,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
             Row(children: [Expanded(child: _field(buy, 'سعر الشراء', numeric: true)), const SizedBox(width: 8), Expanded(child: _field(sell, 'سعر البيع', numeric: true))]),
             Row(children: [Expanded(child: _field(stock, 'الكمية الحالية', decimal: true)), const SizedBox(width: 8), Expanded(child: _field(minimum, 'حد التنبيه', decimal: true, nonNegative: true))]),
             _field(unit, 'وحدة القياس', required: true),
+            const SizedBox(height: 8),
+            if (imagePath != null && File(imagePath!).existsSync())
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(File(imagePath!), height: 120, width: 160, fit: BoxFit.contain),
+              )
+            else
+              const Icon(Icons.image_outlined, size: 54),
+            OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  final picked = await _pickProductImage();
+                  if (picked != null) refreshDialog(() => imagePath = picked);
+                } catch (error) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر اختيار صورة الصنف: $error')));
+                }
+              },
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(imagePath == null ? 'اختيار صورة للصنف' : 'تغيير صورة الصنف'),
+            ),
             const Text('يمكن تسجيل مخزون سالب عند الحاجة.', style: TextStyle(fontSize: 12)),
           ]),
         ))),
@@ -178,10 +205,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
               barcode: barcode.text.trim().isEmpty ? null : barcode.text.trim(),
               unit: unit.text.trim(), purchasePrice: buyValue, sellingPrice: sellValue,
               stockQuantity: stockValue, minimumQuantity: minValue,
+              imagePath: imagePath,
             ));
           }, child: const Text('حفظ')),
         ],
-      ),
+      )),
     );
     name.dispose(); barcode.dispose(); unit.dispose(); buy.dispose(); sell.dispose(); stock.dispose(); minimum.dispose();
     if (result == null || !mounted) return;
@@ -194,6 +222,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر الحفظ؛ تحقق من عدم تكرار الباركود. $error')));
     }
+  }
+
+  Future<String?> _pickProductImage() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    final sourcePath = result?.files.single.path;
+    if (sourcePath == null) return null;
+    final support = await getApplicationSupportDirectory();
+    final directory = Directory(p.join(support.path, 'product-images'));
+    await directory.create(recursive: true);
+    final extension = p.extension(sourcePath);
+    final target = p.join(
+      directory.path,
+      'product-${DateTime.now().microsecondsSinceEpoch}${extension.isEmpty ? '.img' : extension}',
+    );
+    await File(sourcePath).copy(target);
+    return target;
   }
 
   // الأرشفة تحافظ على سجل الصنف بدل حذفه نهائيًا.
