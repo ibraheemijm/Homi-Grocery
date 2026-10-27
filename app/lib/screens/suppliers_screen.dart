@@ -322,7 +322,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             final validLines = drafts.every((line) {
               final q = double.tryParse(line.quantity.text.trim());
               final cost = int.tryParse(line.cost.text.trim());
-              return q != null && q.isFinite && q > 0 && cost != null && cost >= 0;
+              final sellingPrice = int.tryParse(line.sellingPrice.text.trim());
+              return q != null && q.isFinite && q > 0 && cost != null && cost >= 0 && sellingPrice != null && sellingPrice >= 0;
             });
             if (!validLines || d == null || d < 0 || d > subtotal || p == null || p < 0 || p > subtotal - d) {
               ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تحقق من الكميات والأسعار والخصم والمدفوع.')));
