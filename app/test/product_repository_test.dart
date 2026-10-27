@@ -42,6 +42,25 @@ void main() {
     expect(saved.isActive, isTrue);
   });
 
+  test('يحدّث سعر البيع دون تغيير تكلفة الشراء أو المخزون ويحفظ مسار الصورة', () async {
+    final id = await repository.add(const GroceryProduct(
+      name: 'حليب',
+      purchasePrice: 80,
+      sellingPrice: 100,
+      stockQuantity: 9,
+      imagePath: '/tmp/homi-product-image.png',
+    ));
+
+    await repository.updateSellingPrice(productId: id, sellingPrice: 125);
+    final saved = await repository.getById(id);
+
+    expect(saved, isNotNull);
+    expect(saved!.purchasePrice, 80);
+    expect(saved.sellingPrice, 125);
+    expect(saved.stockQuantity, 9);
+    expect(saved.imagePath, '/tmp/homi-product-image.png');
+  });
+
   test('يبحث باسم الصنف أو الباركود', () async {
     await repository.add(const GroceryProduct(
       barcode: '9988',
