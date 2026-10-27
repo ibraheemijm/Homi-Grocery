@@ -114,6 +114,12 @@ class BackupRepository {
         required.addAll({'supplier_returns', 'supplier_return_items'});
       }
       if (version >= 11) required.add('supplier_return_refunds');
+      if (version >= 12) {
+        required.addAll({
+          'local_notifications',
+          'delivery_publication_approvals',
+        });
+      }
       if (!names.containsAll(required)) {
         throw const FormatException('الملف لا يحتوي على جداول قاعدة Homi Grocery المتوقعة لإصداره.');
       }
