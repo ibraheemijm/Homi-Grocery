@@ -205,10 +205,27 @@ class BackupRepository {
       rethrow;
     } finally {
       // Cleanup must run even when staging or closing the database fails.
-      if (await staged.exists()) await staged.delete();
+      // A staging cleanup error must not prevent removing a rollback file after
+      // recovery completed, and must never replace the primary restore error.
+      Object? cleanupError;
+      StackTrace? cleanupStack;
+      try {
+        if (await staged.exists()) await staged.delete();
+      } catch (error, stack) {
+        cleanupError = error;
+        cleanupStack = stack;
+      }
       // Keep the rollback copy if recovery failed; it may be the last recoverable copy.
-      if ((restoreCompleted || rollbackRecovered) && await rollback.exists()) {
-        await rollback.delete();
+      if (restoreCompleted || rollbackRecovered) {
+        try {
+          if (await rollback.exists()) await rollback.delete();
+        } catch (error, stack) {
+          cleanupError ??= error;
+          cleanupStack ??= stack;
+        }
+      }
+      if (cleanupError != null) {
+        Error.throwWithStackTrace(cleanupError, cleanupStack!);
       }
     }
   }
