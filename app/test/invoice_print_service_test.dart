@@ -127,7 +127,7 @@ void main() {
       'line_total': 500,
     });
 
-    final bytes = await printer.buildInvoicePdf(6, thermal: false);
+    final bytes = await printer.buildInvoicePdf(4, thermal: false);
 
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     expect(bytes.length, greaterThan(1000));
