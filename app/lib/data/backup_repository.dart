@@ -177,7 +177,16 @@ class BackupRepository {
       restoreCompleted = true;
     } catch (_) {
       if (maintenanceClosed) {
-        await _closeForMaintenance();
+        // A close callback can throw after closing the connection. Check the
+        // actual connection state before touching database files; if it is
+        // still open, preserve the rollback copy rather than replacing a live DB.
+        try {
+          await _closeForMaintenance();
+        } catch (_) {
+          if (_database.isOpen) rethrow;
+        }
+        if (_database.isOpen) rethrow;
+
         try {
           if (hadCurrent && await rollback.exists()) {
             // Never replace the target with a rollback file that failed validation.
