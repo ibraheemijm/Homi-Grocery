@@ -85,8 +85,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         periodLabel: _periodLabel(report),
       );
       if (!mounted) return;
+      final modeLabel = _periodMode == 'year' ? 'سنوي' : 'شهري';
+      final periodLabel = _periodMode == 'year'
+          ? report.start.year.toString()
+          : '${report.start.year}-${report.start.month.toString().padLeft(2, '0')}';
       await Printing.layoutPdf(
-        name: 'homi-grocery-report-${report.start.year}-${report.start.month.toString().padLeft(2, '0')}.pdf',
+        name: 'تقرير-$modeLabel-$periodLabel.pdf',
         onLayout: (_) async => bytes,
       );
     } catch (error) {
