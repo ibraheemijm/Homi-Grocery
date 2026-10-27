@@ -388,7 +388,7 @@ void main() {
       'unit_price': 150,
       'line_total': 150,
     });
-    await database.execute("VACUUM INTO '${path}'");
+    await database.execute("VACUUM INTO '$path'");
 
     await expectLater(
       BackupRepository(database).validateBackup(path),
