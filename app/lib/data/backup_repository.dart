@@ -149,6 +149,7 @@ class BackupRepository {
     var maintenanceClosed = false;
     var rollbackRecovered = false;
     var restoreCompleted = false;
+    var restoreFailed = false;
 
     try {
       // Stage the source inside the protected block so partial copies are cleaned up.
@@ -176,6 +177,7 @@ class BackupRepository {
       await _validateOpenedDatabase(restored);
       restoreCompleted = true;
     } catch (_) {
+      restoreFailed = true;
       if (maintenanceClosed) {
         // A close callback can throw after closing the connection. Check the
         // actual connection state before touching database files; if it is
@@ -224,7 +226,7 @@ class BackupRepository {
           cleanupStack ??= stack;
         }
       }
-      if (cleanupError != null) {
+      if (cleanupError != null && !restoreFailed) {
         Error.throwWithStackTrace(cleanupError, cleanupStack!);
       }
     }
