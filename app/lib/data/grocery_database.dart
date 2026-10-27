@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 12;
+  static const int _version = 13;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -83,6 +83,12 @@ class GroceryDatabase {
         if (oldVersion < 12) {
           await createNotificationsSchema(db);
         }
+        if (oldVersion < 13) {
+          final productColumns = await db.rawQuery('PRAGMA table_info(products)');
+          if (!productColumns.any((column) => column['name'] == 'image_path')) {
+            await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT');
+          }
+        }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
     );
@@ -108,6 +114,7 @@ class GroceryDatabase {
         selling_price INTEGER NOT NULL DEFAULT 0 CHECK (selling_price >= 0),
         stock_quantity REAL NOT NULL DEFAULT 0,
         minimum_quantity REAL NOT NULL DEFAULT 0 CHECK (minimum_quantity >= 0),
+        image_path TEXT,
         is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
         created_at TEXT NOT NULL
       )
