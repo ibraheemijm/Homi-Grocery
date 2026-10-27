@@ -24,6 +24,7 @@ class _SalesScreenState extends State<SalesScreen> {
   List<SaleRecord> _recent = [];
   bool _loading = true;
   bool _saving = false;
+  String _salesViewMode = 'grid';
   String? _error;
 
   @override
@@ -33,12 +34,14 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _initialize() async {
     try {
       final database = await GroceryDatabase.open();
+      final viewRows = await database.query('app_metadata', columns: ['value'], where: 'key = ?', whereArgs: ['sales_view_mode'], limit: 1);
+      final viewMode = viewRows.isEmpty ? 'grid' : viewRows.single['value'] as String;
       _productsRepository = ProductRepository(database);
       _salesRepository = SaleRepository(database);
       _recent = await _salesRepository!.recentSales(limit: 8);
       _matches = await _productsRepository!.search('');
       if (!mounted) return;
-      setState(() { _loading = false; _error = null; });
+      setState(() { _salesViewMode = const {'grid', 'rows', 'rowsWithIcons'}.contains(viewMode) ? viewMode : 'grid'; _loading = false; _error = null; });
     } catch (error) {
       if (!mounted) return;
       setState(() { _loading = false; _error = 'تعذر فتح بيانات البيع: $error'; });
@@ -146,9 +149,59 @@ class _SalesScreenState extends State<SalesScreen> {
         const SizedBox(height: 8),
         if (_matches.isEmpty)
           const Padding(padding: EdgeInsets.all(18), child: Text('لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.', textAlign: TextAlign.center))
+        else if (_salesViewMode == 'grid')
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _matches.take(30).length,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 190,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.92,
+            ),
+            itemBuilder: (context, index) {
+              final product = _matches[index];
+              return Card(
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => _addProduct(product),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.inventory_2_rounded, size: 36, color: theme.colorScheme.primary),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text('${product.sellingPrice} ج.س', style: theme.textTheme.bodySmall),
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: IconButton.filledTonal(
+                            tooltip: 'إضافة إلى الفاتورة',
+                            onPressed: () => _addProduct(product),
+                            icon: const Icon(Icons.add_rounded),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          )
         else
           ..._matches.take(30).map((product) => ListTile(
             contentPadding: EdgeInsets.zero,
+            leading: _salesViewMode == 'rowsWithIcons' ? CircleAvatar(child: Icon(Icons.inventory_2_rounded, color: theme.colorScheme.primary)) : null,
             title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text('السعر: ${product.sellingPrice} ج.س • المتاح: ${_quantity(product.stockQuantity)} ${product.unit}'),
             trailing: IconButton.filledTonal(
