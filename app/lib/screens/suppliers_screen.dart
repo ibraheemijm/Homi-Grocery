@@ -186,7 +186,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     int supplierId = _suppliers.first.id;
     String paymentChannel = 'نقدي';
     final drafts = <_PurchaseDraftLine>[
-      _PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString()),
+      _PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString(), sellingPrice: _products.first.sellingPrice.toString()),
     ];
     final discount = TextEditingController(text: '0');
     final paid = TextEditingController(text: '0');
