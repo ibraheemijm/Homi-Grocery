@@ -270,6 +270,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         decoration: const InputDecoration(labelText: 'سعر الوحدة (ج.س)', border: OutlineInputBorder()),
                       )),
                     ]),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: draft.sellingPrice,
+                      onChanged: (_) => refresh(() {}),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'سعر البيع بعد الاستلام (ج.س)', border: OutlineInputBorder()),
+                    ),
                     Align(
                       alignment: AlignmentDirectional.centerEnd,
                       child: Text('الإجمالي: ${((double.tryParse(draft.quantity.text.trim()) ?? 0) * (int.tryParse(draft.cost.text.trim()) ?? 0)).round()} ج.س'),
