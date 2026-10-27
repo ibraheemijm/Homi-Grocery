@@ -92,6 +92,11 @@ class BackupRepository {
       if (integrity.isEmpty || integrity.first.values.first != 'ok') {
         throw const FormatException('فشل فحص سلامة قاعدة البيانات.');
       }
+      // integrity_check لا يكشف مراجع المفاتيح الخارجية المكسورة؛ افحصها منفصلًا.
+      final foreignKeyViolations = await candidate.rawQuery('PRAGMA foreign_key_check');
+      if (foreignKeyViolations.isNotEmpty) {
+        throw const FormatException('النسخة تحتوي على علاقات بين الجداول غير سليمة.');
+      }
       final versionRows = await candidate.rawQuery('PRAGMA user_version');
       if (versionRows.isEmpty || versionRows.first.isEmpty) {
         throw const FormatException('تعذر قراءة إصدار مخطط قاعدة البيانات.');
