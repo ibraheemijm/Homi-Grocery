@@ -216,7 +216,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             Row(children: [
               const Expanded(child: Text('أصناف الفاتورة', style: TextStyle(fontWeight: FontWeight.w800))),
               TextButton.icon(
-                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString()))),
+                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString(), sellingPrice: _products.first.sellingPrice.toString()))),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('إضافة صنف'),
               ),
