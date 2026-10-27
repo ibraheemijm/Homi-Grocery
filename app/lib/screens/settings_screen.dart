@@ -215,7 +215,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                           ),
                           const SizedBox(height: 12),
-                          const SizedBox(height: 12),
                           const Text('الساعة الرقمية', style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<bool>(
                             initialValue: _clock24,
