@@ -200,39 +200,67 @@ class DeliveryApprovalRepository {
     String? note,
     DateTime? now,
   }) async {
-    final rows = await _database.query(
-      'delivery_publication_approvals',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (rows.isEmpty) throw StateError('طلب الموافقة غير موجود.');
-    if (rows.single['status'] != 'pending') {
-      throw StateError('يمكن اتخاذ القرار على الطلب المعلّق فقط.');
-    }
-    await _database.update(
-      'delivery_publication_approvals',
-      {
-        'status': approved ? 'approved' : 'rejected',
-        'decided_at': (now ?? DateTime.now()).toUtc().toIso8601String(),
-        'decision_note': note?.trim(),
-      },
-      where: 'id = ? AND status = ?',
-      whereArgs: [id, 'pending'],
-    );
+    await _database.transaction((txn) async {
+      final rows = await txn.query(
+        'delivery_publication_approvals',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('طلب الموافقة غير موجود.');
+      final request = rows.single;
+      if (request['status'] != 'pending') {
+        throw StateError('يمكن اتخاذ القرار على الطلب المعلّق فقط.');
+      }
+      if (approved && request['request_type'] == 'important_change') {
+        final initialApprovals = await txn.query(
+          'delivery_publication_approvals',
+          columns: ['id'],
+          where: "request_type = 'initial_enable' AND status = 'approved'",
+          limit: 1,
+        );
+        if (initialApprovals.isEmpty) {
+          throw StateError('لا يمكن اعتماد تغيير مهم بعد سحب الموافقة الأولية.');
+        }
+      }
+      final changed = await txn.update(
+        'delivery_publication_approvals',
+        {
+          'status': approved ? 'approved' : 'rejected',
+          'decided_at': (now ?? DateTime.now()).toUtc().toIso8601String(),
+          'decision_note': note?.trim(),
+        },
+        where: 'id = ? AND status = ?',
+        whereArgs: [id, 'pending'],
+      );
+      if (changed != 1) {
+        throw StateError('تغيّرت حالة الطلب؛ أعد تحميل السجل قبل اتخاذ القرار.');
+      }
+    });
   }
 
   Future<void> revokeInitialApproval({String? note, DateTime? now}) async {
     final timestamp = (now ?? DateTime.now()).toUtc().toIso8601String();
-    await _database.update(
-      'delivery_publication_approvals',
-      {
-        'status': 'revoked',
-        'decided_at': timestamp,
-        'decision_note': note?.trim() ?? 'سُحبت الموافقة الأولية.',
-      },
-      where: "request_type = 'initial_enable' AND status = 'approved'",
-    );
+    await _database.transaction((txn) async {
+      await txn.update(
+        'delivery_publication_approvals',
+        {
+          'status': 'revoked',
+          'decided_at': timestamp,
+          'decision_note': note?.trim() ?? 'سُحبت الموافقة الأولية.',
+        },
+        where: "request_type = 'initial_enable' AND status = 'approved'",
+      );
+      await txn.update(
+        'delivery_publication_approvals',
+        {
+          'status': 'rejected',
+          'decided_at': timestamp,
+          'decision_note': 'أُلغي الطلب لأن الموافقة الأولية سُحبت.',
+        },
+        where: "request_type = 'important_change' AND status = 'pending'",
+      );
+    });
   }
 
   Future<List<DeliveryApproval>> list({String? status, int limit = 100}) async {
