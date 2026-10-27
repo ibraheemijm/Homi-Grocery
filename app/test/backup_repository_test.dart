@@ -246,7 +246,7 @@ void main() {
 
   test('يستعيد النسخة الأصلية إذا رمى إغلاق القاعدة خطأ أثناء مسار التراجع', () async {
     final backupPath = '${directory.path}/restore-rollback-close-failure.db';
-    await database.execute("VACUUM INTO '${backupPath}'");
+    await database.execute("VACUUM INTO '$backupPath'");
     await database.update('products', {'name': 'طحين'});
 
     final targetPath = database.path;
