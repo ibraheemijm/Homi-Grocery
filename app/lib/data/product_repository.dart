@@ -112,6 +112,19 @@ class ProductRepository {
     return rows.isEmpty ? null : GroceryProduct.fromMap(rows.first);
   }
 
+  /// تحديث سعر البيع فقط دون تغيير تكلفة الشراء أو كمية المخزون.
+  Future<int> updateSellingPrice({required int productId, required int sellingPrice}) async {
+    if (productId <= 0 || sellingPrice < 0) {
+      throw ArgumentError('معرّف الصنف أو سعر البيع غير صالح.');
+    }
+    return _database.update(
+      'products',
+      {'selling_price': sellingPrice},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+  }
+
   /// تعطيل الصنف بدل حذفه نهائيًا للحفاظ على سلامة سجل العمليات المستقبلية.
   Future<int> archive(int id) {
     return _database.update(
