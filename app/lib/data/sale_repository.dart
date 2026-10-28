@@ -71,6 +71,7 @@ class SaleRepository {
     required String paymentMethod,
     String paymentChannel = 'نقدي',
     String? customerName,
+    int? customerId,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
     if (discount < 0 || paidAmount < 0) {
@@ -106,8 +107,14 @@ class SaleRepository {
     if (paymentMethod == 'جزئي' && (paidAmount <= 0 || paidAmount >= total)) {
       throw ArgumentError('الدفع الجزئي يجب أن يكون أكبر من صفر وأقل من الإجمالي.');
     }
-    if (paidAmount < total && customerName?.trim().isNotEmpty != true) {
+    final hasDebt = paidAmount < total;
+    if (hasDebt && customerId == null && customerName?.trim().isNotEmpty != true) {
       throw ArgumentError('اسم الزبون مطلوب لتسجيل الرصيد المتبقي في دفتر الديون.');
+    }
+    if (!hasDebt) {
+      // البيع النقدي لا ينشئ سجل زبون ولا يربط الفاتورة بدفتر الديون.
+      customerId = null;
+      customerName = null;
     }
 
     final now = DateTime.now().toUtc();
@@ -115,9 +122,19 @@ class SaleRepository {
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
-      final normalizedCustomer = customerName?.trim();
-      int? customerId;
-      if (normalizedCustomer != null && normalizedCustomer.isNotEmpty) {
+      final normalizedCustomer = hasDebt ? customerName?.trim() : null;
+      var linkedCustomerId = hasDebt ? customerId : null;
+      if (hasDebt && linkedCustomerId != null) {
+        final existing = await txn.query(
+          'customers',
+          columns: ['id', 'name'],
+          where: 'id = ?',
+          whereArgs: [linkedCustomerId],
+          limit: 1,
+        );
+        if (existing.isEmpty) throw StateError('الزبون المحدد لم يعد موجودًا في دفتر الحسابات.');
+        // الاسم المعتمد للحساب هو الاسم المحفوظ، ولا يُستخدم نص الحقل لتغيير الربط.
+      } else if (hasDebt && normalizedCustomer != null && normalizedCustomer.isNotEmpty) {
         final existing = await txn.query(
           'customers',
           columns: ['id'],
@@ -126,18 +143,17 @@ class SaleRepository {
           limit: 1,
         );
         if (existing.isNotEmpty) {
-          customerId = existing.first['id'] as int;
-        } else {
-          customerId = await txn.insert('customers', {
-            'name': normalizedCustomer,
-            'created_at': createdAt,
-          });
+          throw StateError('هذا الاسم موجود في دفتر الحسابات. اختر الزبون من الاقتراحات أو عدّل الاسم/أضف لقبًا.');
         }
+        linkedCustomerId = await txn.insert('customers', {
+          'name': normalizedCustomer,
+          'created_at': createdAt,
+        });
       }
       final saleId = await txn.insert('sales', {
         'invoice_number': invoice,
-        'customer_id': customerId,
-        'customer_name': normalizedCustomer?.isEmpty == true ? null : normalizedCustomer,
+        'customer_id': linkedCustomerId,
+        'customer_name': linkedCustomerId == null ? null : normalizedCustomer,
         'subtotal': subtotal,
         'discount': discount,
         'total': total,
@@ -210,7 +226,7 @@ class SaleRepository {
         paidAmount: paidAmount,
         paymentMethod: paymentMethod,
         createdAt: createdAt,
-        customerName: normalizedCustomer?.isEmpty == true ? null : normalizedCustomer,
+        customerName: linkedCustomerId == null ? null : normalizedCustomer,
       );
     });
   }
