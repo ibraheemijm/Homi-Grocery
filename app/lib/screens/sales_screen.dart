@@ -38,9 +38,10 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() { super.initState(); _initialize(); }
 
-  bool get _hasExactCustomerMatch => _selectedCustomerId == null &&
+  // اعتبر الاسم متعارضًا إذا أعاد البحث أسماء قريبة، وليس عند التطابق الحرفي فقط.
+  bool get _hasPotentialCustomerConflict => _selectedCustomerId == null &&
       _customer.text.trim().isNotEmpty &&
-      _customerMatches.any((customer) => customer.name.trim().toLowerCase() == _customer.text.trim().toLowerCase());
+      _customerMatches.isNotEmpty;
 
   // اقتراح أسماء الزبائن أثناء الكتابة، ولا يعتمد الربط إلا عند اختيار اقتراح صراحةً.
   Future<void> _searchCustomers(String value) async {
@@ -311,7 +312,7 @@ class _SalesScreenState extends State<SalesScreen> {
             );
           }),
         const Divider(height: 24),
-        if (_hasExactCustomerMatch)
+        if (_hasPotentialCustomerConflict)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -353,7 +354,7 @@ class _SalesScreenState extends State<SalesScreen> {
               border: OutlineInputBorder(),
             ),
           ),
-        if (_hasExactCustomerMatch)
+        if (_hasPotentialCustomerConflict)
           const Padding(
             padding: EdgeInsets.only(top: 6, bottom: 4),
             child: Text(
