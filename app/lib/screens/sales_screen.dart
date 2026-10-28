@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../data/grocery_database.dart';
+import '../data/customer_repository.dart';
 import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
@@ -20,7 +21,10 @@ class _SalesScreenState extends State<SalesScreen> {
   final _customer = TextEditingController();
   final _discountController = TextEditingController(text: '0');
   ProductRepository? _productsRepository;
+  CustomerRepository? _customersRepository;
   SaleRepository? _salesRepository;
+  List<CustomerBalance> _customerMatches = [];
+  bool _showCustomerSuggestions = false;
   List<GroceryProduct> _matches = [];
   List<SaleLine> _cart = [];
   List<SaleRecord> _recent = [];
@@ -32,6 +36,45 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() { super.initState(); _initialize(); }
 
+  // اقتراح أسماء الزبائن أثناء الكتابة، مع إبقاء إمكانية إدخال اسم جديد.
+  Future<void> _searchCustomers(String value) async {
+    final query = value.trim();
+    if (query.isEmpty || _customersRepository == null) {
+      if (!mounted) return;
+      setState(() {
+        _customerMatches = [];
+        _showCustomerSuggestions = false;
+      });
+      return;
+    }
+    try {
+      final matches = await _customersRepository!.balances(query: query);
+      if (!mounted || _customer.text.trim() != query) return;
+      setState(() {
+        _customerMatches = matches.take(8).toList(growable: false);
+        _showCustomerSuggestions = _customerMatches.isNotEmpty;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _customerMatches = [];
+        _showCustomerSuggestions = false;
+      });
+    }
+  }
+
+  void _selectCustomer(CustomerBalance customer) {
+    _customer.value = TextEditingValue(
+      text: customer.name,
+      selection: TextSelection.collapsed(offset: customer.name.length),
+    );
+    setState(() {
+      _customerMatches = [];
+      _showCustomerSuggestions = false;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
   // فتح التخزين المحلي وتحميل أحدث الفواتير والأصناف.
   Future<void> _initialize() async {
     try {
@@ -39,6 +82,7 @@ class _SalesScreenState extends State<SalesScreen> {
       final viewRows = await database.query('app_metadata', columns: ['value'], where: 'key = ?', whereArgs: ['sales_view_mode'], limit: 1);
       final viewMode = viewRows.isEmpty ? 'grid' : viewRows.single['value'] as String;
       _productsRepository = ProductRepository(database);
+      _customersRepository = CustomerRepository(database);
       _salesRepository = SaleRepository(database);
       _recent = await _salesRepository!.recentSales(limit: 8);
       _matches = await _productsRepository!.search('');
@@ -258,7 +302,42 @@ class _SalesScreenState extends State<SalesScreen> {
             );
           }),
         const Divider(height: 24),
-        TextField(controller: _customer, decoration: const InputDecoration(labelText: 'اسم الزبون (اختياري)', border: OutlineInputBorder())),
+        TextField(
+          controller: _customer,
+          onChanged: _searchCustomers,
+          decoration: const InputDecoration(
+            labelText: 'اسم الزبون (اختياري)',
+            hintText: 'ابدأ بكتابة الاسم للبحث أو أدخل اسم زبون جديد',
+            prefixIcon: Icon(Icons.person_search_rounded),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4, bottom: 8),
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: _customerMatches.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final customer = _customerMatches[index];
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.person_outline_rounded),
+                  title: Text(customer.name),
+                  subtitle: Text('الرصيد الحالي: ${customer.balance} ج.س'),
+                  onTap: () => _selectCustomer(customer),
+                );
+              },
+            ),
+          ),
         const SizedBox(height: 10),
         TextField(
           controller: _discountController,
@@ -369,6 +448,8 @@ class _SalesScreenState extends State<SalesScreen> {
       );
       _cart = [];
       _customer.clear();
+      _customerMatches = [];
+      _showCustomerSuggestions = false;
       _discountController.text = '0';
       _recent = await _salesRepository!.recentSales(limit: 8);
       widget.onDataChanged?.call();
