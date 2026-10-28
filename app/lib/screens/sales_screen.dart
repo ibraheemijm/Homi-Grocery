@@ -19,6 +19,8 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   final _search = TextEditingController();
   final _customer = TextEditingController();
+  final _customerNickname = TextEditingController();
+  int? _selectedCustomerId;
   final _discountController = TextEditingController(text: '0');
   ProductRepository? _productsRepository;
   CustomerRepository? _customersRepository;
@@ -36,8 +38,13 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() { super.initState(); _initialize(); }
 
-  // اقتراح أسماء الزبائن أثناء الكتابة، مع إبقاء إمكانية إدخال اسم جديد.
+  bool get _hasExactCustomerMatch => _selectedCustomerId == null &&
+      _customer.text.trim().isNotEmpty &&
+      _customerMatches.any((customer) => customer.name.trim().toLowerCase() == _customer.text.trim().toLowerCase());
+
+  // اقتراح أسماء الزبائن أثناء الكتابة، ولا يعتمد الربط إلا عند اختيار اقتراح صراحةً.
   Future<void> _searchCustomers(String value) async {
+    _selectedCustomerId = null;
     final query = value.trim();
     if (query.isEmpty || _customersRepository == null) {
       if (!mounted) return;
@@ -64,6 +71,8 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _selectCustomer(CustomerBalance customer) {
+    _selectedCustomerId = customer.id;
+    _customerNickname.clear();
     _customer.value = TextEditingValue(
       text: customer.name,
       selection: TextSelection.collapsed(offset: customer.name.length),
@@ -130,7 +139,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void dispose() {
-    _search.dispose(); _customer.dispose(); _discountController.dispose(); super.dispose();
+    _search.dispose(); _customer.dispose(); _customerNickname.dispose(); _discountController.dispose(); super.dispose();
   }
 
   @override
@@ -302,16 +311,56 @@ class _SalesScreenState extends State<SalesScreen> {
             );
           }),
         const Divider(height: 24),
-        TextField(
-          controller: _customer,
-          onChanged: _searchCustomers,
-          decoration: const InputDecoration(
-            labelText: 'اسم الزبون (اختياري)',
-            hintText: 'ابدأ بكتابة الاسم للبحث أو أدخل اسم زبون جديد',
-            prefixIcon: Icon(Icons.person_search_rounded),
-            border: OutlineInputBorder(),
+        if (_hasExactCustomerMatch)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: _customer,
+                  onChanged: _searchCustomers,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الزبون',
+                    hintText: 'عدّل الاسم إذا كان زبونًا مختلفًا',
+                    prefixIcon: Icon(Icons.person_search_rounded),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _customerNickname,
+                  decoration: const InputDecoration(
+                    labelText: 'لقب للتمييز',
+                    hintText: 'مثال: السوق',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          TextField(
+            controller: _customer,
+            onChanged: _searchCustomers,
+            decoration: const InputDecoration(
+              labelText: 'اسم الزبون (اختياري)',
+              hintText: 'للدين اختر اسمًا من الاقتراحات أو أدخل اسمًا جديدًا',
+              prefixIcon: Icon(Icons.person_search_rounded),
+              border: OutlineInputBorder(),
+            ),
           ),
-        ),
+        if (_hasExactCustomerMatch)
+          const Padding(
+            padding: EdgeInsets.only(top: 6, bottom: 4),
+            child: Text(
+              'هذا الاسم موجود في دفتر الحسابات. للبيع الآجل أو الجزئي: اختر الحساب الموجود من الاقتراحات، أو عدّل الاسم، أو أضف لقبًا للزبون الجديد. البيع النقدي متاح دون ربط الحساب.',
+              style: TextStyle(color: Colors.deepOrange, fontSize: 12),
+            ),
+          ),
         if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(top: 4, bottom: 8),
@@ -438,16 +487,36 @@ class _SalesScreenState extends State<SalesScreen> {
 
     setState(() => _saving = true);
     try {
+      final hasDebt = (result['paid']! as int) < _total;
+      final typedName = _customer.text.trim();
+      final nickname = _customerNickname.text.trim();
+      final exactMatchWithoutSelection = _selectedCustomerId == null &&
+          _customerMatches.any((customer) => customer.name.trim().toLowerCase() == typedName.toLowerCase());
+      if (hasDebt && exactMatchWithoutSelection && nickname.isEmpty) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('الاسم موجود في دفتر الحسابات. اختر الحساب من الاقتراحات، أو عدّل الاسم، أو أضف لقبًا للزبون الجديد.'),
+        ));
+        return;
+      }
+      final customerNameForDebt = !hasDebt
+          ? null
+          : _selectedCustomerId != null
+              ? typedName
+              : nickname.isEmpty ? typedName : '$typedName - $nickname';
       final sale = await _salesRepository!.createSale(
         lines: List<SaleLine>.from(_cart),
         discount: _discount,
         paidAmount: result['paid']! as int,
         paymentMethod: result['method']! as String,
         paymentChannel: result['channel']! as String,
-        customerName: _customer.text,
+        customerName: customerNameForDebt,
+        customerId: hasDebt ? _selectedCustomerId : null,
       );
       _cart = [];
       _customer.clear();
+      _customerNickname.clear();
+      _selectedCustomerId = null;
       _customerMatches = [];
       _showCustomerSuggestions = false;
       _discountController.text = '0';
@@ -717,7 +786,7 @@ class _SalesScreenState extends State<SalesScreen> {
             contentPadding: EdgeInsets.zero,
             leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
             title: Text(sale.invoiceNumber),
-            subtitle: Text('${sale.customerName?.isNotEmpty == true ? sale.customerName : 'زبون نقدي'} • ${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س'),
+            subtitle: Text('${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س'),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
