@@ -47,7 +47,8 @@ class CustomerRepository {
         COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0) AS total_paid
       FROM customers c
       WHERE c.name LIKE ?
-      ORDER BY (
+      ORDER BY CASE WHEN c.name = ? COLLATE NOCASE THEN 0 ELSE 1 END,
+      (
         COALESCE((SELECT SUM(MAX(0,
           (s.total - s.paid_amount) - MIN(
             s.total - s.paid_amount,
@@ -56,7 +57,7 @@ class CustomerRepository {
         )) FROM sales s WHERE s.customer_id = c.id), 0)
         - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0)
       ) DESC, c.name COLLATE NOCASE ASC
-    ''', ['%${query.trim()}%']);
+    ''', ['%${query.trim()}%', query.trim()]);
     return rows.map((row) => CustomerBalance(
       id: row['id'] as int,
       name: row['name'] as String,
