@@ -491,9 +491,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final hasDebt = (result['paid']! as int) < _total;
       final typedName = _customer.text.trim();
       final nickname = _customerNickname.text.trim();
-      final exactMatchWithoutSelection = _selectedCustomerId == null &&
-          _customerMatches.any((customer) => customer.name.trim().toLowerCase() == typedName.toLowerCase());
-      if (hasDebt && exactMatchWithoutSelection && nickname.isEmpty) {
+      final potentialConflictWithoutSelection = _hasPotentialCustomerConflict;
+      if (hasDebt && potentialConflictWithoutSelection && nickname.isEmpty) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('الاسم موجود في دفتر الحسابات. اختر الحساب من الاقتراحات، أو عدّل الاسم، أو أضف لقبًا للزبون الجديد.'),
