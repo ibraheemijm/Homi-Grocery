@@ -102,8 +102,8 @@ void main() {
     final sale = await sales.createSale(
       lines: [SaleLine(product: product, quantity: 2)],
       discount: 0,
-      paidAmount: 180,
-      paymentMethod: 'نقدي',
+      paidAmount: 90,
+      paymentMethod: 'جزئي',
       customerName: 'عميل الرد النقدي',
     );
     final customer = (await customers.balances()).single;
@@ -112,8 +112,8 @@ void main() {
     )).single['id'] as int;
     await sales.returnItems(
       saleId: sale.id,
-      quantitiesBySaleItemId: {itemId: 1},
-      note: 'مرتجع مدفوع',
+      quantitiesBySaleItemId: {itemId: 2},
+      note: 'مرتجع يغطي الدين ويتجاوزُه',
     );
     await sales.recordReturnRefund(
       saleId: sale.id, amount: 90, note: 'تم تسليم النقد',
