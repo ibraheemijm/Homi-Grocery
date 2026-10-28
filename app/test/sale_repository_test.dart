@@ -61,6 +61,72 @@ void main() {
     expect(cashEntries.single['payment_method'], 'تحويل بنكي');
   });
 
+
+  test('البيع النقدي لا يحفظ اسم الزبون ولا ينشئ حسابًا حتى مع تطابق الاسم', () async {
+    await database.insert('customers', {
+      'name': 'محمد أحمد',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      customerName: 'محمد أحمد',
+    );
+
+    expect(sale.customerName, isNull);
+    final savedSale = (await database.query(
+      'sales', where: 'id = ?', whereArgs: [sale.id],
+    )).single;
+    expect(savedSale['customer_id'], isNull);
+    expect(savedSale['customer_name'], isNull);
+    expect(await database.query('customers'), hasLength(1));
+  });
+
+  test('الدين لا يرتبط بحساب موجود إلا عند تمرير معرّف الحساب المختار', () async {
+    final customerId = await database.insert('customers', {
+      'name': 'محمد أحمد',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final productId = await products.add(const GroceryProduct(
+      name: 'خبز', sellingPrice: 200, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 0,
+        paymentMethod: 'آجل',
+        customerName: 'محمد أحمد',
+      ),
+      throwsStateError,
+    );
+    expect(await sales.recentSales(), isEmpty);
+
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: 'محمد أحمد',
+      customerId: customerId,
+    );
+    final savedSale = (await database.query(
+      'sales', where: 'id = ?', whereArgs: [sale.id],
+    )).single;
+    expect(savedSale['customer_id'], customerId);
+    expect(savedSale['customer_name'], 'محمد أحمد');
+    expect(await database.query('customers'), hasLength(1));
+  });
+
   test('يحفظ تكلفة الصنف وقت البيع لا سعر الشراء الذي قد يتغير لاحقًا', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'قهوة', purchasePrice: 40, sellingPrice: 100, stockQuantity: 5,
