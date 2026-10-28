@@ -133,7 +133,6 @@ class InvoicePrintService {
           pw.Divider(),
           pw.Text('رقم الفاتورة: ${sale['invoice_number']}'),
           pw.Text('التاريخ: ${_dateLabel(sale['created_at'] as String)}'),
-          pw.Text('الزبون: ${(sale['customer_name'] as String?)?.trim().isNotEmpty == true ? sale['customer_name'] : 'زبون نقدي'}'),
           pw.SizedBox(height: 12),
           pw.TableHelper.fromTextArray(
             headers: const ['الصنف', 'الكمية', 'السعر', 'الإجمالي'],
