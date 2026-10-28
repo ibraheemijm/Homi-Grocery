@@ -3,6 +3,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/reports_repository.dart';
+import 'package:homi_grocery/data/product_repository.dart';
+import 'package:homi_grocery/data/sale_repository.dart';
 
 void main() {
   late Database database;
@@ -135,6 +137,59 @@ void main() {
     expect(report.bankTransferIncome, 250);
     expect(report.bankTransferExpense, 80);
     expect(report.lowStockCount, 1);
+  });
+
+  test('يعرض التحصيل والمرتجع الناتجين من مسار البيع الفعلي في التقرير اليومي', () async {
+    final now = DateTime.now();
+    final products = ProductRepository(database);
+    final sales = SaleRepository(database);
+    final productId = await products.add(const GroceryProduct(
+      name: 'صنف اختبار التقرير الفعلي',
+      purchasePrice: 40,
+      sellingPrice: 100,
+      stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 3)],
+      discount: 0,
+      paidAmount: 300,
+      paymentMethod: 'نقدي',
+      customerName: 'زبون اختبار التقرير الفعلي',
+    );
+    final customer = (await database.query(
+      'customers',
+      columns: ['id'],
+      where: 'name = ?',
+      whereArgs: ['زبون اختبار التقرير الفعلي'],
+      limit: 1,
+    )).single;
+    await database.insert('customer_payments', {
+      'customer_id': customer['id'],
+      'amount': 75,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final saleItemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+      limit: 1,
+    )).single['id'] as int;
+
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {saleItemId: 1},
+      note: 'اختبار ربط التقرير',
+    );
+
+    final report = await ReportsRepository(database).load(day: now);
+
+    expect(report.salesTotal, 300);
+    expect(report.saleReturns, 100);
+    expect(report.customerCollections, 75);
+    // لا يوجد رد نقدي مسجل؛ قيمة المرتجع لا تعني تلقائيًا أن النقد رُد.
+    expect(report.returnRefunds, 0);
   });
 
   test('يجمع التقرير الشهري وصافي كميات الأصناف بعد مرتجعات الفترة', () async {
