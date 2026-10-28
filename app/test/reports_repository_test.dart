@@ -153,8 +153,8 @@ void main() {
     final sale = await sales.createSale(
       lines: [SaleLine(product: product, quantity: 3)],
       discount: 0,
-      paidAmount: 300,
-      paymentMethod: 'نقدي',
+      paidAmount: 225,
+      paymentMethod: 'جزئي',
       customerName: 'زبون اختبار التقرير الفعلي',
     );
     final customer = (await database.query(
