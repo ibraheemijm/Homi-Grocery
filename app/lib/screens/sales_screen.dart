@@ -9,10 +9,10 @@ import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({this.onDataChanged, this.userId, this.shiftId, this.cashierMode = false, super.key});
+  const SalesScreen({this.onDataChanged, required this.userId, this.shiftId, this.cashierMode = false, super.key});
 
   final VoidCallback? onDataChanged;
-  final int? userId;
+  final int userId;
   final int? shiftId;
   final bool cashierMode;
 
@@ -65,7 +65,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
     _customerSearchTimer = Timer(const Duration(milliseconds: 280), () async {
       try {
-        final matches = await _customersRepository!.balances(userId: widget.userId!, query: query);
+        final matches = await _customersRepository!.balances(userId: widget.userId, query: query);
         if (!mounted ||
             request != _customerSearchRequest ||
             _customer.text.trim() != query) {
@@ -87,7 +87,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // عند حفظ الدين فقط نتحقق من الأسماء المشابهة، ولا نقاطع الكتابة بالتنبيهات.
   Future<String?> _resolveNewDebtCustomerName(String name) async {
-    final matches = await _customersRepository!.balances(userId: widget.userId!, query: name);
+    final matches = await _customersRepository!.balances(userId: widget.userId, query: name);
     if (!mounted) return null;
     if (matches.isEmpty) return name;
 
@@ -168,7 +168,9 @@ class _SalesScreenState extends State<SalesScreen> {
       _salesRepository = SaleRepository(database);
       if (!widget.cashierMode) {
         _customersRepository = CustomerRepository(database);
-        _recent = await _salesRepository!.recentSales(limit: 50);
+        if (!widget.cashierMode) {
+        _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
+      }
       }
       _matches = await _productsRepository!.search('');
       if (!mounted) return;
@@ -856,7 +858,9 @@ class _SalesScreenState extends State<SalesScreen> {
       _customerSearchTimer?.cancel();
       _customerSearchRequest++;
       _discountController.text = '0';
-      _recent = await _salesRepository!.recentSales(limit: 50);
+      if (!widget.cashierMode) {
+        _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
+      }
       widget.onDataChanged?.call();
       await _searchProducts(_search.text);
       if (!mounted) return;
@@ -1000,7 +1004,9 @@ class _SalesScreenState extends State<SalesScreen> {
         note: note,
         userId: widget.userId,
       );
-      _recent = await _salesRepository!.recentSales(limit: 50);
+      if (!widget.cashierMode) {
+        _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
+      }
       widget.onDataChanged?.call();
       if (!mounted) return;
       setState(() {});
@@ -1009,7 +1015,7 @@ class _SalesScreenState extends State<SalesScreen> {
       );
       // إذا تجاوز المرتجع الدين الأصلي، اسأل عن الرد النقدي الفعلي
       // بدل خصم مبلغ من الخزينة لم يُسلَّم للزبون.
-      final refundable = await _salesRepository!.maximumRefundableAmount(sale.id);
+      final refundable = await _salesRepository!.maximumRefundableAmount(sale.id, userId: widget.userId);
       if (refundable > 0 && mounted) await _refundSale(sale);
     } catch (error) {
       if (!mounted) return;
@@ -1022,7 +1028,7 @@ class _SalesScreenState extends State<SalesScreen> {
   // تسجيل رد نقدي فعلي للزبون بعد احتساب الجزء الذي يغطي دين الفاتورة.
   Future<void> _refundSale(SaleRecord sale) async {
     try {
-      final available = await _salesRepository!.maximumRefundableAmount(sale.id);
+      final available = await _salesRepository!.maximumRefundableAmount(sale.id, userId: widget.userId);
       if (!mounted) return;
       if (available <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
