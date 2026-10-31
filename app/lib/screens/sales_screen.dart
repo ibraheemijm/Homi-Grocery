@@ -85,6 +85,7 @@ class _SalesScreenState extends State<SalesScreen> {
   // عند حفظ الدين فقط نتحقق من الأسماء المشابهة، ولا نقاطع الكتابة بالتنبيهات.
   Future<String?> _resolveNewDebtCustomerName(String name) async {
     final matches = await _customersRepository!.balances(query: name);
+    if (!mounted) return null;
     if (matches.isEmpty) return name;
 
     _customerNickname.clear();
