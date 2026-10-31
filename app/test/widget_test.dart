@@ -67,7 +67,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
-    await tester.pumpAndSettle();
+    // شاشة النسخ تعرض مؤشر تحميل متحركًا أثناء فتح قاعدة البيانات؛ لا ننتظر سكون كل الرسوم.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('النسخ الاحتياطي والاستعادة'), findsWidgets);
     expect(find.text('إنشاء نسخة احتياطية الآن'), findsOneWidget);
