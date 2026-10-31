@@ -100,8 +100,8 @@ class SaleRepository {
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
       throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
     }
-    if (shiftId != null && (userId == null || paymentChannel != 'نقدي')) {
-      throw ArgumentError('ربط حركة البيع بالوردية يتطلب مستخدمًا وطريقة دفع نقدية.');
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط حركة البيع بالوردية يتطلب تحديد المستخدم.');
     }
     if (paymentMethod == 'نقدي' && paidAmount != total) {
       throw ArgumentError('الفاتورة النقدية يجب أن تُدفع بالكامل.');
@@ -400,8 +400,8 @@ class SaleRepository {
     if (paymentMethod.trim().isEmpty) {
       throw ArgumentError('حدد طريقة رد المبلغ.');
     }
-    if (shiftId != null && (userId == null || paymentMethod.trim() != 'نقدي')) {
-      throw ArgumentError('ربط رد المبلغ بالوردية يتطلب مستخدمًا وطريقة رد نقدية.');
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط رد المبلغ بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
       final sales = await txn.query(
