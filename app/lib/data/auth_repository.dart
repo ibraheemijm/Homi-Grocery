@@ -29,6 +29,30 @@ class AuthUser {
       );
 }
 
+
+class CashierAccount {
+  const CashierAccount({
+    required this.user,
+    required this.isActive,
+    required this.createdAt,
+    this.lastLoginAt,
+  });
+
+  final AuthUser user;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime? lastLoginAt;
+
+  factory CashierAccount.fromMap(Map<String, Object?> row) => CashierAccount(
+        user: AuthUser.fromMap(row),
+        isActive: row['is_active'] == 1,
+        createdAt: DateTime.parse(row['created_at'] as String),
+        lastLoginAt: row['last_login_at'] == null
+            ? null
+            : DateTime.tryParse(row['last_login_at'] as String),
+      );
+}
+
 class AuthException implements Exception {
   const AuthException(this.message);
   final String message;
@@ -185,6 +209,181 @@ class AuthRepository {
       );
     });
     return AuthUser.fromMap(row);
+  }
+
+
+  /// عرض حسابات الكاشير للمدير فقط، دون إرجاع بيانات كلمات المرور.
+  Future<List<CashierAccount>> listCashiers({required AuthUser manager}) async {
+    await _requireActiveManager(_database, manager.id);
+    final rows = await _database.query(
+      'users',
+      columns: ['id', 'username', 'display_name', 'role', 'is_active', 'created_at', 'last_login_at'],
+      where: "role = 'cashier'",
+      orderBy: 'is_active DESC, display_name COLLATE NOCASE',
+    );
+    return rows.map(CashierAccount.fromMap).toList(growable: false);
+  }
+
+  /// إنشاء حساب كاشير جديد من حساب مدير نشط.
+  Future<AuthUser> createCashier({
+    required AuthUser manager,
+    required String username,
+    required String displayName,
+    required String password,
+  }) async {
+    final cleanUsername = username.trim();
+    final cleanName = displayName.trim();
+    _validateCredentials(cleanUsername, cleanName, password);
+    final salt = List<int>.generate(
+      _saltLength,
+      (_) => Random.secure().nextInt(256),
+    );
+    final passwordHash = await _hashPassword(password, salt);
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    return _database.transaction((txn) async {
+      final managerUsername = await _requireActiveManager(txn, manager.id);
+      final existing = await txn.query(
+        'users',
+        columns: ['id'],
+        where: 'username = ? COLLATE NOCASE',
+        whereArgs: [cleanUsername],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        throw const AuthException('اسم المستخدم مستخدم بالفعل. اختر اسمًا آخر.');
+      }
+
+      final id = await txn.insert('users', {
+        'username': cleanUsername,
+        'display_name': cleanName,
+        'password_hash': passwordHash,
+        'password_salt': base64Encode(salt),
+        'password_iterations': _passwordIterations,
+        'role': 'cashier',
+        'is_active': 1,
+        'created_at': now,
+      });
+      await _writeAudit(
+        txn,
+        userId: manager.id,
+        username: managerUsername,
+        action: 'cashier_created:$cleanUsername',
+        createdAt: now,
+      );
+      return AuthUser(
+        id: id,
+        username: cleanUsername,
+        displayName: cleanName,
+        role: 'cashier',
+      );
+    });
+  }
+
+  /// تفعيل أو إيقاف حساب كاشير؛ لا تسمح هذه العملية بتعديل حساب مدير.
+  Future<void> setCashierActive({
+    required AuthUser manager,
+    required int cashierId,
+    required bool isActive,
+  }) async {
+    await _database.transaction((txn) async {
+      final managerUsername = await _requireActiveManager(txn, manager.id);
+      final rows = await txn.query(
+        'users',
+        columns: ['id', 'username', 'is_active'],
+        where: "id = ? AND role = 'cashier'",
+        whereArgs: [cashierId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw const AuthException('حساب الكاشير غير موجود.');
+      }
+      final cashier = rows.single;
+      final currentState = cashier['is_active'] == 1;
+      if (currentState == isActive) return;
+
+      await txn.update(
+        'users',
+        {'is_active': isActive ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [cashierId],
+      );
+      await _writeAudit(
+        txn,
+        userId: manager.id,
+        username: managerUsername,
+        action: isActive
+            ? 'cashier_activated:$cashierId'
+            : 'cashier_deactivated:$cashierId',
+        createdAt: DateTime.now().toUtc().toIso8601String(),
+      );
+    });
+  }
+
+  /// إعادة تعيين كلمة مرور كاشير مع إلغاء القفل والمحاولات الفاشلة.
+  Future<void> resetCashierPassword({
+    required AuthUser manager,
+    required int cashierId,
+    required String newPassword,
+  }) async {
+    if (newPassword.length < 10 || newPassword.length > 128) {
+      throw const AuthException('كلمة المرور يجب أن تكون بين 10 و128 حرفًا.');
+    }
+    final salt = List<int>.generate(
+      _saltLength,
+      (_) => Random.secure().nextInt(256),
+    );
+    final passwordHash = await _hashPassword(newPassword, salt);
+
+    await _database.transaction((txn) async {
+      final managerUsername = await _requireActiveManager(txn, manager.id);
+      final rows = await txn.query(
+        'users',
+        columns: ['id'],
+        where: "id = ? AND role = 'cashier'",
+        whereArgs: [cashierId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw const AuthException('حساب الكاشير غير موجود.');
+      }
+      await txn.update(
+        'users',
+        {
+          'password_hash': passwordHash,
+          'password_salt': base64Encode(salt),
+          'password_iterations': _passwordIterations,
+          'failed_attempts': 0,
+          'locked_until': null,
+        },
+        where: 'id = ?',
+        whereArgs: [cashierId],
+      );
+      await _writeAudit(
+        txn,
+        userId: manager.id,
+        username: managerUsername,
+        action: 'cashier_password_reset:$cashierId',
+        createdAt: DateTime.now().toUtc().toIso8601String(),
+      );
+    });
+  }
+
+  Future<String> _requireActiveManager(
+    DatabaseExecutor executor,
+    int managerId,
+  ) async {
+    final rows = await executor.query(
+      'users',
+      columns: ['username'],
+      where: "id = ? AND role = 'manager' AND is_active = 1",
+      whereArgs: [managerId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw const AuthException('هذه العملية متاحة لحساب مدير نشط فقط.');
+    }
+    return rows.single['username'] as String;
   }
 
   Future<void> logout(AuthUser user) async {
