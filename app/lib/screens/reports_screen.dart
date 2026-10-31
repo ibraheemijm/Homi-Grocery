@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 import '../data/grocery_database.dart';
 import '../data/report_print_service.dart';
 import '../data/reports_repository.dart';
+import '../data/pdf_file_name.dart';
 
 /// تقارير حسب اليوم؛ لا يعرض ربحًا تقديريًا قبل حفظ تكلفة الصنف وقت البيع.
 class ReportsScreen extends StatefulWidget {
@@ -79,13 +80,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
         limit: 1,
       );
       final storeName = rows.isEmpty ? 'Homi Grocery' : (rows.single['value'] as String).trim();
+      final languageRows = await database.query(
+        'app_metadata',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: ['pdf_filename_language'],
+        limit: 1,
+      );
+      final filenameLanguage = languageRows.isEmpty
+          ? 'both'
+          : languageRows.single['value'] as String;
       final bytes = await ReportPrintService().buildDailyPdf(
         report: report,
         storeName: storeName.isEmpty ? 'Homi Grocery' : storeName,
       );
       if (!mounted) return;
       await Printing.layoutPdf(
-        name: 'تقرير-يومي-${_dateLabel(report.day)}.pdf',
+        name: buildPdfFileName(
+          language: filenameLanguage,
+          arabicLabel: 'تقرير-يومي-${_dateLabel(report.day)}',
+          englishLabel: 'Daily-Report-${_dateLabel(report.day)}',
+        ),
         onLayout: (_) async => bytes,
       );
     } catch (error) {
@@ -107,6 +122,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
         limit: 1,
       );
       final storeName = rows.isEmpty ? 'Homi Grocery' : (rows.single['value'] as String).trim();
+      final languageRows = await database.query(
+        'app_metadata',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: ['pdf_filename_language'],
+        limit: 1,
+      );
+      final filenameLanguage = languageRows.isEmpty
+          ? 'both'
+          : languageRows.single['value'] as String;
       final bytes = await ReportPrintService().buildPeriodPdf(
         report: report,
         storeName: storeName.isEmpty ? 'Homi Grocery' : storeName,
@@ -114,11 +139,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
       if (!mounted) return;
       final modeLabel = _periodMode == 'year' ? 'سنوي' : 'شهري';
+      final englishModeLabel = _periodMode == 'year' ? 'Annual' : 'Monthly';
       final periodLabel = _periodMode == 'year'
           ? report.start.year.toString()
           : '${report.start.year}-${report.start.month.toString().padLeft(2, '0')}';
       await Printing.layoutPdf(
-        name: 'تقرير-$modeLabel-$periodLabel.pdf',
+        name: buildPdfFileName(
+          language: filenameLanguage,
+          arabicLabel: 'تقرير-$modeLabel-$periodLabel',
+          englishLabel: '$englishModeLabel-Report-$periodLabel',
+        ),
         onLayout: (_) async => bytes,
       );
     } catch (error) {
