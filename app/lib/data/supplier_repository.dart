@@ -13,12 +13,20 @@ class SupplierBalance {
 }
 
 class PurchaseLine {
-  const PurchaseLine({required this.productId, required this.productName, required this.unit, required this.quantity, required this.unitCost});
+  const PurchaseLine({
+    required this.productId,
+    required this.productName,
+    required this.unit,
+    required this.quantity,
+    required this.unitCost,
+    this.sellingPrice,
+  });
   final int productId;
   final String productName;
   final String unit;
   final double quantity;
   final int unitCost;
+  final int? sellingPrice;
   int get lineTotal => (quantity * unitCost).round();
 }
 
@@ -135,7 +143,11 @@ class SupplierRepository {
       throw ArgumentError('طريقة دفع فاتورة الشراء غير مدعومة.');
     }
     for (final line in lines) {
-      if (line.productId <= 0 || !line.quantity.isFinite || line.quantity <= 0 || line.unitCost < 0) {
+      if (line.productId <= 0 ||
+          !line.quantity.isFinite ||
+          line.quantity <= 0 ||
+          line.unitCost < 0 ||
+          (line.sellingPrice != null && line.sellingPrice! < 0)) {
         throw ArgumentError('تحقق من كميات وأسعار أصناف الشراء.');
       }
     }
@@ -171,7 +183,17 @@ class SupplierRepository {
         if (products.isEmpty) throw ArgumentError('أحد أصناف الشراء غير موجود.');
         final before = (products.single['stock_quantity'] as num).toDouble();
         final after = before + line.quantity;
-        await txn.update('products', {'stock_quantity': after, 'purchase_price': line.unitCost}, where: 'id = ?', whereArgs: [line.productId]);
+        final productUpdate = <String, Object?>{
+          'stock_quantity': after,
+          'purchase_price': line.unitCost,
+          if (line.sellingPrice != null) 'selling_price': line.sellingPrice,
+        };
+        await txn.update(
+          'products',
+          productUpdate,
+          where: 'id = ?',
+          whereArgs: [line.productId],
+        );
         await txn.insert('purchase_items', {
           'purchase_id': purchaseId, 'product_id': line.productId,
           'product_name': line.productName, 'unit': line.unit,
