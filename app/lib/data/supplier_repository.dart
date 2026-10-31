@@ -129,7 +129,31 @@ class SupplierRepository {
     return rows.first['id'] as int;
   }
 
-  Future<List<SupplierBalance>> balances({String query = ''}) async {
+  // يتحقق من هوية المستخدم وصلاحية عرض بيانات الموردين قبل إرجاع الأرصدة.
+  Future<void> _requireReadAccess(int userId) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض بيانات الموردين.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_supplier_data'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض بيانات الموردين.');
+    }
+  }
+
+  Future<List<SupplierBalance>> balances({required int userId, String query = ''}) async {
+    await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT s.id, s.name,
         (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) AS purchase_count,
