@@ -15,6 +15,7 @@ void main() {
   late ProductRepository products;
   late SaleRepository sales;
   late int managerId;
+  late AuthUser managerAccount;
 
   setUp(() async {
     sqfliteFfiInit();
@@ -35,6 +36,12 @@ void main() {
       'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
+    managerAccount = AuthUser(
+      id: managerId,
+      username: 'test_manager',
+      displayName: 'مدير الاختبار',
+      role: 'manager',
+    );
     customers = CustomerRepository(database);
     products = ProductRepository(database);
     sales = SaleRepository(database);
@@ -91,11 +98,7 @@ void main() {
 
   test('يشترط وردية المستخدم النشطة للتحصيل النقدي فقط', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_one',
@@ -341,11 +344,7 @@ void main() {
   });
   test('يفرض صلاحية التحصيل وحده المالي على حساب الكاشير', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'collection_manager',
-      displayName: 'المدير',
-      password: 'ManagerPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'collection_cashier',
