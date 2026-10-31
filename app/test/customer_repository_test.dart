@@ -78,7 +78,8 @@ void main() {
       paidAmount: 1200,
       paymentMethod: 'جزئي',
       customerName: 'أحمد',
-    );
+    
+      userId: managerId);
 
     final before = (await customers.balances(userId: managerId)).single;
     expect(before.name, 'أحمد');
@@ -119,7 +120,8 @@ void main() {
       paidAmount: 0,
       paymentMethod: 'آجل',
       customerName: 'عميل الوردية',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
 
     await customers.recordPayment(
@@ -170,7 +172,8 @@ void main() {
       paidAmount: 0,
       paymentMethod: 'آجل',
       customerName: 'سارة',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
     final itemId = (await database.query(
       'sale_items',
@@ -205,7 +208,8 @@ void main() {
       paidAmount: 90,
       paymentMethod: 'جزئي',
       customerName: 'عميل الرد النقدي',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
@@ -240,7 +244,8 @@ void main() {
       paidAmount: 0,
       paymentMethod: 'آجل',
       customerName: 'خالد',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
     final itemId = (await database.query(
       'sale_items',
@@ -291,14 +296,16 @@ void main() {
       paidAmount: 2000,
       paymentMethod: 'نقدي',
       customerName: customerName,
-    );
+    
+      userId: managerId);
     await sales.createSale(
       lines: [SaleLine(product: debtProduct, quantity: 1)],
       discount: 0,
       paidAmount: 0,
       paymentMethod: 'آجل',
       customerName: customerName,
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
     final paidItemId = (await database.query(
       'sale_items',
@@ -332,7 +339,8 @@ void main() {
       paidAmount: 0,
       paymentMethod: 'آجل',
       customerName: 'منى',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
 
     await expectLater(
@@ -369,7 +377,8 @@ void main() {
       paidAmount: 500,
       paymentMethod: 'جزئي',
       customerName: 'عميل التحصيل',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
 
     await expectLater(
