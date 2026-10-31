@@ -39,4 +39,17 @@ void main() {
       'تقرير-يومي-Daily-Report-20261031-094830.pdf',
     );
   });
+  test('يسمي التقرير اليومي بتاريخ التقرير ووقت التصدير دون تكرار التاريخ', () {
+    expect(
+      buildPdfFileName(
+        language: 'both',
+        arabicLabel: 'تقرير-يومي-20261031',
+        englishLabel: 'Daily-Report-20261031',
+        exportedAt: exportedAt,
+        includeExportDate: false,
+      ),
+      'تقرير-يومي-20261031-Daily-Report-20261031-094830.pdf',
+    );
+  });
+
 }
