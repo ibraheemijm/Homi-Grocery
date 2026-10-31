@@ -208,6 +208,60 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() { _cart[index] = SaleLine(product: _cart[index].product, quantity: quantity); });
   }
 
+  // يتيح إدخال وزن دقيق بدل الاقتصار على أزرار الزيادة والنقصان.
+  Future<void> _editQuantity(int index) async {
+    final controller = TextEditingController(
+      text: _quantity(_cart[index].quantity),
+    );
+    final value = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('كمية ${_cart[index].product.name}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'الكمية بـ ${_cart[index].product.unit}',
+            hintText: 'مثال: 1 أو 0.5 أو 0.25',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = double.tryParse(controller.text.trim());
+              if (parsed == null || !parsed.isFinite || parsed <= 0) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('أدخل كمية أكبر من صفر.')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, parsed);
+            },
+            child: const Text('تأكيد الكمية'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value != null && mounted) _changeQuantity(index, value);
+  }
+
+  // وحدات الوزن والحجم تسمح بالزيادة بربع وحدة؛ القطع تبقى بوحدة كاملة.
+  double _quantityStep(GroceryProduct product) {
+    final unit = product.unit.toLowerCase().replaceAll(' ', '');
+    const fractionalUnits = [
+      'كجم', 'كيلوجرام', 'كيلوغرام', 'كيلو', 'كغ',
+      'جم', 'جرام', 'غرام', 'لتر', 'مل',
+    ];
+    return fractionalUnits.any(unit.contains) ? 0.25 : 1;
+  }
+
   @override
   void dispose() {
     _customerSearchTimer?.cancel();
@@ -635,16 +689,27 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                onPressed: () => _changeQuantity(index, line.quantity - 1),
+                tooltip: 'تقليل الكمية',
+                onPressed: () => _changeQuantity(
+                  index,
+                  line.quantity - _quantityStep(line.product),
+                ),
                 icon: const Icon(Icons.remove_circle_outline),
               ),
               SizedBox(
-                width: 34,
-                child: Text(_quantity(line.quantity), textAlign: TextAlign.center),
+                width: 48,
+                child: TextButton(
+                  onPressed: () => _editQuantity(index),
+                  child: Text(_quantity(line.quantity), textAlign: TextAlign.center),
+                ),
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                onPressed: () => _changeQuantity(index, line.quantity + 1),
+                tooltip: 'زيادة الكمية',
+                onPressed: () => _changeQuantity(
+                  index,
+                  line.quantity + _quantityStep(line.product),
+                ),
                 icon: const Icon(Icons.add_circle_outline),
               ),
               IconButton(
