@@ -64,6 +64,28 @@ class SaleRepository {
 
   final Database _database;
 
+  /// يتحقق من صلاحية الكاشير ويعيد سقف العملية المالي إن وُجد.
+  /// الصلاحية غير المسجلة أو غير المفعلة مرفوضة افتراضيًا.
+  static Future<int?> _requireCashierPermission(
+    Transaction txn, {
+    required int userId,
+    required String permissionKey,
+    required String permissionLabel,
+  }) async {
+    final rows = await txn.query(
+      'cashier_permissions',
+      columns: ['is_allowed', 'max_amount'],
+      where: 'user_id = ? AND permission_key = ?',
+      whereArgs: [userId, permissionKey],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية $permissionLabel.');
+    }
+    return (rows.single['max_amount'] as num?)?.toInt();
+  }
+
+
   // حفظ الفاتورة وبنودها وتحديث المخزون في معاملة واحدة.
   Future<SaleRecord> createSale({
     required List<SaleLine> lines,
@@ -139,15 +161,34 @@ class SaleRepository {
         if (accounts.isEmpty || accounts.single['is_active'] != 1) {
           throw StateError('الحساب غير نشط أو غير موجود ولا يمكنه تسجيل مبيعات.');
         }
-        if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
-          if (total <= 0 ||
-              discount != 0 ||
-              paymentMethod != 'نقدي' ||
-              paidAmount != total ||
-              paymentChannel != 'نقدي') {
+        if (accounts.single['role'] == 'cashier') {
+          if (total <= 0 || paymentChannel != 'نقدي') {
             throw StateError(
-              'صلاحية الكاشير الحالية تقتصر على البيع النقدي الكامل دون خصم أو دين أو تحويل.',
+              'الكاشير لا يسجل بيعًا صفريًا أو يستلم عبر التحويل البنكي.',
             );
+          }
+          if (discount > 0) {
+            final limit = await _requireCashierPermission(
+              txn,
+              userId: userId,
+              permissionKey: 'discounts',
+              permissionLabel: 'تقديم الخصم',
+            );
+            if (limit != null && discount > limit) {
+              throw StateError('قيمة الخصم تتجاوز الحد المسموح ($limit ج.س).');
+            }
+          }
+          if (hasDebt) {
+            final limit = await _requireCashierPermission(
+              txn,
+              userId: userId,
+              permissionKey: 'credit_sales',
+              permissionLabel: 'البيع بالدين أو الدفع الجزئي',
+            );
+            final debtAmount = total - paidAmount;
+            if (limit != null && debtAmount > limit) {
+              throw StateError('الرصيد الآجل يتجاوز الحد المسموح ($limit ج.س).');
+            }
           }
         }
       }
@@ -300,7 +341,23 @@ class SaleRepository {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
         if (accounts.single['role'] == 'cashier') {
-          throw StateError('تسجيل المرتجعات غير متاح للكاشير حاليًا.');
+          final limit = await _requireCashierPermission(
+            txn,
+            userId: userId,
+            permissionKey: 'returns',
+            permissionLabel: 'تسجيل مرتجعات البيع',
+          );
+          // يُفحص سقف المرتجع بعد حساب قيمته الفعلية داخل المعاملة.
+          if (limit != null) {
+            final saleRows = await txn.query(
+              'sales',
+              columns: ['total', 'paid_amount'],
+              where: 'id = ?',
+              whereArgs: [saleId],
+              limit: 1,
+            );
+            if (saleRows.isEmpty) throw StateError('الفاتورة غير موجودة.');
+          }
         }
       }
       final sales = await txn.query(
@@ -367,6 +424,27 @@ class SaleRepository {
           'amount': amount,
           'stock_before': (row['stock_quantity'] as num).toDouble(),
         });
+      }
+
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role'],
+          where: 'id = ? AND is_active = 1',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
+          final limit = await _requireCashierPermission(
+            txn,
+            userId: userId,
+            permissionKey: 'returns',
+            permissionLabel: 'تسجيل مرتجعات البيع',
+          );
+          if (limit != null && totalAmount > limit) {
+            throw StateError('قيمة المرتجع تتجاوز الحد المسموح ($limit ج.س).');
+          }
+        }
       }
 
       final now = DateTime.now().toUtc().toIso8601String();
@@ -463,7 +541,15 @@ class SaleRepository {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
         if (accounts.single['role'] == 'cashier') {
-          throw StateError('رد مبالغ المرتجعات غير متاح للكاشير حاليًا.');
+          final limit = await _requireCashierPermission(
+            txn,
+            userId: userId,
+            permissionKey: 'return_refunds',
+            permissionLabel: 'رد مبالغ المرتجعات',
+          );
+          if (limit != null && amount > limit) {
+            throw StateError('مبلغ الرد يتجاوز الحد المسموح ($limit ج.س).');
+          }
         }
       }
       if (paymentMethod.trim() == 'نقدي' && userId != null) {
