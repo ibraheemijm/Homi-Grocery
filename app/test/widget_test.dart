@@ -2,11 +2,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/main.dart';
+import 'package:homi_grocery/data/auth_repository.dart';
+
+Widget _dashboardApp() => MaterialApp(
+      home: DashboardScreen(
+        isDark: false,
+        onToggleTheme: () {},
+        user: const AuthUser(
+          id: 1,
+          username: 'manager',
+          displayName: 'مدير الاختبار',
+          role: 'manager',
+        ),
+        onLogout: () {},
+      ),
+    );
 
 void main() {
   testWidgets('تظهر اللوحة الرئيسية باللغة العربية على شاشة الهاتف',
       (tester) async {
-    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pumpWidget(_dashboardApp());
 
     expect(find.text('الرئيسية'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsOneWidget);
