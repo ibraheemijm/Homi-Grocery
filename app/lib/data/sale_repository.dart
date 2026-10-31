@@ -86,6 +86,47 @@ class SaleRepository {
   }
 
 
+  // يمنع قراءة سجل الفواتير إلا للمدير أو الكاشير الممنوح صلاحية العرض.
+  Future<void> requireInvoiceHistoryAccess(int userId) async {
+    final accounts = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'manager') return;
+    if (role != 'cashier') throw StateError('لا يملك المستخدم صلاحية عرض سجل الفواتير.');
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_invoice_history'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض سجل الفواتير.');
+    }
+  }
+
+  Future<List<Map<String, Object?>>> invoiceHistory({
+    required int userId,
+    String query = '',
+    int limit = 200,
+  }) async {
+    await requireInvoiceHistoryAccess(userId);
+    if (limit < 1 || limit > 500) throw ArgumentError('حد نتائج سجل الفواتير غير صالح.');
+    final normalized = query.trim();
+    return _database.rawQuery('''
+      SELECT s.id, s.invoice_number, s.customer_name, s.total,
+        s.paid_amount, s.payment_method, s.created_at,
+        (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
+      FROM sales s
+      WHERE (? = '' OR s.invoice_number LIKE ? OR COALESCE(s.customer_name, '') LIKE ?)
+      ORDER BY s.id DESC
+      LIMIT ?
+    ''', [normalized, '%$normalized%', '%$normalized%', limit]);
+  }
+
   // حفظ الفاتورة وبنودها وتحديث المخزون في معاملة واحدة.
   Future<SaleRecord> createSale({
     required List<SaleLine> lines,
@@ -317,7 +358,7 @@ class SaleRepository {
     required int saleId,
     required Map<int, double> quantitiesBySaleItemId,
     String? note,
-    int? userId,
+    required int userId,
   }) async {
     if (quantitiesBySaleItemId.isEmpty) {
       throw ArgumentError('حدد كمية واحدة على الأقل لإرجاعها.');
@@ -329,17 +370,19 @@ class SaleRepository {
     }
 
     return _database.transaction((txn) async {
-      if (userId != null) {
-        final accounts = await txn.query(
-          'users',
-          columns: ['role', 'is_active'],
-          where: 'id = ?',
-          whereArgs: [userId],
-          limit: 1,
-        );
-        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
-          throw StateError('الحساب غير نشط أو غير موجود.');
-        }
+      final accounts = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+        throw StateError('الحساب غير نشط أو غير موجود.');
+      }
+      final role = accounts.single['role'];
+      if (role != 'manager' && role != 'cashier') {
+        throw StateError('نوع الحساب غير مصرح له بتسجيل المرتجعات.');
       }
       final sales = await txn.query(
         'sales',
@@ -407,15 +450,7 @@ class SaleRepository {
         });
       }
 
-      if (userId != null) {
-        final accounts = await txn.query(
-          'users',
-          columns: ['role'],
-          where: 'id = ? AND is_active = 1',
-          whereArgs: [userId],
-          limit: 1,
-        );
-        if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
+      if (role == 'cashier') {
           final limit = await _requireCashierPermission(
             txn,
             userId: userId,
@@ -475,7 +510,8 @@ class SaleRepository {
   }
 
   /// الحد المتبقي من النقد الذي يمكن رده فعليًا بعد أن غطت المرتجعات دين الفاتورة الأصلي.
-  Future<int> maximumRefundableAmount(int saleId) async {
+  Future<int> maximumRefundableAmount(int saleId, {required int userId}) async {
+    await requireInvoiceHistoryAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT MAX(0,
         COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
@@ -498,7 +534,7 @@ class SaleRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
-    int? userId,
+    required int userId,
     int? shiftId,
   }) async {
     if (saleId <= 0) throw ArgumentError('معرّف الفاتورة غير صالح.');
@@ -510,18 +546,21 @@ class SaleRepository {
       throw ArgumentError('ربط رد المبلغ بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
-      if (userId != null) {
-        final accounts = await txn.query(
-          'users',
-          columns: ['role', 'is_active'],
-          where: 'id = ?',
-          whereArgs: [userId],
-          limit: 1,
-        );
-        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
-          throw StateError('الحساب غير نشط أو غير موجود.');
-        }
-        if (accounts.single['role'] == 'cashier') {
+      final accounts = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+        throw StateError('الحساب غير نشط أو غير موجود.');
+      }
+      final role = accounts.single['role'];
+      if (role != 'manager' && role != 'cashier') {
+        throw StateError('نوع الحساب غير مصرح له برد مبالغ المرتجعات.');
+      }
+      if (role == 'cashier') {
           final limit = await _requireCashierPermission(
             txn,
             userId: userId,
@@ -533,7 +572,7 @@ class SaleRepository {
           }
         }
       }
-      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+      if (paymentMethod.trim() == 'نقدي' && (role == 'cashier' || shiftId != null)) {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
@@ -598,7 +637,9 @@ class SaleRepository {
   }
 
   // عرض أحدث الفواتير أولًا.
-  Future<List<SaleRecord>> recentSales({int limit = 50}) async {
+  Future<List<SaleRecord>> recentSales({required int userId, int limit = 50}) async {
+    await requireInvoiceHistoryAccess(userId);
+    if (limit < 1 || limit > 500) throw ArgumentError('حد نتائج سجل الفواتير غير صالح.');
     final rows = await _database.query(
       'sales',
       orderBy: 'id DESC',
