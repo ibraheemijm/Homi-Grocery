@@ -20,7 +20,7 @@ String buildPdfFileName({
   };
   final safeLabel = label
       .replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-')
-      .replaceAll(RegExp(r'\\s+'), '-')
+      .replaceAll(RegExp(r'\s+'), '-')
       .replaceAll(RegExp(r'-+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
   return '$safeLabel-$timestamp.pdf';
