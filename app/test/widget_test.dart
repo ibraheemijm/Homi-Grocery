@@ -56,7 +56,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pumpWidget(_dashboardApp());
     await tester.pump();
 
     await tester.tap(find.byTooltip('المظهر الداكن'));
@@ -73,6 +73,7 @@ void main() {
     final selectedText = tester.widget<Text>(selectedTextFinder);
     expect(selectedText.style?.color, Colors.white);
   });
+
   testWidgets('تفتح بطاقة مبيعات اليوم شاشة التقارير لا شاشة البيع',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1000);
@@ -80,7 +81,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pumpWidget(_dashboardApp());
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.tap(find.text('مبيعات اليوم'));
@@ -90,13 +91,14 @@ void main() {
     expect(find.text('اختيار الأصناف'), findsNothing);
   });
 
-  testWidgets('يفتح قسم النسخ الاحتياطي والاستعادة من قائمة الأقسام الأخرى', (tester) async {
+  testWidgets('يفتح قسم النسخ الاحتياطي والاستعادة من قائمة الأقسام الأخرى',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pumpWidget(_dashboardApp());
     await tester.pump();
 
     // نحدد تسمية «المزيد» داخل شريط التنقل السفلي نفسه، لا أي عنصر مشابه في محتوى الصفحة.
