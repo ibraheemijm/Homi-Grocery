@@ -397,4 +397,46 @@ void main() {
 
     expect((await products.getById(productId))!.stockQuantity, -1);
   });
+
+  test('يربط البيع النقدي بمستخدم الوردية ولا يربط التحويل البنكي بدرج النقدية', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 4,
+    ));
+    final product = (await products.getById(productId))!;
+
+    final cashSale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      userId: 7,
+      shiftId: 12,
+    );
+    final cashEntry = (await database.query(
+      'cash_transactions',
+      where: "reference_type = 'sale' AND reference_id = ?",
+      whereArgs: [cashSale.id],
+    )).single;
+    expect(cashEntry['user_id'], 7);
+    expect(cashEntry['shift_id'], 12);
+
+    final bankSale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      paymentChannel: 'تحويل بنكي',
+      userId: 7,
+      shiftId: 12,
+    );
+    final bankEntry = (await database.query(
+      'cash_transactions',
+      where: "reference_type = 'sale' AND reference_id = ?",
+      whereArgs: [bankSale.id],
+    )).single;
+    expect(bankEntry['user_id'], 7);
+    expect(bankEntry['shift_id'], isNull);
+    expect(bankEntry['payment_method'], 'تحويل بنكي');
+  });
+
 }
