@@ -10,12 +10,24 @@ void main() {
   late Database database;
   late ProductRepository products;
   late StockRepository stock;
+  late int managerId;
 
   setUp(() async {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'manager_test',
+      'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 100000,
+      'role': 'manager',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     products = ProductRepository(database);
     stock = StockRepository(database);
   });
@@ -29,6 +41,7 @@ void main() {
     ));
 
     final addition = await stock.recordMovement(
+      userId: managerId,
       productId: id,
       movementType: 'إضافة',
       quantityDelta: 7,
@@ -39,6 +52,7 @@ void main() {
     expect((await products.getById(id))!.stockQuantity, 12);
 
     final adjustment = await stock.recordMovement(
+      userId: managerId,
       productId: id,
       movementType: 'تسوية',
       quantityDelta: -2,
@@ -59,11 +73,13 @@ void main() {
     ));
 
     await stock.recordMovement(
+      userId: managerId,
       productId: sugarId,
       movementType: 'إضافة',
       quantityDelta: 2,
     );
     await stock.recordMovement(
+      userId: managerId,
       productId: oilId,
       movementType: 'تسوية',
       quantityDelta: -1,
@@ -87,6 +103,7 @@ void main() {
     for (final quantity in <double>[0, double.infinity, double.nan]) {
       await expectLater(
         stock.recordMovement(
+          userId: managerId,
           productId: id,
           movementType: 'تسوية',
           quantityDelta: quantity,
@@ -105,6 +122,7 @@ void main() {
     ));
 
     final movement = await stock.recordMovement(
+      userId: managerId,
       productId: id,
       movementType: 'تسوية',
       quantityDelta: -4,
