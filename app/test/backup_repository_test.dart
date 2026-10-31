@@ -234,7 +234,33 @@ void main() {
       openRestoredDatabase: () async {
         database = await databaseFactoryFfi.openDatabase(
           targetPath,
-          options: OpenDatabaseOptions(version: 11),
+          options: OpenDatabaseOptions(
+            version: GroceryDatabase.schemaVersion,
+            onUpgrade: (db, oldVersion, newVersion) async {
+              if (oldVersion < 2) await GroceryDatabase.createSalesSchema(db);
+              if (oldVersion < 3) await GroceryDatabase.createCustomersSchema(db);
+              if (oldVersion < 4) await GroceryDatabase.createStockMovementsSchema(db);
+              if (oldVersion < 5) await GroceryDatabase.createSalesReturnsSchema(db);
+              if (oldVersion < 6) await GroceryDatabase.createPurchasesSchema(db);
+              if (oldVersion < 7) await GroceryDatabase.createSaleReturnRefundsSchema(db);
+              if (oldVersion < 8) await GroceryDatabase.createCashTransactionsSchema(db);
+              if (oldVersion < 9) await GroceryDatabase.createSupplierReturnsSchema(db);
+              if (oldVersion < 10) await GroceryDatabase.createCostOfGoodsSchema(db);
+              if (oldVersion < 11) await GroceryDatabase.createSupplierReturnRefundsSchema(db);
+              if (oldVersion < 12) await GroceryDatabase.createNotificationsSchema(db);
+              if (oldVersion < 13) {
+                final columns = await db.rawQuery('PRAGMA table_info(products)');
+                if (!columns.any((column) => column['name'] == 'image_path')) {
+                  await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT');
+                }
+              }
+              await db.insert(
+                'app_metadata',
+                {'key': 'schema_version', 'value': newVersion.toString()},
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            },
+          ),
         );
         return database;
       },
