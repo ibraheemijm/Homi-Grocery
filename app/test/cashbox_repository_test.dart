@@ -66,6 +66,43 @@ void main() {
     expect(await cashbox.recent(userId: managerId, paymentMethod: 'تحويل بنكي'), hasLength(2));
   });
 
+  test('يحمي قراءة الخزينة ويتيحها للكاشير بعد منح الصلاحية', () async {
+    final manager = AuthUser(
+      id: managerId,
+      username: 'cashbox_test_manager',
+      displayName: 'مدير الاختبار',
+      role: 'manager',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashbox_reader',
+      displayName: 'قارئ الخزينة',
+      password: 'CashierPass!2026',
+    );
+
+    await expectLater(cashbox.summary(userId: cashier.id), throwsStateError);
+    await expectLater(cashbox.recent(userId: cashier.id), throwsStateError);
+
+    final settings = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) => setting.key == 'view_cashbox'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+            )
+          : setting).toList(),
+    );
+
+    expect((await cashbox.summary(userId: cashier.id)).currentBalance, 0);
+    expect(await cashbox.recent(userId: cashier.id), isEmpty);
+  });
+
   test('يرفض المبالغ غير الصالحة واتجاه الحركة غير المعروف', () async {
     await expectLater(
       cashbox.recordManualMovement(direction: 'in', category: 'دخل', amount: 0, userId: managerId),
