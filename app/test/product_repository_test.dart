@@ -42,6 +42,56 @@ void main() {
     expect(saved.isActive, isTrue);
   });
 
+  test('يمنع تكرار اسم الصنف بعد توحيد الهمزات والمسافات والتشكيل', () async {
+    await repository.addUnique(const GroceryProduct(
+      name: 'أرز   بسمتي',
+      unit: 'كيس',
+      sellingPrice: 5000,
+    ));
+
+    await expectLater(
+      repository.addUnique(const GroceryProduct(
+        name: 'ارز بسمتي',
+        unit: 'كيس',
+        sellingPrice: 5200,
+      )),
+      throwsStateError,
+    );
+    expect(await repository.findByNormalizedName('  ارز بسمتي '), isNotNull);
+  });
+
+  test('يؤرشف الصنف الجديد غير المستخدم ولا يؤرشف الصنف المرتبط بعملية', () async {
+    final unusedId = await repository.addUnique(
+      const GroceryProduct(name: 'منتج جديد', unit: 'علبة'),
+    );
+    expect(await repository.archiveIfUnused(unusedId), isTrue);
+    expect(await repository.getById(unusedId), isNotNull);
+
+    final usedId = await repository.addUnique(
+      const GroceryProduct(name: 'منتج مستخدم', unit: 'حبة'),
+    );
+    await database.insert('sales', {
+      'invoice_number': 'TEST-ARCHIVE-1',
+      'subtotal': 100,
+      'discount': 0,
+      'total': 100,
+      'paid_amount': 100,
+      'payment_method': 'نقدي',
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    final sale = await database.query('sales', limit: 1);
+    await database.insert('sale_items', {
+      'sale_id': sale.single['id'],
+      'product_id': usedId,
+      'product_name': 'منتج مستخدم',
+      'quantity': 1,
+      'unit_price': 100,
+      'line_total': 100,
+    });
+    expect(await repository.archiveIfUnused(usedId), isFalse);
+    expect((await repository.getById(usedId))!.isActive, isTrue);
+  });
+
   test('يحدّث سعر البيع دون تغيير تكلفة الشراء أو المخزون ويحفظ مسار الصورة', () async {
     final id = await repository.add(const GroceryProduct(
       name: 'حليب',
