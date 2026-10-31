@@ -152,6 +152,26 @@ class SupplierRepository {
     }
   }
 
+  // يفرض صلاحية مستقلة للعمليات المالية الخاصة بالكاشير داخل المعاملة.
+  Future<int?> _requireCashierPermission(
+    Transaction txn, {
+    required int userId,
+    required String permissionKey,
+    required String label,
+  }) async {
+    final accounts = await txn.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'manager') return null;
+    if (role != 'cashier') throw StateError('نوع الحساب غير مصرح له بهذه العملية.');
+    return _cashierLimit(txn, userId: userId, permissionKey: permissionKey, label: label);
+  }
+
   Future<List<SupplierBalance>> balances({required int userId, String query = ''}) async {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
@@ -304,9 +324,11 @@ class SupplierRepository {
 
   /// يعرض سجل فواتير الشراء الأحدث أولًا، مع اسم المورد والمبالغ المحاسبية.
   Future<List<PurchaseHistoryRecord>> purchaseHistory({
+    required int userId,
     int? supplierId,
     int limit = 100,
   }) async {
+    await _requireReadAccess(userId);
     if (limit < 1 || limit > 1000) {
       throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
     }
@@ -335,7 +357,8 @@ class SupplierRepository {
   }
 
   /// يعرض البنود المحفوظة كما كانت وقت الشراء، لا حسب بيانات الصنف الحالية.
-  Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId) async {
+  Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId, {required int userId}) async {
+    await _requireReadAccess(userId);
     final rows = await _database.query(
       'purchase_items',
       columns: ['product_name', 'unit', 'quantity', 'unit_cost', 'line_total'],
@@ -355,6 +378,7 @@ class SupplierRepository {
   /// يعيد أصنافًا من فاتورة شراء، ويحدّث المخزون والمستحق وسجل الحركة ذريًا.
   /// لتجنب رصيد دائن غير ممثل بعد، لا يسمح بإرجاع قيمة أكبر من المستحق الحالي للمورد.
   Future<int> createSupplierReturn({
+    required int userId,
     required int purchaseId,
     required Map<int, double> quantitiesByPurchaseItemId,
     String? note,
@@ -364,6 +388,12 @@ class SupplierRepository {
       throw ArgumentError('حدد كميات مرتجع صالحة.');
     }
     return _database.transaction((txn) async {
+      final permissionLimit = await _requireCashierPermission(
+        txn,
+        userId: userId,
+        permissionKey: 'supplier_returns',
+        label: 'تسجيل مرتجعات الموردين',
+      );
       final purchases = await txn.query(
         'purchases',
         columns: ['id', 'supplier_id', 'invoice_number', 'subtotal', 'total'],
@@ -426,6 +456,9 @@ class SupplierRepository {
         });
       }
       if (total <= 0) throw ArgumentError('قيمة المرتجع يجب أن تكون أكبر من صفر.');
+      if (permissionLimit != null && total > permissionLimit) {
+        throw StateError('قيمة مرتجع المورد تتجاوز الحد المسموح ($permissionLimit ج.س).');
+      }
       final returnId = await txn.insert('supplier_returns', {
         'purchase_id': purchaseId,
         'amount': total,
@@ -463,7 +496,8 @@ class SupplierRepository {
   }
 
   /// بنود فاتورة الشراء مع الكميات المتبقية القابلة للإرجاع.
-  Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId) async {
+  Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId, {required int userId}) async {
+    await _requireReadAccess(userId);
     return _database.rawQuery('''
       SELECT pi.id, pi.product_id, pi.product_name, pi.unit, pi.quantity,
         pi.unit_cost, pi.line_total, pr.stock_quantity,
@@ -477,7 +511,8 @@ class SupplierRepository {
   }
 
   /// أقصى مبلغ لم يُسترد نقديًا بعد من مرتجع مورد.
-  Future<int> maximumRefundableSupplierReturnAmount(int returnId) async {
+  Future<int> maximumRefundableSupplierReturnAmount(int returnId, {required int userId}) async {
+    await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT MAX(0, sr.amount - COALESCE((
         SELECT SUM(srr.amount) FROM supplier_return_refunds srr
@@ -491,6 +526,7 @@ class SupplierRepository {
 
   /// تسجيل رد نقدي/بنكي وصل فعليًا من المورد؛ يظل الرصيد الدائن منفصلًا عن الخزينة.
   Future<int> recordSupplierReturnRefund({
+    required int userId,
     required int returnId,
     required int amount,
     String paymentMethod = 'نقدي',
@@ -505,7 +541,13 @@ class SupplierRepository {
       throw ArgumentError('حدد طريقة استلام المبلغ.');
     }
     return _database.transaction((txn) async {
-      if (paymentMethod.trim() == 'نقدي' && (userId != null || shiftId != null)) {
+      final permissionLimit = await _requireCashierPermission(
+        txn,
+        userId: userId,
+        permissionKey: 'supplier_return_refunds',
+        label: 'استلام مبالغ مرتجعات الموردين',
+      );
+      if (paymentMethod.trim() == 'نقدي') {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
@@ -526,6 +568,9 @@ class SupplierRepository {
       final available = (availableRows.single['refundable'] as num).toInt();
       if (amount > available) {
         throw ArgumentError('المبلغ أكبر من رصيد المرتجع المتاح للاسترداد ($available ج.س).');
+      }
+      if (permissionLimit != null && amount > permissionLimit) {
+        throw StateError('مبلغ الاسترداد يتجاوز الحد المسموح ($permissionLimit ج.س).');
       }
       final createdAt = DateTime.now().toUtc().toIso8601String();
       final refundId = await txn.insert('supplier_return_refunds', {
