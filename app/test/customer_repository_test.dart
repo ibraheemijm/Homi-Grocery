@@ -85,7 +85,7 @@ void main() {
     expect(before.totalDebt, 800);
     expect(before.balance, 800);
 
-    await customers.recordPayment(customerId: before.id, amount: 300, paymentMethod: 'تحويل بنكي', note: 'تحصيل بنكي');
+    await customers.recordPayment(customerId: before.id, amount: 300, paymentMethod: 'تحويل بنكي', note: 'تحصيل بنكي' , userId: managerId);
     final cashEntries = await database.query('cash_transactions', where: "reference_type = 'customer_payment'");
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['amount'], 300);
@@ -182,13 +182,14 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
 
     expect((await customers.balances(userId: managerId)).single.balance, 1000);
-    await customers.recordPayment(customerId: customer.id, amount: 1000);
+    await customers.recordPayment(customerId: customer.id, amount: 1000 , userId: managerId);
     expect((await customers.balances(userId: managerId)).single.balance, 0);
     await expectLater(
-      customers.recordPayment(customerId: customer.id, amount: 1),
+      customers.recordPayment(customerId: customer.id, amount: 1 , userId: managerId),
       throwsArgumentError,
     );
   });
@@ -213,10 +214,12 @@ void main() {
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 2},
       note: 'مرتجع يغطي الدين ويتجاوزُه',
-    );
+    
+      userId: managerId);
     await sales.recordReturnRefund(
       saleId: sale.id, amount: 90, note: 'تم تسليم النقد',
-    );
+    
+      userId: managerId);
 
     final ledger = await customers.ledger(customer.id, userId: managerId);
     final refund = ledger.singleWhere((entry) => entry.title == 'رد نقدي للزبون');
@@ -250,12 +253,14 @@ void main() {
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
       note: 'إرجاع عبوة',
-    );
+    
+      userId: managerId);
     await customers.recordPayment(
       customerId: customer.id,
       amount: 100,
       note: 'تحصيل نقدي',
-    );
+    
+      userId: managerId);
 
     final ledger = await customers.ledger(customer.id, userId: managerId);
     expect(ledger.length, 3);
@@ -306,12 +311,13 @@ void main() {
       saleId: paidSale.id,
       quantitiesBySaleItemId: {paidItemId: 1},
       note: 'إرجاع فاتورة مدفوعة',
-    );
+    
+      userId: managerId);
 
     final afterReturn = (await customers.balances(userId: managerId)).single;
     expect(afterReturn.totalDebt, 500);
     expect(afterReturn.balance, 500);
-    await customers.recordPayment(customerId: customer.id, amount: 500);
+    await customers.recordPayment(customerId: customer.id, amount: 500 , userId: managerId);
     expect((await customers.balances(userId: managerId)).single.balance, 0);
   });
 
@@ -330,7 +336,7 @@ void main() {
     final customer = (await customers.balances(userId: managerId)).single;
 
     await expectLater(
-      customers.recordPayment(customerId: customer.id, amount: 201),
+      customers.recordPayment(customerId: customer.id, amount: 201 , userId: managerId),
       throwsArgumentError,
     );
     expect((await customers.balances(userId: managerId)).single.balance, 200);
