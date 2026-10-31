@@ -9,9 +9,10 @@ import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({this.onDataChanged, super.key});
+  const SalesScreen({this.onDataChanged, this.userId, super.key});
 
   final VoidCallback? onDataChanged;
+  final int? userId;
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -822,6 +823,7 @@ class _SalesScreenState extends State<SalesScreen> {
         paymentChannel: result['channel']! as String,
         customerName: customerNameForDebt,
         customerId: hasDebt ? _selectedCustomerId : null,
+        userId: widget.userId,
       );
       _cart = [];
       _customer.clear();
@@ -1069,6 +1071,7 @@ class _SalesScreenState extends State<SalesScreen> {
         saleId: sale.id,
         amount: amount,
         paymentMethod: paymentMethod,
+        userId: widget.userId,
       );
       widget.onDataChanged?.call();
       if (!mounted) return;
