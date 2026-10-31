@@ -33,6 +33,7 @@ class _TestDashboardAppState extends State<_TestDashboardApp> {
             displayName: 'مدير الاختبار',
             role: 'manager',
           ),
+          shiftId: 1,
           onLogout: () {},
         ),
       );
