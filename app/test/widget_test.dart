@@ -37,4 +37,21 @@ void main() {
     final selectedText = tester.widget<Text>(selectedTextFinder);
     expect(selectedText.style?.color, Colors.white);
   });
+  testWidgets('تفتح بطاقة مبيعات اليوم شاشة التقارير لا شاشة البيع',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('مبيعات اليوم'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('التقارير'), findsOneWidget);
+    expect(find.text('اختيار الأصناف'), findsNothing);
+  });
+
 }
