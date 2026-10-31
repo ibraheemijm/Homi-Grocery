@@ -54,4 +54,20 @@ void main() {
     expect(find.text('اختيار الأصناف'), findsNothing);
   });
 
+  testWidgets('يفتح قسم النسخ الاحتياطي والاستعادة من قائمة التنقل', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const HomiGroceryApp());
+    await tester.pump();
+
+    await tester.tap(find.text('النسخ الاحتياطي والاستعادة').last);
+    await tester.pump();
+
+    expect(find.text('النسخ الاحتياطي والاستعادة'), findsWidgets);
+    expect(find.text('إنشاء نسخة احتياطية الآن'), findsOneWidget);
+    expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
+  });
 }
