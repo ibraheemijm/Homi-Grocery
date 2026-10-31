@@ -234,10 +234,8 @@ class AuthRepository {
     final cleanUsername = username.trim();
     final cleanName = displayName.trim();
     _validateCredentials(cleanUsername, cleanName, password);
-    final salt = List<int>.generate(
-      _saltLength,
-      (_) => Random.secure().nextInt(256),
-    );
+    await _requireActiveManager(_database, manager.id);
+    final salt = _generateSalt();
     final passwordHash = await _hashPassword(password, salt);
     final now = DateTime.now().toUtc().toIso8601String();
 
@@ -329,10 +327,8 @@ class AuthRepository {
     if (newPassword.length < 10 || newPassword.length > 128) {
       throw const AuthException('كلمة المرور يجب أن تكون بين 10 و128 حرفًا.');
     }
-    final salt = List<int>.generate(
-      _saltLength,
-      (_) => Random.secure().nextInt(256),
-    );
+    await _requireActiveManager(_database, manager.id);
+    final salt = _generateSalt();
     final passwordHash = await _hashPassword(newPassword, salt);
 
     await _database.transaction((txn) async {
@@ -367,6 +363,14 @@ class AuthRepository {
         createdAt: DateTime.now().toUtc().toIso8601String(),
       );
     });
+  }
+
+  List<int> _generateSalt() {
+    final secureRandom = Random.secure();
+    return List<int>.generate(
+      _saltLength,
+      (_) => secureRandom.nextInt(256),
+    );
   }
 
   Future<String> _requireActiveManager(
