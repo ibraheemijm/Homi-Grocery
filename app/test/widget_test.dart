@@ -63,10 +63,17 @@ void main() {
     await tester.pumpWidget(const HomiGroceryApp());
     await tester.pump();
 
-    // نفتح القائمة من أيقونتها لتجنب الالتباس بين نصوص التنقل وعناصرها.
-    await tester.tap(find.byIcon(Icons.grid_view_rounded));
-    // رسوم التطبيق المستمرة تمنع pumpAndSettle؛ ننتظر اكتمال انتقال القائمة.
-    await tester.pump(const Duration(milliseconds: 600));
+    // نحدد تسمية «المزيد» داخل شريط التنقل السفلي نفسه، لا أي عنصر مشابه في محتوى الصفحة.
+    final moreDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('المزيد'),
+    );
+    expect(moreDestination, findsOneWidget);
+    await tester.tap(moreDestination);
+    // رسوم التطبيق المستمرة تمنع pumpAndSettle؛ ننتظر انتقال القائمة على دفعات.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('الأقسام الأخرى'), findsOneWidget);
     expect(find.text('النسخ الاحتياطي والاستعادة'), findsOneWidget);
 
     await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
