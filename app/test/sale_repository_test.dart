@@ -61,7 +61,8 @@ void main() {
     await sales.createSale(
       lines: [SaleLine(product: product, quantity: 1)],
       discount: 0, paidAmount: 100, paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     expect(await sales.invoiceHistory(userId: managerId), hasLength(1));
     await expectLater(
       sales.invoiceHistory(userId: cashier.id),
@@ -98,7 +99,8 @@ void main() {
       paymentMethod: 'جزئي',
       paymentChannel: 'تحويل بنكي',
       customerName: 'زبون اختبار',
-    );
+    
+      userId: managerId);
 
     expect(sale.total, 1800);
     expect(sale.paidAmount, 1000);
@@ -133,7 +135,8 @@ void main() {
       discount: 0,
       paidAmount: 1500,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
 
     expect(sale.total, 1500);
     expect((await products.getById(productId))!.stockQuantity, 1.25);
@@ -160,7 +163,8 @@ void main() {
       paidAmount: 100,
       paymentMethod: 'نقدي',
       customerName: 'محمد أحمد',
-    );
+    
+      userId: managerId);
 
     expect(sale.customerName, isNull);
     final savedSale = (await database.query(
@@ -188,7 +192,8 @@ void main() {
         paidAmount: 0,
         paymentMethod: 'آجل',
         customerName: 'محمد أحمد',
-      ),
+      
+      userId: managerId),
       throwsStateError,
     );
     expect(await sales.recentSales(userId: managerId), isEmpty);
@@ -200,7 +205,8 @@ void main() {
       paymentMethod: 'آجل',
       customerName: 'محمد أحمد',
       customerId: customerId,
-    );
+    
+      userId: managerId);
     final savedSale = (await database.query(
       'sales', where: 'id = ?', whereArgs: [sale.id],
     )).single;
@@ -219,7 +225,8 @@ void main() {
       discount: 0,
       paidAmount: 200,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final item = (await database.query(
       'sale_items', where: 'sale_id = ?', whereArgs: [sale.id],
     )).single;
@@ -245,7 +252,8 @@ void main() {
         discount: 600,
         paidAmount: 0,
         paymentMethod: 'آجل',
-      ),
+      
+      userId: managerId),
       throwsArgumentError,
     );
 
@@ -263,7 +271,8 @@ void main() {
       discount: 0,
       paidAmount: 750,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final item = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -300,7 +309,8 @@ void main() {
       discount: 0,
       paidAmount: 200,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -338,7 +348,8 @@ void main() {
       paidAmount: 100,
       paymentMethod: 'جزئي',
       customerName: 'زبون مرتجع',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
@@ -382,7 +393,8 @@ void main() {
       discount: 0,
       paidAmount: 150,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
@@ -411,7 +423,8 @@ void main() {
       discount: 40,
       paidAmount: 160,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -453,7 +466,8 @@ void main() {
       discount: 0,
       paidAmount: 600,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
 
     expect((await products.getById(productId))!.stockQuantity, -1);
   });
@@ -889,7 +903,8 @@ void main() {
       discount: 0,
       paidAmount: 40,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
