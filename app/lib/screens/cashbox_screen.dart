@@ -5,7 +5,9 @@ import '../data/grocery_database.dart';
 
 /// شاشة الخزينة والتقرير اليومي للمبالغ المسجلة فعليًا.
 class CashboxScreen extends StatefulWidget {
-  const CashboxScreen({super.key});
+  const CashboxScreen({this.userId, super.key});
+
+  final int? userId;
 
   @override
   State<CashboxScreen> createState() => _CashboxScreenState();
@@ -139,6 +141,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
           amount: int.parse(amountController.text.trim()),
           paymentMethod: paymentMethod,
           note: noteController.text,
+          userId: widget.userId,
         );
         if (mounted) {
           setState(_reload);
