@@ -328,7 +328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         : _selectedIndex == 6
                                             ? CashboxScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                             : _selectedIndex == 7
-                                                ? const ReportsScreen()
+                                                ? ReportsScreen(userId: widget.user.id)
                                                 : _selectedIndex == 8
                                                     ? const SettingsScreen()
                                                     : _selectedIndex == 9
