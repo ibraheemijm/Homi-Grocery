@@ -61,4 +61,28 @@ void main() {
     );
     expect(await cashbox.recent(), isEmpty);
   });
+
+  test('يربط الحركة اليدوية النقدية بالمستخدم والوردية ولا يربط التحويل بالدرج', () async {
+    await cashbox.recordManualMovement(
+      direction: 'in',
+      category: 'إيداع',
+      amount: 300,
+      userId: 7,
+      shiftId: 12,
+    );
+    await cashbox.recordManualMovement(
+      direction: 'in',
+      category: 'تحويل',
+      amount: 500,
+      paymentMethod: 'تحويل بنكي',
+      userId: 7,
+      shiftId: 12,
+    );
+    final rows = await database.query('cash_transactions', orderBy: 'id');
+    expect(rows[0]['user_id'], 7);
+    expect(rows[0]['shift_id'], 12);
+    expect(rows[1]['user_id'], 7);
+    expect(rows[1]['shift_id'], isNull);
+  });
+
 }
