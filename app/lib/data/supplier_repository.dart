@@ -550,13 +550,6 @@ class SupplierRepository {
           userId: userId,
         );
       }
-      if (paymentMethod == 'نقدي' && userId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
-      }
       if (userId != null) {
         final accounts = await txn.query(
           'users',
