@@ -71,12 +71,17 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
-          authenticatedBuilder: (user, onLogout) => DashboardScreen(
-            isDark: _themeMode == ThemeMode.dark,
-            onToggleTheme: _toggleTheme,
-            user: user,
-            onLogout: onLogout,
-          ),
+          authenticatedBuilder: (user, onLogout) => user.isManager
+              ? DashboardScreen(
+                  isDark: _themeMode == ThemeMode.dark,
+                  onToggleTheme: _toggleTheme,
+                  user: user,
+                  onLogout: onLogout,
+                )
+              : CashierAccessPendingScreen(
+                  cashier: user,
+                  onLogout: onLogout,
+                ),
         ),
       ),
     );
