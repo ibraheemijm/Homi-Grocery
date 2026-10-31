@@ -305,10 +305,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _selectedIndex == 0
                         ? _buildDashboard(context, isDesktop)
                         : _selectedIndex == 1
-                            ? SalesScreen(onDataChanged: () {
-                                _loadDashboardStats();
-                                _loadRecentInvoices();
-                              })
+                            ? SalesScreen(
+                                userId: widget.user.id,
+                                onDataChanged: () {
+                                  _loadDashboardStats();
+                                  _loadRecentInvoices();
+                                },
+                              )
                             : _selectedIndex == 2
                                 ? const InvoicesScreen()
                             : _selectedIndex == 3
@@ -318,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     : _selectedIndex == 5
                                         ? const SuppliersScreen()
                                         : _selectedIndex == 6
-                                            ? const CashboxScreen()
+                                            ? CashboxScreen(userId: widget.user.id)
                                             : _selectedIndex == 7
                                                 ? const ReportsScreen()
                                                 : _selectedIndex == 8
