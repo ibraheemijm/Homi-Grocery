@@ -78,4 +78,157 @@ void main() {
     final users = await database.query('users');
     expect(users, hasLength(1));
   });
+
+  test('يسمح للمدير بإنشاء كاشير وعرض الحساب دون كشف بيانات الاعتماد', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
+    expect(cashier.role, 'cashier');
+    final accounts = await repository.listCashiers(manager: manager);
+    expect(accounts, hasLength(1));
+    expect(accounts.single.user.username, 'cashier_one');
+    expect(accounts.single.isActive, isTrue);
+
+    final events = await database.query('auth_audit_log');
+    expect(
+      events.map((event) => event['action']),
+      contains('cashier_created:cashier_one'),
+    );
+    final stored = (await database.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: ['cashier_one'],
+    )).single;
+    expect(stored.containsKey('password_hash'), isTrue);
+    expect(stored['password_hash'], isNot('CashierPass!2026'));
+  });
+
+  test('يرفض إنشاء أو إدارة حسابات الكاشير من حساب غير مدير', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
+    await expectLater(
+      repository.createCashier(
+        manager: cashier,
+        username: 'cashier_two',
+        displayName: 'الكاشير الثاني',
+        password: 'AnotherPass!2026',
+      ),
+      throwsA(isA<AuthException>()),
+    );
+    await expectLater(
+      repository.listCashiers(manager: cashier),
+      throwsA(isA<AuthException>()),
+    );
+    await expectLater(
+      repository.setCashierActive(
+        manager: cashier,
+        cashierId: cashier.id,
+        isActive: false,
+      ),
+      throwsA(isA<AuthException>()),
+    );
+  });
+
+  test('يمنع الحساب الموقوف من الدخول ويسجل تفعيل وإيقاف الحساب', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
+    await repository.setCashierActive(
+      manager: manager,
+      cashierId: cashier.id,
+      isActive: false,
+    );
+    await expectLater(
+      repository.login(username: 'cashier_one', password: 'CashierPass!2026'),
+      throwsA(isA<AuthException>()),
+    );
+
+    await repository.setCashierActive(
+      manager: manager,
+      cashierId: cashier.id,
+      isActive: true,
+    );
+    final events = await database.query('auth_audit_log');
+    expect(
+      events.map((event) => event['action']),
+      containsAll([
+        'cashier_deactivated:${cashier.id}',
+        'cashier_activated:${cashier.id}',
+      ]),
+    );
+  });
+
+  test('يعيد المدير تعيين كلمة مرور الكاشير ويمسح القفل والمحاولات', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    await database.update(
+      'users',
+      {'failed_attempts': 4, 'locked_until': '2099-01-01T00:00:00.000Z'},
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    );
+
+    await repository.resetCashierPassword(
+      manager: manager,
+      cashierId: cashier.id,
+      newPassword: 'NewCashier!2026',
+    );
+    final stored = (await database.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    )).single;
+    expect(stored['failed_attempts'], 0);
+    expect(stored['locked_until'], isNull);
+
+    final loggedIn = await repository.login(
+      username: 'cashier_one',
+      password: 'NewCashier!2026',
+    );
+    expect(loggedIn.id, cashier.id);
+    final events = await database.query('auth_audit_log');
+    expect(
+      events.map((event) => event['action']),
+      contains('cashier_password_reset:${cashier.id}'),
+    );
+  });
+
 }
