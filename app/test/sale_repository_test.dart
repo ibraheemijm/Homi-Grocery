@@ -12,6 +12,8 @@ void main() {
   late Database database;
   late ProductRepository products;
   late SaleRepository sales;
+  late int managerId;
+  late AuthUser managerAccount;
 
   setUp(() async {
     sqfliteFfiInit();
@@ -26,12 +28,58 @@ void main() {
     await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'sale_test_manager', 'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    managerAccount = AuthUser(
+      id: managerId, username: 'sale_test_manager',
+      displayName: 'مدير الاختبار', role: 'manager',
+    );
     products = ProductRepository(database);
     sales = SaleRepository(database);
   });
 
   tearDown(() async {
     await database.close();
+  });
+
+  test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'invoice_reader',
+      displayName: 'قارئ الفواتير',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0, paidAmount: 100, paymentMethod: 'نقدي',
+    );
+    expect(await sales.invoiceHistory(userId: managerId), hasLength(1));
+    await expectLater(
+      sales.invoiceHistory(userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+    final settings = await auth.getCashierPermissions(
+      manager: managerAccount, cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) => setting.key == 'view_invoice_history'
+          ? CashierPermissionSetting(
+              key: setting.key, label: setting.label, isAllowed: true,
+            )
+          : setting).toList(),
+    );
+    expect(await sales.invoiceHistory(userId: cashier.id), hasLength(1));
   });
 
   test('يحفظ الفاتورة ويخصم الكمية من المخزون', () async {
@@ -57,7 +105,7 @@ void main() {
     expect(sale.remainingAmount, 800);
     expect(sale.customerName, 'زبون اختبار');
     expect((await products.getById(productId))!.stockQuantity, 8);
-    expect((await sales.recentSales()).length, 1);
+    expect((await sales.recentSales(userId: managerId)).length, 1);
     final cashEntries = await database.query('cash_transactions', where: "reference_type = 'sale'");
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['direction'], 'in');
@@ -143,7 +191,7 @@ void main() {
       ),
       throwsStateError,
     );
-    expect(await sales.recentSales(), isEmpty);
+    expect(await sales.recentSales(userId: managerId), isEmpty);
 
     final sale = await sales.createSale(
       lines: [SaleLine(product: product, quantity: 1)],
@@ -201,7 +249,7 @@ void main() {
       throwsArgumentError,
     );
 
-    expect(await sales.recentSales(), isEmpty);
+    expect(await sales.recentSales(userId: managerId), isEmpty);
     expect((await products.getById(productId))!.stockQuantity, 4);
   });
 
@@ -228,7 +276,8 @@ void main() {
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
       note: 'عبوة تالفة',
-    );
+    
+      userId: managerId);
 
     expect(returned.amount, 250);
     expect((await products.getById(productId))!.stockQuantity, 3);
@@ -262,12 +311,14 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
     await expectLater(
       sales.returnItems(
         saleId: sale.id,
         quantitiesBySaleItemId: {itemId: 1.1},
-      ),
+      
+      userId: managerId),
       throwsArgumentError,
     );
 
@@ -295,20 +346,22 @@ void main() {
     final returned = await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 2},
-    );
+    
+      userId: managerId);
     expect(returned.amount, 200);
-    expect(await sales.maximumRefundableAmount(sale.id), 100);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 100);
 
     await expectLater(
-      sales.recordReturnRefund(saleId: sale.id, amount: 101),
+      sales.recordReturnRefund(saleId: sale.id, amount: 101 , userId: managerId),
       throwsArgumentError,
     );
     await sales.recordReturnRefund(
       saleId: sale.id, amount: 80, paymentMethod: 'نقدي', note: 'رد فعلي',
-    );
-    expect(await sales.maximumRefundableAmount(sale.id), 20);
-    await sales.recordReturnRefund(saleId: sale.id, amount: 20);
-    expect(await sales.maximumRefundableAmount(sale.id), 0);
+    
+      userId: managerId);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 20);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 20 , userId: managerId);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 0);
     expect(await database.query('sale_return_refunds'), hasLength(2));
     final cashEntries = await database.query(
       'cash_transactions',
@@ -336,13 +389,14 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
 
-    expect(await sales.maximumRefundableAmount(sale.id), 75);
-    await sales.recordReturnRefund(saleId: sale.id, amount: 75);
-    expect(await sales.maximumRefundableAmount(sale.id), 0);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 75);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 75 , userId: managerId);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 0);
     await expectLater(
-      sales.recordReturnRefund(saleId: sale.id, amount: 1),
+      sales.recordReturnRefund(saleId: sale.id, amount: 1 , userId: managerId),
       throwsArgumentError,
     );
   });
@@ -368,11 +422,13 @@ void main() {
     final first = await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
     final second = await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
 
     expect(first.amount, 80);
     expect(second.amount, 80);
@@ -403,12 +459,7 @@ void main() {
   });
 
   test('يربط البيع النقدي بالوردية النشطة ويستثني التحويل البنكي', () async {
-    final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final shift = await CashShiftRepository(database).openShift(
       userId: manager.id,
       openingCash: 0,
@@ -454,12 +505,7 @@ void main() {
   });
 
   test('يشترط الوردية النشطة لرد مبالغ المرتجعات نقدًا', () async {
-    final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final shift = await CashShiftRepository(database).openShift(
       userId: manager.id,
       openingCash: 0,
@@ -485,7 +531,8 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
     await sales.recordReturnRefund(
       saleId: sale.id,
       amount: 100,
@@ -504,11 +551,7 @@ void main() {
 
   test('يقصر حساب الكاشير على البيع النقدي الكامل دون خصم أو دين أو تحويل', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_one',
@@ -584,16 +627,12 @@ void main() {
       ),
       throwsStateError,
     );
-    expect(await sales.recentSales(), hasLength(1));
+    expect(await sales.recentSales(userId: managerId), hasLength(1));
   });
 
   test('يمنع الكاشير من تسجيل مرتجع أو رد مبلغ حتى عند استدعاء المستودع مباشرة', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_one',
@@ -634,7 +673,8 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
+    
+      userId: managerId);
     await expectLater(
       sales.recordReturnRefund(
         saleId: sale.id,
@@ -648,11 +688,7 @@ void main() {
 
   test('يرفض البيع النقدي إذا كانت الوردية غير مملوكة أو مغلقة', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_one',
@@ -694,17 +730,13 @@ void main() {
       ),
       throwsA(isA<CashShiftException>()),
     );
-    expect(await sales.recentSales(), isEmpty);
+    expect(await sales.recentSales(userId: managerId), isEmpty);
     expect(await database.query('cash_transactions'), isEmpty);
   });
 
   test('يفرض صلاحية الخصم وحدها المالية للكاشير داخل معاملة البيع', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'manager_sale',
-      displayName: 'المدير',
-      password: 'ManagerPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_sale',
@@ -764,11 +796,7 @@ void main() {
 
   test('يرفض بيع الكاشير بالدين دون صلاحية أو عند تجاوز سقف الدين', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'manager_credit',
-      displayName: 'المدير',
-      password: 'ManagerPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_credit',
@@ -843,11 +871,7 @@ void main() {
 
   test('يفرض صلاحية المرتجعات ورد المبالغ وحدودهما للكاشير', () async {
     final auth = AuthRepository(database);
-    final manager = await auth.createInitialManager(
-      username: 'manager_returns',
-      displayName: 'المدير',
-      password: 'ManagerPass!2026',
-    );
+    final manager = managerAccount;
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_returns',
@@ -935,7 +959,7 @@ void main() {
       userId: cashier.id,
       shiftId: shift.id,
     );
-    expect(await sales.maximumRefundableAmount(sale.id), 10);
+    expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 10);
   });
 
 }
