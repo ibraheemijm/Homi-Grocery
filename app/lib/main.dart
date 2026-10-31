@@ -58,28 +58,6 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
           _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     });
   }
-  // طلب تأكيد قبل إنهاء جلسة المستخدم الحالي.
-  Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تسجيل الخروج'),
-        content: const Text('هل تريد إنهاء الجلسة الحالية؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('تسجيل الخروج'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) widget.onLogout();
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +174,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _clockTimer?.cancel();
     super.dispose();
   }
+  // طلب تأكيد قبل إنهاء جلسة المستخدم الحالي.
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تسجيل الخروج'),
+        content: const Text('هل تريد إنهاء الجلسة الحالية؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('تسجيل الخروج'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onLogout();
+  }
+
 
   Future<void> _loadHomePreferences() async {
     try {
