@@ -1,6 +1,8 @@
 // مستودع الزبائن: حساب الأرصدة وتسجيل التحصيلات دون حذف سجل الفواتير.
 import 'package:sqflite/sqflite.dart';
 
+import 'cash_shift_repository.dart';
+
 class CustomerBalance {
   const CustomerBalance({required this.id, required this.name, required this.salesCount, required this.totalDebt, required this.totalPaid});
   final int id;
@@ -140,6 +142,13 @@ class CustomerRepository {
       throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
       final result = await txn.rawQuery('''
