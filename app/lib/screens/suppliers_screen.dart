@@ -239,7 +239,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('أدخل بيانات تعريف المنتج يدويًا. تكلفة الشراء والكمية ستُدخلان في سطر الفاتورة.'),
+                  const Text('أدخل بيانات المنتج وتكلفة الشراء هنا، ثم راجع الكمية وسعر البيع وعدّلهما في سطر الفاتورة.'),
                   const SizedBox(height: 12),
                   TextField(
                     controller: name,
