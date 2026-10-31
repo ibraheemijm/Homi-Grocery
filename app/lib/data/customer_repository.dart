@@ -156,7 +156,7 @@ class CustomerRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
-    int? userId,
+    required int userId,
     int? shiftId,
   }) async {
     if (amount <= 0) throw ArgumentError('قيمة التحصيل يجب أن تكون أكبر من صفر.');
@@ -167,15 +167,7 @@ class CustomerRepository {
       throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
-      if (paymentMethod == 'نقدي' && userId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
-      }
-      if (userId != null) {
-        final accounts = await txn.query(
+      final accounts = await txn.query(
           'users',
           columns: ['role', 'is_active'],
           where: 'id = ?',
@@ -185,7 +177,18 @@ class CustomerRepository {
         if (accounts.isEmpty || accounts.single['is_active'] != 1) {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
-        if (accounts.single['role'] == 'cashier') {
+        final role = accounts.single['role'];
+        if (role != 'manager' && role != 'cashier') {
+          throw StateError('نوع الحساب غير مصرح له بتحصيل ديون الزبائن.');
+        }
+        if (role == 'cashier') {
+          if (paymentMethod == 'نقدي') {
+            await CashShiftRepository.validateActiveShift(
+              txn,
+              shiftId: shiftId,
+              userId: userId,
+            );
+          }
           final permissions = await txn.query(
             'cashier_permissions',
             columns: ['is_allowed', 'max_amount'],
@@ -200,8 +203,13 @@ class CustomerRepository {
           if (limit != null && amount > limit) {
             throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
           }
+        } else if (paymentMethod == 'نقدي' && shiftId != null) {
+          await CashShiftRepository.validateActiveShift(
+            txn,
+            shiftId: shiftId,
+            userId: userId,
+          );
         }
-      }
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
       final result = await txn.rawQuery('''
