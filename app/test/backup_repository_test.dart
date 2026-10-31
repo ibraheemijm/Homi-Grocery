@@ -338,10 +338,14 @@ void main() {
         if (openAttempts == 1) {
           database = await databaseFactoryFfi.openDatabase(
             invalidOpenedPath,
-            options: OpenDatabaseOptions(version: 13),
-            onCreate: (db, version) async {
-              await db.execute('CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)');
-            },
+            options: OpenDatabaseOptions(
+              version: 13,
+              onCreate: (db, version) async {
+                await db.execute(
+                  'CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)',
+                );
+              },
+            ),
           );
           return database;
         }
