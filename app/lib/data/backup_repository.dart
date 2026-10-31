@@ -119,6 +119,7 @@ class BackupRepository {
         required.addAll({'supplier_returns', 'supplier_return_items'});
       }
       if (version >= 11) required.add('supplier_return_refunds');
+      if (version >= 15) required.add('cash_shifts');
       if (version >= 12) {
         required.addAll({
           'local_notifications',
@@ -275,7 +276,7 @@ class BackupRepository {
       'sale_return_items', 'suppliers', 'purchases', 'purchase_items',
       'supplier_payments', 'sale_return_refunds', 'cash_transactions',
       'supplier_returns', 'supplier_return_items', 'supplier_return_refunds',
-      'local_notifications', 'delivery_publication_approvals',
+      'local_notifications', 'delivery_publication_approvals', 'cash_shifts',
     };
     if (!names.containsAll(requiredTables)) {
       throw const FormatException('المخطط المستعاد لا يحتوي على جميع جداول Homi Grocery المطلوبة.');
