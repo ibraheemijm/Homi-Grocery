@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 14;
+  static const int _version = 15;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -48,6 +48,7 @@ class GroceryDatabase {
         await createSupplierReturnRefundsSchema(db);
         await createNotificationsSchema(db);
         await createAuthSchema(db);
+        await createCashShiftsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -92,6 +93,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 14) {
           await createAuthSchema(db);
+        }
+        if (oldVersion < 15) {
+          await createCashShiftsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -362,6 +366,8 @@ class GroceryDatabase {
         reference_type TEXT,
         reference_id INTEGER,
         note TEXT,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL,
         created_at TEXT NOT NULL
       )
     ''');
@@ -370,6 +376,43 @@ class GroceryDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_cash_transactions_reference ON cash_transactions(reference_type, reference_id)',
+    );
+  }
+
+  // ورديات الدرج: وردية واحدة مفتوحة على الجهاز، مع رصيد افتتاحي وتسوية الإغلاق.
+  static Future<void> createCashShiftsSchema(Database db) async {
+    final cashColumns = await db.rawQuery('PRAGMA table_info(cash_transactions)');
+    if (!cashColumns.any((column) => column['name'] == 'user_id')) {
+      await db.execute(
+        'ALTER TABLE cash_transactions ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL',
+      );
+    }
+    if (!cashColumns.any((column) => column['name'] == 'shift_id')) {
+      await db.execute(
+        'ALTER TABLE cash_transactions ADD COLUMN shift_id INTEGER REFERENCES cash_shifts(id) ON DELETE SET NULL',
+      );
+    }
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cash_shifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        opening_cash INTEGER NOT NULL CHECK (opening_cash >= 0),
+        closing_cash INTEGER CHECK (closing_cash IS NULL OR closing_cash >= 0),
+        expected_cash INTEGER CHECK (expected_cash IS NULL OR expected_cash >= 0),
+        difference INTEGER,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+        opened_at TEXT NOT NULL,
+        closed_at TEXT
+      )
+    ''');
+    await db.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_shifts_single_open ON cash_shifts(status) WHERE status = 'open'",
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cash_shifts_user_opened ON cash_shifts(user_id, opened_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cash_transactions_shift ON cash_transactions(shift_id, payment_method, direction)',
     );
   }
 
