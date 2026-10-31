@@ -68,10 +68,12 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
           'توجد وردية مفتوحة لمستخدم آخر. سجّل الدخول بالحساب صاحب الوردية وأغلقها أولًا.',
         );
       }
-      if (mounted) setState(() {
-        _shift = openShift;
-        _user = user;
-      });
+      if (mounted) {
+        setState(() {
+          _shift = openShift;
+          _user = user;
+        });
+      }
       return;
     }
 
@@ -87,10 +89,12 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       userId: user.id,
       openingCash: openingCash,
     );
-    if (mounted) setState(() {
-      _shift = shift;
-      _user = user;
-    });
+    if (mounted) {
+      setState(() {
+        _shift = shift;
+        _user = user;
+      });
+    }
   }
 
   Future<int?> _askCashAmount({
@@ -204,10 +208,12 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         );
       }
       await _repository?.logout(current);
-      if (mounted) setState(() {
-        _user = null;
-        _shift = null;
-      });
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _shift = null;
+        });
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
