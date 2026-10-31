@@ -698,4 +698,237 @@ void main() {
     expect(await database.query('cash_transactions'), isEmpty);
   });
 
+  test('يفرض صلاحية الخصم وحدها المالية للكاشير داخل معاملة البيع', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'manager_sale',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_sale',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final settings = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'discounts'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 30,
+            )
+          : setting
+      ).toList(),
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة اختبار الخصم',
+      sellingPrice: 100,
+      stockQuantity: 10,
+    ));
+    final product = (await products.getById(productId))!;
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 31,
+        paidAmount: 69,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 30,
+      paidAmount: 70,
+      paymentMethod: 'نقدي',
+      userId: cashier.id,
+      shiftId: shift.id,
+    );
+    expect(sale.total, 70);
+  });
+
+  test('يرفض بيع الكاشير بالدين دون صلاحية أو عند تجاوز سقف الدين', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'manager_credit',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_credit',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة اختبار الدين',
+      sellingPrice: 100,
+      stockQuantity: 10,
+    ));
+    final product = (await products.getById(productId))!;
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 0,
+        paymentMethod: 'آجل',
+        customerName: 'عميل اختبار',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+
+    final defaults = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: defaults.map((setting) =>
+        setting.key == 'credit_sales'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 40,
+            )
+          : setting
+      ).toList(),
+    );
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 50,
+        paymentMethod: 'جزئي',
+        customerName: 'عميل اختبار',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    final allowed = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 60,
+      paymentMethod: 'جزئي',
+      customerName: 'عميل اختبار آخر',
+      userId: cashier.id,
+    );
+    expect(allowed.remainingAmount, 40);
+  });
+
+  test('يفرض صلاحية المرتجعات ورد المبالغ وحدودهما للكاشير', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'manager_returns',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_returns',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة اختبار المرتجع',
+      sellingPrice: 40,
+      stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 40,
+      paymentMethod: 'نقدي',
+    );
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await expectLater(
+      sales.returnItems(
+        saleId: sale.id,
+        quantitiesBySaleItemId: {itemId: 1},
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+
+    final defaults = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: defaults.map((setting) {
+        if (setting.key == 'returns') {
+          return CashierPermissionSetting(
+            key: setting.key,
+            label: setting.label,
+            isAllowed: true,
+            maxAmount: 40,
+          );
+        }
+        if (setting.key == 'return_refunds') {
+          return CashierPermissionSetting(
+            key: setting.key,
+            label: setting.label,
+            isAllowed: true,
+            maxAmount: 30,
+          );
+        }
+        return setting;
+      }).toList(),
+    );
+    final returned = await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+      userId: cashier.id,
+    );
+    expect(returned.amount, 40);
+
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
+    await expectLater(
+      sales.recordReturnRefund(
+        saleId: sale.id,
+        amount: 31,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    await sales.recordReturnRefund(
+      saleId: sale.id,
+      amount: 30,
+      userId: cashier.id,
+      shiftId: shift.id,
+    );
+    expect(await sales.maximumRefundableAmount(sale.id), 10);
+  });
+
 }
