@@ -4,6 +4,7 @@ String buildPdfFileName({
   required String language,
   required String arabicLabel,
   required String englishLabel,
+  String? sharedSuffix,
   DateTime? exportedAt,
   bool includeExportDate = true,
 }) {
@@ -17,11 +18,14 @@ String buildPdfFileName({
   final timestamp = includeExportDate
       ? '$exportDate-$exportTime'
       : exportTime;
-  final label = switch (language) {
+  final baseLabel = switch (language) {
     'en' => englishLabel,
     'both' => '$arabicLabel-$englishLabel',
     _ => arabicLabel,
   };
+  final label = sharedSuffix == null || sharedSuffix.trim().isEmpty
+      ? baseLabel
+      : '$baseLabel-${sharedSuffix.trim()}';
   final safeLabel = label
       .replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-')
       .replaceAll(RegExp(r'\s+'), '-')
