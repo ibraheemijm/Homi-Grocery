@@ -173,6 +173,55 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     name.dispose(); phone.dispose(); note.dispose();
   }
 
+  _PurchaseDraftLine _newPurchaseDraft(GroceryProduct product) {
+    final cost = product.purchasePrice;
+    final selling = product.sellingPrice;
+    final percentage = cost > 0
+        ? ((selling - cost) / cost * 100).toStringAsFixed(2)
+        : '0';
+    return _PurchaseDraftLine(
+      productId: product.id!,
+      productName: product.name,
+      cost: cost.toString(),
+      sellingPrice: selling.toString(),
+      percentage: percentage,
+    );
+  }
+
+  // يحسب سعر البيع وفق الزيادة على التكلفة أو هامش الربح من سعر البيع.
+  void _updateSellingPriceFromPercentage(_PurchaseDraftLine draft) {
+    final cost = int.tryParse(draft.cost.text.trim());
+    final percentage = double.tryParse(draft.percentage.text.trim());
+    if (cost == null || cost < 0 || percentage == null) return;
+    double selling;
+    if (draft.pricingMode == 'markup') {
+      selling = cost * (1 + percentage / 100);
+    } else {
+      if (percentage >= 100) return;
+      selling = cost / (1 - percentage / 100);
+    }
+    if (!selling.isFinite || selling < 0 || selling > 9000000000000000) return;
+    draft.setSellingPrice(selling.round().toString());
+  }
+
+  // يعكس النسبة تلقائيًا عندما يغيّر المستخدم سعر البيع يدويًا.
+  void _updatePercentageFromSellingPrice(_PurchaseDraftLine draft) {
+    final cost = int.tryParse(draft.cost.text.trim());
+    final selling = int.tryParse(draft.sellingPrice.text.trim());
+    if (cost == null || selling == null || selling < 0) return;
+    double percentage;
+    if (draft.pricingMode == 'markup') {
+      if (cost == 0) return;
+      percentage = (selling - cost) / cost * 100;
+    } else {
+      if (selling == 0) return;
+      percentage = (selling - cost) / selling * 100;
+    }
+    if (percentage.isFinite) {
+      draft.setPercentage(percentage.toStringAsFixed(2));
+    }
+  }
+
   Future<void> _createPurchase() async {
     if (_suppliers.isEmpty) {
       _message('أضف موردًا أولًا قبل تسجيل فاتورة شراء.');
@@ -186,7 +235,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     int supplierId = _suppliers.first.id;
     String paymentChannel = 'نقدي';
     final drafts = <_PurchaseDraftLine>[
-      _PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString(), sellingPrice: _products.first.sellingPrice.toString()),
+      _newPurchaseDraft(_products.first),
     ];
     final discount = TextEditingController(text: '0');
     final paid = TextEditingController(text: '0');
@@ -216,7 +265,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             Row(children: [
               const Expanded(child: Text('أصناف الفاتورة', style: TextStyle(fontWeight: FontWeight.w800))),
               TextButton.icon(
-                onPressed: () => refresh(() => drafts.add(_PurchaseDraftLine(productId: _products.first.id!, cost: _products.first.purchasePrice.toString(), sellingPrice: _products.first.sellingPrice.toString()))),
+                onPressed: () => refresh(() => drafts.insert(0, _newPurchaseDraft(_products.first))),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('إضافة صنف'),
               ),
@@ -238,20 +287,78 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                           icon: const Icon(Icons.delete_outline_rounded),
                         ),
                     ]),
-                    DropdownButtonFormField<int>(
-                      initialValue: draft.productId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'الصنف', border: OutlineInputBorder()),
-                      items: [for (final p in _products) DropdownMenuItem(value: p.id, child: Text('${p.name} • المخزون ${p.stockQuantity}', overflow: TextOverflow.ellipsis))],
-                      onChanged: (v) {
-                        if (v != null) {
-                          refresh(() {
-                            draft.productId = v;
-                            final selectedProduct = _products.firstWhere((p) => p.id == v);
-                            draft.cost.text = selectedProduct.purchasePrice.toString();
-                            draft.sellingPrice.text = selectedProduct.sellingPrice.toString();
-                          });
-                        }
+                    Autocomplete<GroceryProduct>(
+                      key: ValueKey(draft),
+                      displayStringForOption: (product) => product.name,
+                      initialValue: TextEditingValue(text: draft.productName),
+                      optionsBuilder: (value) {
+                        final query = value.text.trim().toLowerCase();
+                        return _products.where((product) =>
+                            query.isEmpty ||
+                            product.name.toLowerCase().contains(query));
+                      },
+                      onSelected: (selectedProduct) {
+                        refresh(() {
+                          draft.productId = selectedProduct.id!;
+                          draft.productName = selectedProduct.name;
+                          draft.cost.text = selectedProduct.purchasePrice.toString();
+                          draft.sellingPrice.text = selectedProduct.sellingPrice.toString();
+                          _updatePercentageFromSellingPrice(draft);
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          onChanged: (value) {
+                            draft.productName = value;
+                            final selected = _products.where((p) => p.id == draft.productId);
+                            if (selected.isEmpty || selected.first.name != value) {
+                              draft.productId = -1;
+                            }
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'الصنف',
+                            hintText: 'اكتب اسم الصنف أو افتح القائمة',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              tooltip: 'عرض جميع الأصناف',
+                              onPressed: () => focusNode.requestFocus(),
+                              icon: const Icon(Icons.arrow_drop_down_rounded),
+                            ),
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        final choices = options.toList(growable: false);
+                        return Align(
+                          alignment: Alignment.topRight,
+                          child: Material(
+                            elevation: 6,
+                            borderRadius: BorderRadius.circular(12),
+                            clipBehavior: Clip.antiAlias,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxHeight: 240,
+                                maxWidth: 460,
+                              ),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: choices.length,
+                                itemBuilder: (context, optionIndex) {
+                                  final product = choices[optionIndex];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(product.name),
+                                    subtitle: Text('المخزون: ${product.stockQuantity} • سعر البيع: ${product.sellingPrice} ج.س'),
+                                    onTap: () => onSelected(product),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
                       },
                     ),
                     const SizedBox(height: 8),
@@ -265,17 +372,70 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       const SizedBox(width: 8),
                       Expanded(child: TextField(
                         controller: draft.cost,
-                        onChanged: (_) => refresh(() {}),
+                        onChanged: (_) => refresh(() {
+                          _updateSellingPriceFromPercentage(draft);
+                        }),
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'سعر الوحدة (ج.س)', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'سعر الشراء للوحدة (ج.س)', border: OutlineInputBorder()),
                       )),
                     ]),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: draft.sellingPrice,
-                      onChanged: (_) => refresh(() {}),
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'سعر البيع بعد الاستلام (ج.س)', border: OutlineInputBorder()),
+                    DropdownButtonFormField<String>(
+                      initialValue: draft.pricingMode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'طريقة حساب نسبة الربح',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'markup',
+                          child: Text('زيادة على سعر الشراء (Markup)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'margin',
+                          child: Text('هامش من سعر البيع (Margin)'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        refresh(() {
+                          draft.pricingMode = value;
+                          _updateSellingPriceFromPercentage(draft);
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: draft.percentage,
+                            onChanged: (_) => refresh(() {
+                              _updateSellingPriceFromPercentage(draft);
+                            }),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                            decoration: const InputDecoration(
+                              labelText: 'نسبة الربح %',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: draft.sellingPrice,
+                            onChanged: (_) => refresh(() {
+                              _updatePercentageFromSellingPrice(draft);
+                            }),
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'سعر البيع (ج.س)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Align(
                       alignment: AlignmentDirectional.centerEnd,
@@ -323,7 +483,10 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               final q = double.tryParse(line.quantity.text.trim());
               final cost = int.tryParse(line.cost.text.trim());
               final sellingPrice = int.tryParse(line.sellingPrice.text.trim());
-              return q != null && q.isFinite && q > 0 && cost != null && cost >= 0 && sellingPrice != null && sellingPrice >= 0;
+              final percentage = double.tryParse(line.percentage.text.trim());
+              final validProduct = _products.any((product) => product.id == line.productId);
+              final validMargin = line.pricingMode != 'margin' || (percentage != null && percentage < 100);
+              return validProduct && q != null && q.isFinite && q > 0 && cost != null && cost >= 0 && sellingPrice != null && sellingPrice >= 0 && percentage != null && validMargin;
             });
             if (!validLines || d == null || d < 0 || d > subtotal || p == null || p < 0 || p > subtotal - d) {
               ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تحقق من الكميات والأسعار والخصم والمدفوع.')));
@@ -695,19 +858,44 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 }
 
 class _PurchaseDraftLine {
-  _PurchaseDraftLine({required this.productId, String quantity = '1', String cost = '0', String sellingPrice = '0'})
-      : quantity = TextEditingController(text: quantity),
+  _PurchaseDraftLine({
+    required this.productId,
+    required this.productName,
+    String quantity = '1',
+    String cost = '0',
+    String sellingPrice = '0',
+    String percentage = '0',
+  })  : quantity = TextEditingController(text: quantity),
         cost = TextEditingController(text: cost),
-        sellingPrice = TextEditingController(text: sellingPrice);
+        sellingPrice = TextEditingController(text: sellingPrice),
+        percentage = TextEditingController(text: percentage);
 
   int productId;
+  String productName;
+  String pricingMode = 'markup';
   final TextEditingController quantity;
   final TextEditingController cost;
   final TextEditingController sellingPrice;
+  final TextEditingController percentage;
+
+  void setSellingPrice(String value) {
+    sellingPrice.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  void setPercentage(String value) {
+    percentage.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
 
   void dispose() {
     quantity.dispose();
     cost.dispose();
     sellingPrice.dispose();
+    percentage.dispose();
   }
 }
