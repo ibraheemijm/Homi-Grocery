@@ -244,10 +244,43 @@ class BackupRepository {
   }
 
   Future<void> _validateOpenedDatabase(Database database) async {
+    // فحص الملف بعد فتحه وترحيله، وليس الاكتفاء بفحص النسخة قبل الاستعادة.
     final result = await database.rawQuery('PRAGMA integrity_check');
     if (result.isEmpty || result.first.values.first != 'ok') {
       throw const FormatException('قاعدة البيانات المستعادة لم تجتز فحص السلامة.');
     }
+
+    final foreignKeyViolations = await database.rawQuery('PRAGMA foreign_key_check');
+    if (foreignKeyViolations.isNotEmpty) {
+      throw const FormatException('قاعدة البيانات المستعادة تحتوي على علاقات غير سليمة.');
+    }
+
+    final versionRows = await database.rawQuery('PRAGMA user_version');
+    final version = versionRows.isEmpty
+        ? 0
+        : (versionRows.first.values.first as num).toInt();
+    if (version != GroceryDatabase.schemaVersion) {
+      throw FormatException(
+        'لم يكتمل ترحيل قاعدة البيانات إلى الإصدار الحالي (${GroceryDatabase.schemaVersion}).',
+      );
+    }
+
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final names = tables.map((row) => row['name']).whereType<String>().toSet();
+    const requiredTables = {
+      'products', 'app_metadata', 'sales', 'sale_items', 'customers',
+      'customer_payments', 'stock_movements', 'sale_returns',
+      'sale_return_items', 'suppliers', 'purchases', 'purchase_items',
+      'supplier_payments', 'sale_return_refunds', 'cash_transactions',
+      'supplier_returns', 'supplier_return_items', 'supplier_return_refunds',
+      'local_notifications', 'delivery_publication_approvals',
+    };
+    if (!names.containsAll(requiredTables)) {
+      throw const FormatException('المخطط المستعاد لا يحتوي على جميع جداول Homi Grocery المطلوبة.');
+    }
+
     final rows = await database.rawQuery('SELECT COUNT(*) AS count FROM products');
     if (rows.isEmpty || rows.first['count'] == null) {
       throw const FormatException('تعذر التحقق من بيانات الأصناف بعد الاستعادة.');
