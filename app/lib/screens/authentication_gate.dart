@@ -57,10 +57,11 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
 
   Future<void> _logout() async {
     final current = _user;
-    if (current != null) {
-      await _repository?.logout(current);
+    try {
+      if (current != null) await _repository?.logout(current);
+    } finally {
+      if (mounted) setState(() => _user = null);
     }
-    if (mounted) setState(() => _user = null);
   }
 
   @override
@@ -139,6 +140,7 @@ class _GateError extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       );
 }
