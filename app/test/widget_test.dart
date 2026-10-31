@@ -64,7 +64,8 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('المزيد'));
-    await tester.pumpAndSettle();
+    // رسوم التطبيق المستمرة تمنع pumpAndSettle؛ ننتظر انتقال القائمة بإطار زمني ثابت.
+    await tester.pump(const Duration(milliseconds: 400));
 
     await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
     // شاشة النسخ تعرض مؤشر تحميل متحركًا أثناء فتح قاعدة البيانات؛ لا ننتظر سكون كل الرسوم.
