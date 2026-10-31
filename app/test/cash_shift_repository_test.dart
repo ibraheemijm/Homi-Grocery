@@ -72,6 +72,60 @@ void main() {
     );
   });
 
+  test('يتحقق من ملكية الوردية وأنها مفتوحة قبل الحركة النقدية', () async {
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await shifts.openShift(userId: manager.id, openingCash: 500);
+
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: shift.id,
+        userId: manager.id,
+      ),
+      completes,
+    );
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: shift.id,
+        userId: cashier.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: shift.id + 999,
+        userId: manager.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+
+    await shifts.closeShift(
+      shiftId: shift.id,
+      userId: manager.id,
+      closingCash: 500,
+    );
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: shift.id,
+        userId: manager.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+  });
+
   test('يحسب المتوقع والفرق عند الإغلاق من المقبوضات والمدفوعات النقدية للوردية', () async {
     final manager = await auth.createInitialManager(
       username: 'store_admin',
