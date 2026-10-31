@@ -98,12 +98,9 @@ class InvoicePrintService {
     final invoiceNumber = sale['invoice_number'].toString();
     final fileName = buildPdfFileName(
       language: filenameLanguage,
-      arabicLabel: thermal
-          ? 'إيصال-حراري-رقم-$invoiceNumber'
-          : 'فاتورة-رقم-$invoiceNumber',
-      englishLabel: thermal
-          ? 'Thermal-Receipt-$invoiceNumber'
-          : 'Invoice-$invoiceNumber',
+      arabicLabel: thermal ? 'إيصال-حراري-رقم' : 'فاتورة-رقم',
+      englishLabel: thermal ? 'Thermal-Receipt' : 'Invoice',
+      sharedSuffix: invoiceNumber,
     );
     await Printing.layoutPdf(
       name: fileName,
