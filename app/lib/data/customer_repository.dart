@@ -33,8 +33,32 @@ class CustomerRepository {
   CustomerRepository(this._database);
   final Database _database;
 
-  // يعرض الأرصدة المحسوبة من الفواتير والتحصيلات الفعلية.
-  Future<List<CustomerBalance>> balances({String query = ''}) async {
+  // لا يسمح بقراءة دفتر الزبائن دون هوية مستخدم وصلاحية فعالة.
+  Future<void> _requireReadAccess(int userId) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض بيانات الزبائن.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_customer_data'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض بيانات الزبائن.');
+    }
+  }
+
+  // يعرض الأرصدة المحسوبة من الفواتير والتحصيلات الفعلية بعد التحقق من الهوية.
+  Future<List<CustomerBalance>> balances({required int userId, String query = ''}) async {
+    await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT c.id, c.name,
         (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.id) AS sales_count,
@@ -70,7 +94,8 @@ class CustomerRepository {
   }
 
   /// كشف حساب موحد مرتب زمنيًا من الفواتير والمرتجعات والتحصيلات.
-  Future<List<CustomerLedgerEntry>> ledger(int customerId) async {
+  Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId}) async {
+    await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT 'فاتورة ' || s.invoice_number AS title,
         MAX(0, s.total - s.paid_amount) AS amount,
