@@ -8,11 +8,19 @@ import 'package:homi_grocery/data/sale_repository.dart';
 
 void main() {
   late Database database;
+  late int managerId;
 
   setUp(() async {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'report_manager', 'display_name': 'مدير التقارير',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
@@ -26,6 +34,28 @@ void main() {
   });
 
   tearDown(() async => database.close());
+
+
+  test('يمنع الكاشير من قراءة التقارير المالية افتراضيًا', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'report_cashier', 'display_name': 'كاشير التقارير',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      ReportsRepository(database).load(userId: cashierId),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      ReportsRepository(database).loadPeriod(
+        userId: cashierId,
+        start: DateTime(2026, 1),
+        end: DateTime(2026, 2),
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
 
   test('يجمع تقرير اليوم من الفواتير والتحصيلات والخزينة', () async {
     final now = DateTime.now();
@@ -118,7 +148,7 @@ void main() {
       'return_id': returnId, 'sale_item_id': saleItemId, 'quantity': 1, 'amount': 100,
     });
 
-    final report = await ReportsRepository(database).load(day: now);
+    final report = await ReportsRepository(database).load(userId: managerId, day: now);
     expect(report.salesTotal, 500);
     expect(report.salesCount, 1);
     expect(report.saleReturns, 100);
@@ -184,7 +214,7 @@ void main() {
       note: 'اختبار ربط التقرير',
     );
 
-    final report = await ReportsRepository(database).load(day: now);
+    final report = await ReportsRepository(database).load(userId: managerId, day: now);
 
     expect(report.salesTotal, 300);
     expect(report.saleReturns, 100);
@@ -270,7 +300,7 @@ void main() {
       'amount': 300,
     });
 
-    final report = await ReportsRepository(database).loadPeriod(
+    final report = await ReportsRepository(database).loadPeriod(userId: managerId, 
       start: start,
       end: end,
     );
@@ -318,7 +348,7 @@ void main() {
       'created_at': mayAt,
     });
 
-    final report = await ReportsRepository(database).loadPeriod(
+    final report = await ReportsRepository(database).loadPeriod(userId: managerId, 
       start: start,
       end: end,
     );
@@ -380,7 +410,7 @@ void main() {
 
     final start = DateTime(now.year, now.month, 1);
     final end = DateTime(now.year, now.month + 1, 1);
-    final report = await ReportsRepository(database).loadPeriod(
+    final report = await ReportsRepository(database).loadPeriod(userId: managerId, 
       start: start,
       end: end,
     );
@@ -425,13 +455,13 @@ void main() {
       // cost_price متروك null عمدًا لمحاكاة فاتورة سابقة لترحيل التكلفة.
     });
 
-    final report = await ReportsRepository(database).load(day: now);
+    final report = await ReportsRepository(database).load(userId: managerId, day: now);
 
     expect(report.salesTotal, 100);
     expect(report.grossProfit, isNull);
 
     final periodStart = DateTime(now.year, now.month, now.day);
-    final periodReport = await ReportsRepository(database).loadPeriod(
+    final periodReport = await ReportsRepository(database).loadPeriod(userId: managerId, 
       start: periodStart,
       end: periodStart.add(const Duration(days: 1)),
     );
