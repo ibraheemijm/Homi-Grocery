@@ -45,10 +45,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const HomiGroceryApp());
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     await tester.tap(find.text('مبيعات اليوم'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('التقارير'), findsOneWidget);
     expect(find.text('اختيار الأصناف'), findsNothing);
