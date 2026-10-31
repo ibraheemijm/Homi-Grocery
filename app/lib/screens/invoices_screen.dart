@@ -74,6 +74,29 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }
   }
 
+  Future<void> _savePdf(Map<String, Object?> invoice, {required bool thermal}) async {
+    if (_printing) return;
+    setState(() => _printing = true);
+    try {
+      final db = await GroceryDatabase.open();
+      final path = await InvoicePrintService(db).saveInvoicePdf(
+        invoice['id'] as int,
+        thermal: thermal,
+      );
+      if (!mounted || path == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم حفظ الملف: $path')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر حفظ PDF: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
   String _date(String value) {
     final parsed = DateTime.tryParse(value)?.toLocal();
     if (parsed == null) return value;
@@ -166,12 +189,22 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                               OutlinedButton.icon(
                                                 onPressed: _printing ? null : () => _print(invoice, thermal: false),
                                                 icon: const Icon(Icons.picture_as_pdf_rounded),
-                                                label: const Text('فاتورة A4 / PDF'),
+                                                label: const Text('طباعة A4'),
+                                              ),
+                                              OutlinedButton.icon(
+                                                onPressed: _printing ? null : () => _savePdf(invoice, thermal: false),
+                                                icon: const Icon(Icons.save_alt_rounded),
+                                                label: const Text('حفظ PDF'),
                                               ),
                                               FilledButton.tonalIcon(
                                                 onPressed: _printing ? null : () => _print(invoice, thermal: true),
                                                 icon: const Icon(Icons.receipt_rounded),
-                                                label: const Text('إيصال حراري'),
+                                                label: const Text('طباعة حراري'),
+                                              ),
+                                              OutlinedButton.icon(
+                                                onPressed: _printing ? null : () => _savePdf(invoice, thermal: true),
+                                                icon: const Icon(Icons.save_alt_rounded),
+                                                label: const Text('حفظ إيصال'),
                                               ),
                                             ],
                                           ),
