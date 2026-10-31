@@ -61,6 +61,139 @@ void main() {
     );
   });
 
+  test('يفرض صلاحيات قراءة المشتريات ومرتجعات المورد وحدود الاسترداد', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'supplier_permissions_cashier',
+      displayName: 'كاشير الموردين',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الصلاحيات');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(
+        productId: productId,
+        productName: 'حليب',
+        unit: 'عبوة',
+        quantity: 1,
+        unitCost: 100,
+      )],
+      paidAmount: 0,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(
+      purchase.id, userId: managerId,
+    )).single['id'] as int;
+    final managerReturnId = await suppliers.createSupplierReturn(
+      userId: managerId,
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 0.5},
+    );
+
+    await expectLater(
+      suppliers.purchaseHistory(userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      suppliers.purchaseItems(purchase.id, userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      suppliers.returnablePurchaseItems(purchase.id, userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      suppliers.maximumRefundableSupplierReturnAmount(managerReturnId, userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      suppliers.createSupplierReturn(
+        userId: cashier.id,
+        purchaseId: purchase.id,
+        quantitiesByPurchaseItemId: {itemId: 0.2},
+      ),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      suppliers.recordSupplierReturnRefund(
+        userId: cashier.id,
+        returnId: managerReturnId,
+        amount: 10,
+        paymentMethod: 'تحويل بنكي',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    final settings = await auth.getCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) {
+        if (setting.key == 'view_supplier_data') {
+          return CashierPermissionSetting(
+            key: setting.key, label: setting.label, isAllowed: true,
+          );
+        }
+        if (setting.key == 'supplier_returns') {
+          return CashierPermissionSetting(
+            key: setting.key, label: setting.label, isAllowed: true, maxAmount: 30,
+          );
+        }
+        if (setting.key == 'supplier_return_refunds') {
+          return CashierPermissionSetting(
+            key: setting.key, label: setting.label, isAllowed: true, maxAmount: 20,
+          );
+        }
+        return setting;
+      }).toList(),
+    );
+
+    expect(await suppliers.purchaseHistory(userId: cashier.id), hasLength(1));
+    expect(await suppliers.purchaseItems(purchase.id, userId: cashier.id), hasLength(1));
+    expect(await suppliers.returnablePurchaseItems(purchase.id, userId: cashier.id), hasLength(1));
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(
+      managerReturnId, userId: cashier.id,
+    ), 50);
+    await expectLater(
+      suppliers.createSupplierReturn(
+        userId: cashier.id,
+        purchaseId: purchase.id,
+        quantitiesByPurchaseItemId: {itemId: 0.4},
+      ),
+      throwsA(isA<StateError>()),
+    );
+    final cashierReturnId = await suppliers.createSupplierReturn(
+      userId: cashier.id,
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 0.2},
+    );
+    await expectLater(
+      suppliers.recordSupplierReturnRefund(
+        userId: cashier.id,
+        returnId: managerReturnId,
+        amount: 21,
+        paymentMethod: 'تحويل بنكي',
+      ),
+      throwsA(isA<StateError>()),
+    );
+    await suppliers.recordSupplierReturnRefund(
+      userId: cashier.id,
+      returnId: managerReturnId,
+      amount: 20,
+      paymentMethod: 'تحويل بنكي',
+    );
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(
+      managerReturnId, userId: cashier.id,
+    ), 30);
+    expect(await database.query('supplier_returns', where: 'id = ?', whereArgs: [cashierReturnId]), hasLength(1));
+  });
+
   test('يحفظ فاتورة الشراء ويزيد المخزون ويسجل حركة الشراء', () async {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 4,
