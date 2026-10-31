@@ -122,6 +122,11 @@ class ProductRepository {
         return false;
       }
       for (final table in ['sale_items', 'purchase_items', 'stock_movements']) {
+        final tableRows = await txn.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+          [table],
+        );
+        if (tableRows.isEmpty) continue;
         final rows = await txn.rawQuery(
           'SELECT COUNT(*) AS count FROM $table WHERE product_id = ?',
           [productId],
@@ -229,8 +234,8 @@ String normalizeProductName(String value) {
   return value
       .trim()
       .toLowerCase()
-      .replaceAll(RegExp(r'[\\u064B-\\u065F\\u0670\\u0640]'), '')
+      .replaceAll(RegExp(r'[\u064B-\u065F\u0670\u0640]'), '')
       .replaceAll(RegExp(r'[أإآٱ]'), 'ا')
       .replaceAll('ى', 'ي')
-      .replaceAll(RegExp(r'\\s+'), ' ');
+      .replaceAll(RegExp(r'\s+'), ' ');
 }
