@@ -138,25 +138,28 @@ void main() {
     expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
   });
 
-  testWidgets('لا يصل حساب الكاشير إلى لوحة المدير قبل اكتمال واجهته', (tester) async {
+  testWidgets('يفتح الكاشير نقطة بيع مبسطة دون أدوات المدير', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: CashierAccessPendingScreen(
+        home: CashierWorkspaceScreen(
           cashier: const AuthUser(
             id: 2,
             username: 'cashier_one',
             displayName: 'الكاشير الأول',
             role: 'cashier',
           ),
+          shiftId: 8,
           onLogout: () {},
         ),
       ),
     );
+    await tester.pump();
 
-    expect(find.text('مرحبًا الكاشير الأول'), findsOneWidget);
-    expect(find.textContaining('لن نعرض لك لوحة المدير'), findsOneWidget);
+    expect(find.textContaining('نقطة البيع'), findsOneWidget);
+    expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
     expect(find.text('مبيعات اليوم'), findsNothing);
     expect(find.text('إدارة الكاشيرين'), findsNothing);
+    expect(find.text('التقارير'), findsNothing);
   });
 
 }
