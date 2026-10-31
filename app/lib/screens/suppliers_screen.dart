@@ -7,7 +7,9 @@ import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({super.key});
+  const SuppliersScreen({this.userId, super.key});
+
+  final int? userId;
 
   @override
   State<SuppliersScreen> createState() => _SuppliersScreenState();
@@ -678,6 +680,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           paymentMethod: int.parse(paid.text.trim()) == 0 ? 'آجل' : 'جزئي',
           paymentChannel: paymentChannel,
           note: note.text,
+          userId: widget.userId,
         );
         // ينظف المنتجات التي أُنشئت ثم أزيلت من الفاتورة، دون أرشفة ما استُخدم.
         for (final productId in newlyCreatedProductIds) {
@@ -954,6 +957,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         returnId: returnId,
         amount: value,
         paymentMethod: result['method']! as String,
+        userId: widget.userId,
       );
       await _load();
       _message('تم تسجيل المبلغ المستلم وإضافته إلى الخزينة.');
@@ -1008,6 +1012,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           amount: result['amount']! as int,
           paymentMethod: result['method']! as String,
           note: note.text,
+          userId: widget.userId,
         );
         await _load();
         _message('تم تسجيل دفعة المورد.');
