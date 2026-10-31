@@ -320,6 +320,49 @@ void main() {
     expect(rows.single['stock_quantity'], 12);
   });
 
+  test('يتراجع إذا فشل فحص المخطط بعد فتح قاعدة البيانات المستعادة', () async {
+    final backupPath = '${directory.path}/restore-post-open-check.db';
+    await database.execute("VACUUM INTO '$backupPath'");
+    await database.update('products', {'name': 'طحين'});
+
+    final targetPath = database.path;
+    final invalidOpenedPath = '${directory.path}/opened-but-incomplete.db';
+    var openAttempts = 0;
+    final repository = BackupRepository(
+      database,
+      closeForMaintenance: () async {
+        if (database.isOpen) await database.close();
+      },
+      openRestoredDatabase: () async {
+        openAttempts++;
+        if (openAttempts == 1) {
+          database = await databaseFactoryFfi.openDatabase(
+            invalidOpenedPath,
+            options: OpenDatabaseOptions(version: 13),
+            onCreate: (db, version) async {
+              await db.execute('CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)');
+            },
+          );
+          return database;
+        }
+        database = await databaseFactoryFfi.openDatabase(
+          targetPath,
+          options: OpenDatabaseOptions(version: 13),
+        );
+        return database;
+      },
+    );
+
+    await expectLater(
+      repository.restoreBackup(backupPath),
+      throwsA(isA<FormatException>()),
+    );
+
+    expect(openAttempts, 2);
+    expect(database.isOpen, isTrue);
+    final rows = await database.query('products');
+    expect(rows.single['name'], 'طحين');
+  });
   test('يرفض استعادة ملف غير صالح ويحافظ على قاعدة البيانات الحالية', () async {
     final invalid = File('${directory.path}/invalid-restore.db');
     await invalid.writeAsString('not a sqlite database');
