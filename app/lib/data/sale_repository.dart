@@ -511,7 +511,26 @@ class SaleRepository {
 
   /// الحد المتبقي من النقد الذي يمكن رده فعليًا بعد أن غطت المرتجعات دين الفاتورة الأصلي.
   Future<int> maximumRefundableAmount(int saleId, {required int userId}) async {
-    await requireInvoiceHistoryAccess(userId);
+    final accounts = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'cashier') {
+      await _database.transaction((txn) async {
+        await _requireCashierPermission(
+          txn,
+          userId: userId,
+          permissionKey: 'returns',
+          permissionLabel: 'تسجيل مرتجعات البيع',
+        );
+      });
+    } else if (role != 'manager') {
+      throw StateError('لا يملك المستخدم صلاحية عرض مبلغ المرتجع المتاح.');
+    }
     final rows = await _database.rawQuery('''
       SELECT MAX(0,
         COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
