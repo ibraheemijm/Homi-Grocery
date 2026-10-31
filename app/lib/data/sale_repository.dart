@@ -72,6 +72,8 @@ class SaleRepository {
     String paymentChannel = 'نقدي',
     String? customerName,
     int? customerId,
+    int? userId,
+    int? shiftId,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
     if (discount < 0 || paidAmount < 0) {
@@ -97,6 +99,9 @@ class SaleRepository {
     }
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
       throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
+    }
+    if (shiftId != null && (userId == null || paymentChannel != 'نقدي')) {
+      throw ArgumentError('ربط حركة البيع بالوردية يتطلب مستخدمًا وطريقة دفع نقدية.');
     }
     if (paymentMethod == 'نقدي' && paidAmount != total) {
       throw ArgumentError('الفاتورة النقدية يجب أن تُدفع بالكامل.');
@@ -169,6 +174,8 @@ class SaleRepository {
           'payment_method': paymentChannel,
           'reference_type': 'sale',
           'reference_id': saleId,
+          'user_id': userId,
+          'shift_id': paymentChannel == 'نقدي' ? shiftId : null,
           'note': 'فاتورة $invoice',
           'created_at': createdAt,
         });
@@ -385,11 +392,16 @@ class SaleRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
+    int? userId,
+    int? shiftId,
   }) async {
     if (saleId <= 0) throw ArgumentError('معرّف الفاتورة غير صالح.');
     if (amount <= 0) throw ArgumentError('مبلغ الرد يجب أن يكون أكبر من صفر.');
     if (paymentMethod.trim().isEmpty) {
       throw ArgumentError('حدد طريقة رد المبلغ.');
+    }
+    if (shiftId != null && (userId == null || paymentMethod.trim() != 'نقدي')) {
+      throw ArgumentError('ربط رد المبلغ بالوردية يتطلب مستخدمًا وطريقة رد نقدية.');
     }
     return _database.transaction((txn) async {
       final sales = await txn.query(
@@ -431,6 +443,8 @@ class SaleRepository {
         'payment_method': paymentMethod.trim(),
         'reference_type': 'sale_return_refund',
         'reference_id': refundId,
+        'user_id': userId,
+        'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
         'note': note?.trim().isEmpty == true ? 'فاتورة البيع #$saleId' : note?.trim(),
         'created_at': createdAt,
       });
