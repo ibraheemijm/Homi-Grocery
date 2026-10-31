@@ -195,6 +195,8 @@ void main() {
                   await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT');
                 }
               }
+              if (oldVersion < 14) await GroceryDatabase.createAuthSchema(db);
+              if (oldVersion < 15) await GroceryDatabase.createCashShiftsSchema(db);
               await db.insert(
                 'app_metadata',
                 {'key': 'schema_version', 'value': newVersion.toString()},
@@ -254,6 +256,8 @@ void main() {
                   await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT');
                 }
               }
+              if (oldVersion < 14) await GroceryDatabase.createAuthSchema(db);
+              if (oldVersion < 15) await GroceryDatabase.createCashShiftsSchema(db);
               await db.insert(
                 'app_metadata',
                 {'key': 'schema_version', 'value': newVersion.toString()},
