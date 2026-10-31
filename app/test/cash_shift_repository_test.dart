@@ -110,6 +110,22 @@ void main() {
       ),
       throwsA(isA<CashShiftException>()),
     );
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: null,
+        userId: manager.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await expectLater(
+      CashShiftRepository.validateActiveShift(
+        database,
+        shiftId: shift.id,
+        userId: null,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
 
     await shifts.closeShift(
       shiftId: shift.id,
