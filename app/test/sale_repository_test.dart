@@ -290,7 +290,7 @@ void main() {
 
     expect(returned.amount, 250);
     expect((await products.getById(productId))!.stockQuantity, 3);
-    expect(await sales.returnedQuantity(itemId), 1);
+    expect(await sales.returnedQuantity(itemId, userId: managerId), 1);
     final movements = await database.query(
       'stock_movements',
       where: "reference_type = 'sale_return'",
@@ -333,7 +333,7 @@ void main() {
     );
 
     expect((await products.getById(productId))!.stockQuantity, 1);
-    expect(await sales.returnedQuantity(itemId), 1);
+    expect(await sales.returnedQuantity(itemId, userId: managerId), 1);
     expect(await database.query('sale_returns'), hasLength(1));
   });
 
