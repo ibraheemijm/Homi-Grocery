@@ -244,6 +244,139 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     }
   }
 
+  Future<void> _editPermissions(CashierAccount account) async {
+    setState(() => _working = true);
+    List<CashierPermissionSetting> settings;
+    try {
+      settings = await _repository!.getCashierPermissions(
+        manager: widget.manager,
+        cashierId: account.user.id,
+      );
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+      if (mounted) setState(() => _working = false);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _working = false);
+
+    final enabled = {
+      for (final setting in settings) setting.key: setting.isAllowed,
+    };
+    final limits = {
+      for (final setting in settings)
+        setting.key: TextEditingController(
+          text: setting.maxAmount?.toString() ?? '',
+        ),
+    };
+    String? dialogError;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('صلاحيات ${account.user.displayName}'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'عدم تفعيل الصلاحية يعني منعها. اترك الحد المالي فارغًا إذا لم ترد وضع سقف للعملية.',
+                  ),
+                  const SizedBox(height: 12),
+                  ...settings.map((setting) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(setting.label),
+                        value: enabled[setting.key] ?? false,
+                        onChanged: (value) => setDialogState(
+                          () => enabled[setting.key] = value,
+                        ),
+                      ),
+                      TextField(
+                        controller: limits[setting.key],
+                        enabled: enabled[setting.key] ?? false,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'الحد الأقصى للعملية (ج.س) — اختياري',
+                          isDense: true,
+                        ),
+                      ),
+                      const Divider(height: 20),
+                    ],
+                  )),
+                  if (dialogError != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        dialogError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                for (final setting in settings) {
+                  final raw = limits[setting.key]!.text.trim();
+                  if (raw.isNotEmpty &&
+                      (int.tryParse(raw) == null || int.parse(raw) < 0)) {
+                    setDialogState(
+                      () => dialogError = 'أدخل حدًا ماليًا صحيحًا أو اترك الحقل فارغًا.',
+                    );
+                    return;
+                  }
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('حفظ الصلاحيات'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final updated = settings.map((setting) {
+      final raw = limits[setting.key]!.text.trim();
+      return CashierPermissionSetting(
+        key: setting.key,
+        label: setting.label,
+        isAllowed: enabled[setting.key] ?? false,
+        maxAmount: raw.isEmpty ? null : int.parse(raw),
+      );
+    }).toList(growable: false);
+    for (final controller in limits.values) {
+      controller.dispose();
+    }
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _working = true);
+    try {
+      await _repository!.saveCashierPermissions(
+        manager: widget.manager,
+        cashierId: account.user.id,
+        permissions: updated,
+      );
+      if (mounted) _showMessage('تم حفظ إعدادات الصلاحيات وتسجيلها في سجل التدقيق.');
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _changeStatus(CashierAccount account, bool isActive) async {
     final action = isActive ? 'تفعيل' : 'إيقاف';
     final confirmed = await showDialog<bool>(
@@ -376,7 +509,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                               SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'تنبيه: واجهة الكاشير والورديات وتطبيق حدود الصلاحيات لم تكتمل بعد. حساب الكاشير الجديد لن يفتح لوحة الإدارة أو ينفذ عمليات بيع حتى تكتمل هذه المرحلة.',
+                                  'يمكن ضبط الصلاحيات والحدود المالية لكل كاشير. يجري استكمال فرض هذه الإعدادات على جميع العمليات في طبقة البيانات.',
                                 ),
                               ),
                             ],
@@ -426,11 +559,17 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                                 onSelected: (value) {
                                   if (value == 'password') {
                                     _resetPassword(account);
+                                  } else if (value == 'permissions') {
+                                    _editPermissions(account);
                                   } else if (value == 'status') {
                                     _changeStatus(account, !account.isActive);
                                   }
                                 },
                                 itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'permissions',
+                                    child: Text('إعداد الصلاحيات'),
+                                  ),
                                   const PopupMenuItem(
                                     value: 'password',
                                     child: Text('تغيير كلمة المرور'),
