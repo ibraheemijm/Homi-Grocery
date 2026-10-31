@@ -1074,6 +1074,7 @@ class _SalesScreenState extends State<SalesScreen> {
         amount: amount,
         paymentMethod: paymentMethod,
         userId: widget.userId,
+        shiftId: widget.shiftId,
       );
       widget.onDataChanged?.call();
       if (!mounted) return;
