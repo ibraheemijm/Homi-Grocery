@@ -59,6 +59,9 @@ class AuthRepository {
     final cleanUsername = username.trim();
     final cleanName = displayName.trim();
     _validateCredentials(cleanUsername, cleanName, password);
+    if (await hasAccounts()) {
+      throw const AuthException('تم إنشاء حساب المدير مسبقًا. سجّل الدخول للمتابعة.');
+    }
 
     final secureRandom = Random.secure();
     final salt = List<int>.generate(
