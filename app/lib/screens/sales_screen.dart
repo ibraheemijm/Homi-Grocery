@@ -46,6 +46,12 @@ class _SalesScreenState extends State<SalesScreen> {
     _selectedCustomerId = null;
     _customerSearchTimer?.cancel();
     final query = value.trim();
+    if (query.isNotEmpty) {
+      setState(() {
+        _customerMatches = [];
+        _showCustomerSuggestions = false;
+      });
+    }
     final request = ++_customerSearchRequest;
     if (query.isEmpty || _customersRepository == null) {
       setState(() {
@@ -133,6 +139,8 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _selectCustomer(CustomerBalance customer) {
+    _customerSearchTimer?.cancel();
+    _customerSearchRequest++;
     _selectedCustomerId = customer.id;
     _customerNickname.clear();
     _customer.value = TextEditingValue(
@@ -340,16 +348,29 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Expanded(
-                child: _matches.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.',
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : _buildProductList(theme),
-              ),
+              if (compact)
+                SizedBox(
+                  height: 380,
+                  child: _matches.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : _buildProductList(theme),
+                )
+              else
+                Expanded(
+                  child: _matches.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : _buildProductList(theme),
+                ),
             ],
           ),
         ),
