@@ -7,9 +7,9 @@ import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({this.userId, this.shiftId, super.key});
+  const SuppliersScreen({required this.userId, this.shiftId, super.key});
 
-  final int? userId;
+  final int userId;
   final int? shiftId;
 
   @override
@@ -46,7 +46,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _load() async {
     if (_repository == null) return;
-    final rows = await _repository!.balances(userId: widget.userId!, query: _search.text);
+    final rows = await _repository!.balances(userId: widget.userId, query: _search.text);
     if (mounted) setState(() => _suppliers = rows);
   }
 
@@ -712,7 +712,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _showPurchaseHistory() async {
     try {
-      final purchases = await _repository!.purchaseHistory();
+      final purchases = await _repository!.purchaseHistory(userId: widget.userId);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -759,7 +759,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _showPurchaseDetails(PurchaseHistoryRecord purchase) async {
     try {
-      final items = await _repository!.purchaseItems(purchase.id);
+      final items = await _repository!.purchaseItems(purchase.id, userId: widget.userId);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -812,7 +812,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async {
     try {
-      final rows = await _repository!.returnablePurchaseItems(purchase.id);
+      final rows = await _repository!.returnablePurchaseItems(purchase.id, userId: widget.userId);
       if (!mounted) return;
       final controllers = <int, TextEditingController>{};
       for (final row in rows) {
@@ -884,6 +884,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       }
       if (quantities == null || !mounted) return;
       final returnId = await _repository!.createSupplierReturn(
+        userId: widget.userId,
         purchaseId: purchase.id,
         quantitiesByPurchaseItemId: quantities,
         note: 'مرتجع فاتورة ${purchase.invoiceNumber}',
@@ -891,7 +892,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       await _load();
       _products = await _productsRepository!.search('');
       _message('تم تسجيل المرتجع. إذا لم يُعد المورد المبلغ نقدًا، سيبقى رصيدًا دائنًا لنا.');
-      final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId);
+      final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId, userId: widget.userId);
       if (availableRefund > 0 && mounted) {
         await _askSupplierRefund(returnId, availableRefund);
       }
@@ -956,6 +957,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     if (value == 0) return;
     try {
       await _repository!.recordSupplierReturnRefund(
+        userId: widget.userId,
         returnId: returnId,
         amount: value,
         paymentMethod: result['method']! as String,
