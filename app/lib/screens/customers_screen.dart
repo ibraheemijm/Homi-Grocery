@@ -5,9 +5,10 @@ import '../data/customer_repository.dart';
 import '../data/grocery_database.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({this.userId, super.key});
+  const CustomersScreen({this.userId, this.shiftId, super.key});
 
   final int? userId;
+  final int? shiftId;
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -289,6 +290,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         await _repository!.recordPayment(
           customerId: customer.id,
           userId: widget.userId,
+          shiftId: widget.shiftId,
           amount: result['amount']! as int,
           paymentMethod: result['method']! as String,
           note: noteController.text,
