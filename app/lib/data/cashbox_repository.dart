@@ -136,8 +136,8 @@ class CashboxRepository {
     if (category.trim().isEmpty) throw ArgumentError('اسم الحركة مطلوب.');
     if (amount <= 0) throw ArgumentError('المبلغ يجب أن يكون أكبر من صفر.');
     if (paymentMethod.trim().isEmpty) throw ArgumentError('حدد طريقة الدفع.');
-    if (shiftId != null && (userId == null || paymentMethod.trim() != 'نقدي')) {
-      throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب مستخدمًا وطريقة دفع نقدية.');
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.insert('cash_transactions', {
       'direction': direction,
