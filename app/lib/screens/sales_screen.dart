@@ -150,8 +150,6 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() {
       _customerMatches = [];
       _showCustomerSuggestions = false;
-      _customerSearchTimer?.cancel();
-      _customerSearchRequest++;
     });
     FocusScope.of(context).unfocus();
   }
@@ -765,6 +763,8 @@ class _SalesScreenState extends State<SalesScreen> {
       _selectedCustomerId = null;
       _customerMatches = [];
       _showCustomerSuggestions = false;
+      _customerSearchTimer?.cancel();
+      _customerSearchRequest++;
       _discountController.text = '0';
       _recent = await _salesRepository!.recentSales(limit: 8);
       widget.onDataChanged?.call();
