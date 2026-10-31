@@ -124,10 +124,20 @@ class CustomerRepository {
   }
 
   // تسجيل تحصيل مع التحقق من الرصيد داخل معاملة لمنع تجاوز المبلغ المستحق.
-  Future<void> recordPayment({required int customerId, required int amount, String paymentMethod = 'نقدي', String? note}) async {
+  Future<void> recordPayment({
+    required int customerId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    int? userId,
+    int? shiftId,
+  }) async {
     if (amount <= 0) throw ArgumentError('قيمة التحصيل يجب أن تكون أكبر من صفر.');
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
       throw ArgumentError('طريقة التحصيل غير مدعومة.');
+    }
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
@@ -162,6 +172,8 @@ class CustomerRepository {
         'payment_method': paymentMethod,
         'reference_type': 'customer_payment',
         'reference_id': paymentId,
+        'user_id': userId,
+        'shift_id': paymentMethod == 'نقدي' ? shiftId : null,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
         'created_at': createdAt,
       });
