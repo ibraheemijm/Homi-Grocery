@@ -323,7 +323,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               tooltip: 'عرض جميع الأصناف',
-                              onPressed: () => focusNode.requestFocus(),
+                              onPressed: () {
+                                controller.clear();
+                                draft.productName = '';
+                                draft.productId = -1;
+                                focusNode.requestFocus();
+                              },
                               icon: const Icon(Icons.arrow_drop_down_rounded),
                             ),
                           ),
