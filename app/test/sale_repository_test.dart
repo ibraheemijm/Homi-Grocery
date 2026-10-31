@@ -783,7 +783,6 @@ void main() {
     final product = (await products.getById(productId))!;
     final shift = await CashShiftRepository(database).openShift(
       userId: cashier.id,
-      shiftId: shift.id,
       openingCash: 100,
     );
 
@@ -795,7 +794,6 @@ void main() {
         paymentMethod: 'آجل',
         customerName: 'عميل اختبار',
         userId: cashier.id,
-      shiftId: shift.id,
         shiftId: shift.id,
       ),
       throwsStateError,
@@ -827,7 +825,6 @@ void main() {
         paymentMethod: 'جزئي',
         customerName: 'عميل اختبار',
         userId: cashier.id,
-      shiftId: shift.id,
         shiftId: shift.id,
       ),
       throwsStateError,
