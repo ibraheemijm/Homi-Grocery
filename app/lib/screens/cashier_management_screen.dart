@@ -438,3 +438,61 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     );
   }
 }
+
+
+// حاجز مؤقت يمنع حساب الكاشير من الوصول إلى واجهة المدير قبل اكتمال واجهته وصلاحياته.
+class CashierAccessPendingScreen extends StatelessWidget {
+  const CashierAccessPendingScreen({
+    required this.cashier,
+    required this.onLogout,
+    super.key,
+  });
+
+  final AuthUser cashier;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.point_of_sale_rounded, size: 52),
+                          const SizedBox(height: 16),
+                          Text(
+                            'مرحبًا ${cashier.displayName}',
+                            style: Theme.of(context).textTheme.titleLarge,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'تم إنشاء حسابك بنجاح. واجهة الكاشير وربط صلاحيات البيع والورديات ما زالت قيد التجهيز. لن نعرض لك لوحة المدير أو البيانات المالية قبل اكتمال الحماية.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton.icon(
+                            onPressed: onLogout,
+                            icon: const Icon(Icons.logout_rounded),
+                            label: const Text('تسجيل الخروج'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
