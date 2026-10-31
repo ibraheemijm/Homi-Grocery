@@ -899,7 +899,7 @@ class _SalesScreenState extends State<SalesScreen> {
       for (final item in items) {
         final id = item['id'] as int;
         final sold = (item['quantity'] as num).toDouble();
-        final returned = await _salesRepository!.returnedQuantity(id);
+        final returned = await _salesRepository!.returnedQuantity(id, userId: widget.userId);
         remaining[id] = (sold - returned).clamp(0, sold).toDouble();
       }
       final controllers = <int, TextEditingController>{
