@@ -8,6 +8,7 @@ import 'data/grocery_database.dart';
 import 'data/font_preferences.dart';
 import 'data/auth_repository.dart';
 import 'screens/authentication_gate.dart';
+import 'screens/cashier_management_screen.dart';
 
 import 'screens/invoices_screen.dart';
 import 'screens/cashbox_screen.dart';
@@ -264,20 +265,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // تعريف عناصر التنقل في مكان واحد لتوحيد أسماء الأقسام وأيقوناتها.
-  static const List<_NavigationItem> _navigationItems = [
-    _NavigationItem('الرئيسية', Icons.dashboard_rounded),
-    _NavigationItem('المبيعات', Icons.point_of_sale_rounded),
-    _NavigationItem('الفواتير', Icons.receipt_long_rounded),
-    _NavigationItem('الزبائن والديون', Icons.people_alt_rounded),
-    _NavigationItem('الأصناف والمخزون', Icons.inventory_2_rounded),
-    _NavigationItem('الموردون والمشتريات', Icons.local_shipping_rounded),
-    _NavigationItem('الخزينة', Icons.account_balance_wallet_rounded),
-    _NavigationItem('التقارير', Icons.analytics_rounded),
-    _NavigationItem('الإعدادات', Icons.settings_rounded),
-    _NavigationItem('حركات المخزون', Icons.history_rounded),
-    _NavigationItem('الإشعارات وسجل الموافقات', Icons.notifications_active_rounded),
-    _NavigationItem('النسخ الاحتياطي والاستعادة', Icons.backup_rounded),
-  ];
+  List<_NavigationItem> get _navigationItems => [
+        const _NavigationItem('الرئيسية', Icons.dashboard_rounded),
+        const _NavigationItem('المبيعات', Icons.point_of_sale_rounded),
+        const _NavigationItem('الفواتير', Icons.receipt_long_rounded),
+        const _NavigationItem('الزبائن والديون', Icons.people_alt_rounded),
+        const _NavigationItem('الأصناف والمخزون', Icons.inventory_2_rounded),
+        const _NavigationItem('الموردون والمشتريات', Icons.local_shipping_rounded),
+        const _NavigationItem('الخزينة', Icons.account_balance_wallet_rounded),
+        const _NavigationItem('التقارير', Icons.analytics_rounded),
+        const _NavigationItem('الإعدادات', Icons.settings_rounded),
+        const _NavigationItem('حركات المخزون', Icons.history_rounded),
+        const _NavigationItem('الإشعارات وسجل الموافقات', Icons.notifications_active_rounded),
+        const _NavigationItem('النسخ الاحتياطي والاستعادة', Icons.backup_rounded),
+        if (widget.user.isManager)
+          const _NavigationItem('إدارة الكاشيرين', Icons.manage_accounts_rounded),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +324,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ? const NotificationsScreen()
                                             : _selectedIndex == 11
                                                 ? const BackupScreen()
-                                : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
+                                                : _selectedIndex == 12 && widget.user.isManager
+                                                    ? CashierManagementScreen(manager: widget.user)
+                                                    : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
                   ),
                 ],
               ),
