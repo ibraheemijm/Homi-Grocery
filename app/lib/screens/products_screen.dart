@@ -18,6 +18,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   final _search = TextEditingController();
   ProductRepository? _repository;
   List<GroceryProduct> _products = [];
+  bool _showArchived = false;
   bool _loading = true;
   String? _error;
 
@@ -43,9 +44,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (_repository == null) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final rows = await _repository!.search(_search.text);
+      final rows = await _repository!.search(_search.text, includeInactive: true);
       if (!mounted) return;
-      setState(() { _products = rows; _loading = false; });
+      setState(() {
+        _products = rows.where((item) => item.isActive != _showArchived).toList(growable: false);
+        _loading = false;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() { _loading = false; _error = 'تعذر تحميل الأصناف: $error'; });
@@ -75,7 +79,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ])),
               FilledButton.icon(onPressed: _repository == null ? null : () => _edit(), icon: const Icon(Icons.add_rounded), label: const Text('إضافة صنف')),
             ]),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            Wrap(spacing: 8, children: [
+              ChoiceChip(
+                label: const Text('الأصناف النشطة'),
+                selected: !_showArchived,
+                onSelected: (_) {
+                  setState(() => _showArchived = false);
+                  _load();
+                },
+              ),
+              ChoiceChip(
+                label: const Text('الأصناف المؤرشفة'),
+                selected: _showArchived,
+                onSelected: (_) {
+                  setState(() => _showArchived = true);
+                  _load();
+                },
+              ),
+            ]),
+            const SizedBox(height: 10),
             TextField(
               controller: _search,
               onChanged: (_) => _load(),
@@ -128,17 +151,30 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}$barcodeText'),
                     isThreeLine: true,
                     trailing: PopupMenuButton<String>(
-                      onSelected: (value) { if (value == 'edit') _edit(item); if (value == 'archive') _archive(item); },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'edit', child: Text('تعديل الصنف')),
-                        PopupMenuItem(value: 'archive', child: Text('أرشفة الصنف')),
+                      onSelected: (value) {
+                        if (value == 'edit') _edit(item);
+                        if (value == 'archive') _archive(item);
+                        if (value == 'restore') _restore(item);
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'edit', child: Text('تعديل الصنف')),
+                        if (item.isActive)
+                          const PopupMenuItem(value: 'archive', child: Text('أرشفة الصنف'))
+                        else
+                          const PopupMenuItem(value: 'restore', child: Text('إعادة تفعيل الصنف')),
                       ],
                     ),
                   ));
                 },
               )),
             if (!_loading && _error == null)
-              Padding(padding: const EdgeInsets.only(top: 10), child: Text('عدد الأصناف النشطة: ${_products.length}', style: theme.textTheme.bodySmall)),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  _showArchived ? 'عدد الأصناف المؤرشفة: ${_products.length}' : 'عدد الأصناف النشطة: ${_products.length}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
           ]),
         ),
       ),
@@ -263,6 +299,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
     catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذرت الأرشفة: $error')));
+    }
+  }
+
+  // إعادة الصنف المؤرشف إلى قائمة الأصناف المتاحة للبيع والشراء.
+  Future<void> _restore(GroceryProduct item) async {
+    try {
+      await _repository!.restore(item.id!);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تمت إعادة تفعيل ${item.name}.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذرت إعادة تفعيل الصنف: $error')),
+      );
     }
   }
 
