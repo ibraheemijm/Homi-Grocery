@@ -323,10 +323,10 @@ void main() {
       end: end,
     );
 
-    expect(report.purchaseTotal, 0);
-    expect(report.purchaseCount, 0);
+    expect(report.purchaseTotal, 300);
+    expect(report.purchaseCount, 1);
     expect(report.supplierReturns, 125);
-    expect(report.netPurchasesTotal, -125);
+    expect(report.netPurchasesTotal, 175);
   });
 
   test('لا يعرض ربح الفترة إذا كان المرتجع الحالي يعود إلى فاتورة أقدم بلا تكلفة محفوظة', () async {
