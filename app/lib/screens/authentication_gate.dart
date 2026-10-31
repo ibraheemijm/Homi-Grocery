@@ -141,7 +141,6 @@ class _GateError extends StatelessWidget {
             ),
           ),
         ),
-        ),
       );
 }
 
