@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 15;
+  static const int _version = 16;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -96,6 +96,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 15) {
           await createCashShiftsSchema(db);
+        }
+        if (oldVersion < 16) {
+          await createCashierPermissionsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -500,6 +503,26 @@ class GroceryDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_users_role_active ON users(role, is_active)',
+    );
+    await createCashierPermissionsSchema(db);
+  }
+
+  /// صلاحيات الكاشير وحدود العمليات؛ عدم وجود سجل يعني المنع افتراضيًا.
+  static Future<void> createCashierPermissionsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cashier_permissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        permission_key TEXT NOT NULL,
+        is_allowed INTEGER NOT NULL DEFAULT 0 CHECK (is_allowed IN (0, 1)),
+        max_amount INTEGER CHECK (max_amount IS NULL OR max_amount >= 0),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(user_id, permission_key)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cashier_permissions_user ON cashier_permissions(user_id, permission_key)',
     );
   }
 
