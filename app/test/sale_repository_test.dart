@@ -569,6 +569,21 @@ void main() {
       ),
       throwsStateError,
     );
+    final freeProductId = await products.add(const GroceryProduct(
+      name: 'عينة مجانية', sellingPrice: 0, stockQuantity: 2,
+    ));
+    final freeProduct = (await products.getById(freeProductId))!;
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: freeProduct, quantity: 1)],
+        discount: 0,
+        paidAmount: 0,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
     expect(await sales.recentSales(), hasLength(1));
   });
 
