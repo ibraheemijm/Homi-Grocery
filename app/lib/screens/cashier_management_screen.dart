@@ -365,6 +365,24 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.info_outline_rounded),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'تنبيه: واجهة الكاشير والورديات وتطبيق حدود الصلاحيات لم تكتمل بعد. حساب الكاشير الجديد لن يفتح لوحة الإدارة أو ينفذ عمليات بيع حتى تكتمل هذه المرحلة.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       if (_cashiers.isEmpty)
                         const Card(
                           child: Padding(
