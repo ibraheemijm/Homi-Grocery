@@ -5,9 +5,9 @@ import '../data/customer_repository.dart';
 import '../data/grocery_database.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({this.userId, this.shiftId, super.key});
+  const CustomersScreen({required this.userId, this.shiftId, super.key});
 
-  final int? userId;
+  final int userId;
   final int? shiftId;
 
   @override
@@ -40,7 +40,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _load() async {
     if (_repository == null) return;
-    final rows = await _repository!.balances(userId: widget.userId!, query: _search.text);
+    final rows = await _repository!.balances(userId: widget.userId, query: _search.text);
     if (mounted) setState(() => _customers = rows);
   }
 
@@ -147,7 +147,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _showLedger(CustomerBalance customer) async {
     try {
-      final entries = await _repository!.ledger(customer.id, userId: widget.userId!);
+      final entries = await _repository!.ledger(customer.id, userId: widget.userId);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
