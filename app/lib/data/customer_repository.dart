@@ -142,6 +142,13 @@ class CustomerRepository {
       throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       if (userId != null) {
         final accounts = await txn.query(
           'users',
@@ -169,13 +176,6 @@ class CustomerRepository {
             throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
           }
         }
-      }
-      if (paymentMethod == 'نقدي' && userId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
       }
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
