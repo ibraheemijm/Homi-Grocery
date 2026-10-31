@@ -58,7 +58,7 @@ void main() {
       name: 'حليب منخفض', sellingPrice: 100, stockQuantity: 1, minimumQuantity: 2,
     ));
 
-    final stats = await DashboardRepository(database).load(now: DateTime.now());
+    final stats = await DashboardRepository(database).load(userId: managerId, now: DateTime.now());
     expect(stats.todaySales, 500);
     expect(stats.todayPaid, 200);
     expect(stats.customerDebt, 200);
@@ -90,7 +90,7 @@ void main() {
       userId: managerId);
     await sales.recordReturnRefund(saleId: sale.id, amount: 250, userId: managerId);
 
-    final stats = await DashboardRepository(database).load(now: DateTime.now());
+    final stats = await DashboardRepository(database).load(userId: managerId, now: DateTime.now());
     expect(stats.todaySales, 250);
     expect(stats.todayPaid, 250);
   });
@@ -117,7 +117,7 @@ void main() {
       'created_at': '2026-01-02T10:00:00.000',
     });
 
-    final invoices = await DashboardRepository(database).loadRecentInvoices();
+    final invoices = await DashboardRepository(database).loadRecentInvoices(userId: managerId);
     expect(invoices.map((invoice) => invoice.invoiceNumber).toList(),
         ['INV-NEW', 'INV-OLD']);
     expect(invoices.first.customerName, 'زبون جديد');
@@ -125,7 +125,7 @@ void main() {
   });
 
   test('تتعامل مع قاعدة فواتير فارغة دون خطأ', () async {
-    final invoices = await DashboardRepository(database).loadRecentInvoices();
+    final invoices = await DashboardRepository(database).loadRecentInvoices(userId: managerId);
     expect(invoices, isEmpty);
   });
 
@@ -141,7 +141,7 @@ void main() {
       'created_at': '2026-01-03T10:00:00.000',
     });
 
-    final invoices = await DashboardRepository(database).loadRecentInvoices();
+    final invoices = await DashboardRepository(database).loadRecentInvoices(userId: managerId);
 
     expect(invoices.single.customerName, 'زبون نقدي');
   });
@@ -161,7 +161,7 @@ void main() {
       });
     }
 
-    final invoices = await DashboardRepository(database).loadRecentInvoices(limit: 2);
+    final invoices = await DashboardRepository(database).loadRecentInvoices(userId: managerId, limit: 2);
 
     expect(invoices.map((invoice) => invoice.invoiceNumber).toList(),
         ['INV-3', 'INV-2']);
