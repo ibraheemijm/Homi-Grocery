@@ -168,9 +168,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _salesRepository = SaleRepository(database);
       if (!widget.cashierMode) {
         _customersRepository = CustomerRepository(database);
-        if (!widget.cashierMode) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
-      }
       }
       _matches = await _productsRepository!.search('');
       if (!mounted) return;
