@@ -53,6 +53,38 @@ class CashierAccount {
       );
 }
 
+/// إعداد صلاحية واحدة للكاشير. الحد الفارغ يعني عدم وضع سقف مالي.
+class CashierPermissionSetting {
+  const CashierPermissionSetting({
+    required this.key,
+    required this.label,
+    required this.isAllowed,
+    this.maxAmount,
+  });
+
+  final String key;
+  final String label;
+  final bool isAllowed;
+  final int? maxAmount;
+}
+
+/// الصلاحيات التي يمكن للمدير ضبطها لكل حساب كاشير.
+const Map<String, String> cashierPermissionLabels = {
+  'credit_sales': 'البيع بالدين أو الدفع الجزئي',
+  'discounts': 'تقديم خصم على الفاتورة',
+  'returns': 'تسجيل مرتجعات البيع',
+  'return_refunds': 'رد مبالغ المرتجعات',
+  'customer_collections': 'تحصيل ديون الزبائن',
+  'cash_expenses': 'تسجيل المصروفات النقدية',
+  'supplier_purchases': 'تسجيل فواتير الشراء',
+  'supplier_payments': 'سداد مستحقات الموردين',
+  'view_customer_data': 'عرض بيانات ودفتر الزبائن',
+  'view_supplier_data': 'عرض بيانات الموردين',
+  'view_invoice_history': 'عرض سجل الفواتير',
+  'view_reports': 'عرض التقارير',
+  'stock_adjustments': 'تسوية المخزون وحركاته',
+};
+
 class AuthException implements Exception {
   const AuthException(this.message);
   final String message;
@@ -211,6 +243,93 @@ class AuthRepository {
     return AuthUser.fromMap(row);
   }
 
+
+  /// يعيد الصلاحيات المضبوطة، ويعامل الصلاحية غير المسجلة على أنها ممنوعة.
+  Future<List<CashierPermissionSetting>> getCashierPermissions({
+    required AuthUser manager,
+    required int cashierId,
+  }) async {
+    await _requireActiveManager(_database, manager.id);
+    final cashierRows = await _database.query(
+      'users',
+      columns: ['id'],
+      where: "id = ? AND role = 'cashier'",
+      whereArgs: [cashierId],
+      limit: 1,
+    );
+    if (cashierRows.isEmpty) {
+      throw const AuthException('حساب الكاشير غير موجود.');
+    }
+    final rows = await _database.query(
+      'cashier_permissions',
+      where: 'user_id = ?',
+      whereArgs: [cashierId],
+    );
+    final saved = {
+      for (final row in rows) row['permission_key'] as String: row,
+    };
+    return cashierPermissionLabels.entries.map((entry) {
+      final row = saved[entry.key];
+      return CashierPermissionSetting(
+        key: entry.key,
+        label: entry.value,
+        isAllowed: row?['is_allowed'] == 1,
+        maxAmount: (row?['max_amount'] as num?)?.toInt(),
+      );
+    }).toList(growable: false);
+  }
+
+  /// يحفظ المدير إعدادات الكاشير ذريًا ويسجل كل تغيير في سجل التدقيق.
+  Future<void> saveCashierPermissions({
+    required AuthUser manager,
+    required int cashierId,
+    required List<CashierPermissionSetting> permissions,
+  }) async {
+    final keys = permissions.map((permission) => permission.key).toSet();
+    if (keys.length != permissions.length ||
+        permissions.any((permission) =>
+            !cashierPermissionLabels.containsKey(permission.key) ||
+            (permission.maxAmount != null && permission.maxAmount! < 0))) {
+      throw const AuthException('إعدادات الصلاحيات أو الحدود المالية غير صالحة.');
+    }
+
+    await _database.transaction((txn) async {
+      final managerUsername = await _requireActiveManager(txn, manager.id);
+      final cashiers = await txn.query(
+        'users',
+        columns: ['id'],
+        where: "id = ? AND role = 'cashier'",
+        whereArgs: [cashierId],
+        limit: 1,
+      );
+      if (cashiers.isEmpty) {
+        throw const AuthException('حساب الكاشير غير موجود.');
+      }
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      for (final permission in permissions) {
+        await txn.insert(
+          'cashier_permissions',
+          {
+            'user_id': cashierId,
+            'permission_key': permission.key,
+            'is_allowed': permission.isAllowed ? 1 : 0,
+            'max_amount': permission.maxAmount,
+            'updated_by': manager.id,
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await _writeAudit(
+          txn,
+          userId: manager.id,
+          username: managerUsername,
+          action: 'cashier_permission_updated:$cashierId:${permission.key}:${permission.isAllowed}:${permission.maxAmount ?? 'unlimited'}',
+          createdAt: now,
+        );
+      }
+    });
+  }
 
   /// عرض حسابات الكاشير للمدير فقط، دون إرجاع بيانات كلمات المرور.
   Future<List<CashierAccount>> listCashiers({required AuthUser manager}) async {
