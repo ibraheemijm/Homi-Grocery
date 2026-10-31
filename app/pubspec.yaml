@@ -1,0 +1,44 @@
+name: homi_grocery
+description: Homi Grocery - Arabic-first offline grocery management for Linux and Android.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # مكتبات قاعدة SQLite المحلية لدعم Linux وAndroid.
+  sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.6
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  file_picker: ^10.3.7
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  # تجزئة كلمات المرور محليًا باستخدام HMAC-SHA256.
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/fonts/Amiri-Regular.ttf
+    - assets/fonts/Amiri-Bold.ttf
+    - assets/fonts/LICENSE-Cairo-OFL.txt
+    - assets/fonts/LICENSE-Amiri-OFL.txt
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo.ttf
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+          weight: 700

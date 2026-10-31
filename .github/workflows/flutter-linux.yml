@@ -1,0 +1,50 @@
+name: Flutter Linux checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# إلغاء الفحوصات الأقدم عند وصول تعديل أحدث إلى الفرع نفسه.
+concurrency:
+  group: flutter-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Run widget tests
+        run: flutter test
+      - name: Prepare Linux desktop platform
+        run: flutter create --platforms=linux .
+      - name: Build Linux desktop
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          flutter config --enable-linux-desktop
+          flutter build linux
+
+      - name: Upload Linux desktop bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: homi-grocery-linux-x64
+          path: app/build/linux/x64/release/bundle/
+          if-no-files-found: error
+          retention-days: 14

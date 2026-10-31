@@ -1,0 +1,290 @@
+// النسخ الاحتياطي والاستعادة: لا يستبدل قاعدة البيانات قبل فحص النسخة.
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'grocery_database.dart';
+
+class BackupRepository {
+  BackupRepository(
+    this._database, {
+    Future<void> Function()? closeForMaintenance,
+    Future<Database> Function()? openRestoredDatabase,
+    Future<Directory> Function()? resolveBackupDirectory,
+  })  : _closeForMaintenance = closeForMaintenance ?? GroceryDatabase.closeForMaintenance,
+        _openRestoredDatabase = openRestoredDatabase ?? GroceryDatabase.open,
+        _resolveBackupDirectory = resolveBackupDirectory;
+
+  final Database _database;
+  final Future<void> Function() _closeForMaintenance;
+  final Future<Database> Function() _openRestoredDatabase;
+  final Future<Directory> Function()? _resolveBackupDirectory;
+
+  Future<Directory> backupDirectory() async {
+    if (_resolveBackupDirectory != null) {
+      final directory = await _resolveBackupDirectory();
+      await directory.create(recursive: true);
+      return directory;
+    }
+    final support = await getApplicationSupportDirectory();
+    final directory = Directory(p.join(support.path, 'backups'));
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  /// Returns managed local backups newest first; unrelated files are ignored.
+  Future<List<File>> listBackups() async {
+    final directory = await backupDirectory();
+    final files = <File>[];
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basename(entity.path);
+      if (!name.startsWith('homi-grocery-') || !name.endsWith('.db')) continue;
+      try {
+        await validateBackup(entity.path);
+        files.add(entity);
+      } on FormatException {
+        // Do not present corrupt or unsupported files as restorable backups.
+      } on FileSystemException {
+        // Ignore files that disappear while the list is being read.
+      }
+    }
+    files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    return files;
+  }
+
+  /// Deletes only a managed backup in the application's backup directory.
+  Future<void> deleteBackup(String path) async {
+    final directory = await backupDirectory();
+    final file = File(path);
+    final normalizedParent = p.normalize(directory.absolute.path);
+    final normalizedFile = p.normalize(file.absolute.path);
+    if (p.dirname(normalizedFile) != normalizedParent ||
+        !p.basename(normalizedFile).startsWith('homi-grocery-') ||
+        !p.basename(normalizedFile).endsWith('.db')) {
+      throw ArgumentError('يمكن حذف النسخ الاحتياطية التي يديرها التطبيق فقط.');
+    }
+    if (!await file.exists()) {
+      throw const FileSystemException('ملف النسخة الاحتياطية غير موجود.');
+    }
+    await file.delete();
+  }
+
+  Future<File> createBackup() async {
+    final directory = await backupDirectory();
+    final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+    final destination = File(p.join(directory.path, 'homi-grocery-$stamp.db'));
+    final escaped = destination.path.replaceAll("'", "''");
+    await _database.execute("VACUUM INTO '$escaped'");
+    await validateBackup(destination.path);
+    return destination;
+  }
+
+  Future<void> validateBackup(String path) async {
+    final file = File(path);
+    if (!await file.exists() || await file.length() < 100) {
+      throw const FormatException('ملف النسخة غير موجود أو حجمه غير صالح.');
+    }
+    Database? candidate;
+    try {
+      candidate = await databaseFactory.openDatabase(path);
+      final integrity = await candidate.rawQuery('PRAGMA integrity_check');
+      if (integrity.isEmpty || integrity.first.values.first != 'ok') {
+        throw const FormatException('فشل فحص سلامة قاعدة البيانات.');
+      }
+      // integrity_check لا يكشف مراجع المفاتيح الخارجية المكسورة؛ افحصها منفصلًا.
+      final foreignKeyViolations = await candidate.rawQuery('PRAGMA foreign_key_check');
+      if (foreignKeyViolations.isNotEmpty) {
+        throw const FormatException('النسخة تحتوي على علاقات بين الجداول غير سليمة.');
+      }
+      final versionRows = await candidate.rawQuery('PRAGMA user_version');
+      if (versionRows.isEmpty || versionRows.first.isEmpty) {
+        throw const FormatException('تعذر قراءة إصدار مخطط قاعدة البيانات.');
+      }
+      final version = (versionRows.first.values.first as num).toInt();
+      if (version < 1 || version > GroceryDatabase.schemaVersion) {
+        throw FormatException('إصدار مخطط قاعدة البيانات غير مدعوم: $version');
+      }
+
+      final tables = await candidate.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'");
+      final names = tables.map((row) => row['name']).whereType<String>().toSet();
+      // اسمح بالنسخ القديمة المدعومة؛ ستُرحّل عند فتحها بدل رفضها بسبب جداول أضيفت لاحقًا.
+      final required = <String>{'products', 'app_metadata'};
+      // sales and sale_items first entered the schema in version 2; older
+      // backups must be validated against the schema they actually contain.
+      if (version >= 2) required.addAll({'sales', 'sale_items'});
+      if (version >= 7) required.add('sale_return_refunds');
+      if (version >= 8) required.add('cash_transactions');
+      if (version >= 9) {
+        required.addAll({'supplier_returns', 'supplier_return_items'});
+      }
+      if (version >= 11) required.add('supplier_return_refunds');
+      if (version >= 15) required.add('cash_shifts');
+      if (version >= 12) {
+        required.addAll({
+          'local_notifications',
+          'delivery_publication_approvals',
+        });
+      }
+      if (!names.containsAll(required)) {
+        throw const FormatException('الملف لا يحتوي على جداول قاعدة Homi Grocery المتوقعة لإصداره.');
+      }
+      if (version >= 10) {
+        final saleItemColumns = await candidate.rawQuery('PRAGMA table_info(sale_items)');
+        if (!saleItemColumns.any((column) => column['name'] == 'cost_price')) {
+          throw const FormatException('النسخة لا تحتوي على عمود تكلفة الصنف المتوقع لإصدارها.');
+        }
+      }
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('تعذر فتح النسخة الاحتياطية أو فحصها.');
+    } finally {
+      await candidate?.close();
+    }
+  }
+
+  Future<void> restoreBackup(String sourcePath) async {
+    final source = File(sourcePath);
+    final targetPath = _database.path;
+    if (p.equals(p.normalize(source.absolute.path), p.normalize(File(targetPath).absolute.path))) {
+      throw ArgumentError('اختر ملف نسخة احتياطية، وليس قاعدة البيانات الحالية.');
+    }
+    await validateBackup(source.path);
+
+    final target = File(targetPath);
+    final parent = target.parent;
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final staged = File(p.join(parent.path, '.homi-restore-$stamp.db'));
+    final rollback = File(p.join(parent.path, '.homi-rollback-$stamp.db'));
+    var hadCurrent = false;
+    var maintenanceClosed = false;
+    var rollbackRecovered = false;
+    var restoreCompleted = false;
+    var restoreFailed = false;
+
+    try {
+      // Stage the source inside the protected block so partial copies are cleaned up.
+      await source.copy(staged.path);
+      hadCurrent = await target.exists();
+
+      try {
+        await _closeForMaintenance();
+        maintenanceClosed = true;
+      } catch (_) {
+        // A maintenance callback may close the connection before throwing.
+        // Reopen only when it actually left the injected database closed.
+        if (!_database.isOpen) await _openRestoredDatabase();
+        rethrow;
+      }
+
+      // Do not copy the live database: close SQLite first to avoid an inconsistent snapshot.
+      if (hadCurrent) {
+        await target.copy(rollback.path);
+        await validateBackup(rollback.path);
+      }
+      if (await target.exists()) await target.delete();
+      await staged.copy(target.path);
+      final restored = await _openRestoredDatabase();
+      await _validateOpenedDatabase(restored);
+      restoreCompleted = true;
+    } catch (_) {
+      restoreFailed = true;
+      if (maintenanceClosed) {
+        // A close callback can throw after closing the connection. Check the
+        // actual connection state before touching database files; if it is
+        // still open, preserve the rollback copy rather than replacing a live DB.
+        try {
+          await _closeForMaintenance();
+        } catch (_) {
+          if (_database.isOpen) rethrow;
+        }
+        if (_database.isOpen) rethrow;
+
+        try {
+          if (hadCurrent && await rollback.exists()) {
+            // Never replace the target with a rollback file that failed validation.
+            await validateBackup(rollback.path);
+            if (await target.exists()) await target.delete();
+            await rollback.copy(target.path);
+            rollbackRecovered = true;
+          } else if (!hadCurrent && await target.exists()) {
+            await target.delete();
+          }
+        } finally {
+          // Reopen the original database even if rollback itself fails.
+          await _openRestoredDatabase();
+        }
+      }
+      rethrow;
+    } finally {
+      // Cleanup must run even when staging or closing the database fails.
+      // A staging cleanup error must not prevent removing a rollback file after
+      // recovery completed, and must never replace the primary restore error.
+      Object? cleanupError;
+      StackTrace? cleanupStack;
+      try {
+        if (await staged.exists()) await staged.delete();
+      } catch (error, stack) {
+        cleanupError = error;
+        cleanupStack = stack;
+      }
+      // Keep the rollback copy if recovery failed; it may be the last recoverable copy.
+      if (restoreCompleted || rollbackRecovered) {
+        try {
+          if (await rollback.exists()) await rollback.delete();
+        } catch (error, stack) {
+          cleanupError ??= error;
+          cleanupStack ??= stack;
+        }
+      }
+      if (cleanupError != null && !restoreFailed) {
+        Error.throwWithStackTrace(cleanupError, cleanupStack!);
+      }
+    }
+  }
+
+  Future<void> _validateOpenedDatabase(Database database) async {
+    // فحص الملف بعد فتحه وترحيله، وليس الاكتفاء بفحص النسخة قبل الاستعادة.
+    final result = await database.rawQuery('PRAGMA integrity_check');
+    if (result.isEmpty || result.first.values.first != 'ok') {
+      throw const FormatException('قاعدة البيانات المستعادة لم تجتز فحص السلامة.');
+    }
+
+    final foreignKeyViolations = await database.rawQuery('PRAGMA foreign_key_check');
+    if (foreignKeyViolations.isNotEmpty) {
+      throw const FormatException('قاعدة البيانات المستعادة تحتوي على علاقات غير سليمة.');
+    }
+
+    final versionRows = await database.rawQuery('PRAGMA user_version');
+    final version = versionRows.isEmpty
+        ? 0
+        : (versionRows.first.values.first as num).toInt();
+    if (version != GroceryDatabase.schemaVersion) {
+      throw FormatException(
+        'لم يكتمل ترحيل قاعدة البيانات إلى الإصدار الحالي (${GroceryDatabase.schemaVersion}).',
+      );
+    }
+
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final names = tables.map((row) => row['name']).whereType<String>().toSet();
+    const requiredTables = {
+      'products', 'app_metadata', 'sales', 'sale_items', 'customers',
+      'customer_payments', 'stock_movements', 'sale_returns',
+      'sale_return_items', 'suppliers', 'purchases', 'purchase_items',
+      'supplier_payments', 'sale_return_refunds', 'cash_transactions',
+      'supplier_returns', 'supplier_return_items', 'supplier_return_refunds',
+      'local_notifications', 'delivery_publication_approvals', 'cash_shifts',
+    };
+    if (!names.containsAll(requiredTables)) {
+      throw const FormatException('المخطط المستعاد لا يحتوي على جميع جداول Homi Grocery المطلوبة.');
+    }
+
+    final rows = await database.rawQuery('SELECT COUNT(*) AS count FROM products');
+    if (rows.isEmpty || rows.first['count'] == null) {
+      throw const FormatException('تعذر التحقق من بيانات الأصناف بعد الاستعادة.');
+    }
+  }
+}
