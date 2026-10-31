@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 13;
+  static const int _version = 14;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -47,6 +47,7 @@ class GroceryDatabase {
         await createCostOfGoodsSchema(db);
         await createSupplierReturnRefundsSchema(db);
         await createNotificationsSchema(db);
+        await createAuthSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -88,6 +89,9 @@ class GroceryDatabase {
           if (!productColumns.any((column) => column['name'] == 'image_path')) {
             await db.execute('ALTER TABLE products ADD COLUMN image_path TEXT');
           }
+        }
+        if (oldVersion < 14) {
+          await createAuthSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -421,6 +425,41 @@ class GroceryDatabase {
 
 
   // سجل الإشعارات المحلي وسجل موافقات نشر الدليفري؛ لا يرسل أي بيانات للخارج.
+  // حسابات المستخدمين وسجل أحداث المصادقة؛ لا تُخزّن كلمات المرور بصيغتها الأصلية.
+  static Future<void> createAuthSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        display_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        password_salt TEXT NOT NULL,
+        password_iterations INTEGER NOT NULL CHECK (password_iterations >= 100000),
+        role TEXT NOT NULL CHECK (role IN ('manager', 'cashier')),
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+        locked_until TEXT,
+        created_at TEXT NOT NULL,
+        last_login_at TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS auth_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        username_snapshot TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_auth_audit_created ON auth_audit_log(created_at DESC, id DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_users_role_active ON users(role, is_active)',
+    );
+  }
+
   static Future<void> createNotificationsSchema(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS local_notifications (
