@@ -65,7 +65,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
     _customerSearchTimer = Timer(const Duration(milliseconds: 280), () async {
       try {
-        final matches = await _customersRepository!.balances(query: query);
+        final matches = await _customersRepository!.balances(userId: widget.userId!, query: query);
         if (!mounted ||
             request != _customerSearchRequest ||
             _customer.text.trim() != query) {
@@ -87,7 +87,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // عند حفظ الدين فقط نتحقق من الأسماء المشابهة، ولا نقاطع الكتابة بالتنبيهات.
   Future<String?> _resolveNewDebtCustomerName(String name) async {
-    final matches = await _customersRepository!.balances(query: name);
+    final matches = await _customersRepository!.balances(userId: widget.userId!, query: name);
     if (!mounted) return null;
     if (matches.isEmpty) return name;
 
