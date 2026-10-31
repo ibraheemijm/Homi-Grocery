@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 
 import '../data/grocery_database.dart';
 import '../data/invoice_print_service.dart';
+import '../data/sale_repository.dart';
 
 class InvoicesScreen extends StatefulWidget {
-  const InvoicesScreen({super.key});
+  const InvoicesScreen({required this.userId, super.key});
+
+  final int userId;
 
   @override
   State<InvoicesScreen> createState() => _InvoicesScreenState();
@@ -34,15 +37,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     try {
       final db = await GroceryDatabase.open();
       final query = _search.text.trim();
-      final rows = await db.rawQuery('''
-        SELECT s.id, s.invoice_number, s.customer_name, s.total,
-          s.paid_amount, s.payment_method, s.created_at,
-          (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
-        FROM sales s
-        WHERE (? = '' OR s.invoice_number LIKE ? OR COALESCE(s.customer_name, '') LIKE ?)
-        ORDER BY s.id DESC
-        LIMIT 200
-      ''', [query, '%$query%', '%$query%']);
+      final rows = await SaleRepository(db).invoiceHistory(
+        userId: widget.userId,
+        query: query,
+      );
       if (!mounted) return;
       setState(() {
         _invoices = rows;
@@ -63,6 +61,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     setState(() => _printing = true);
     try {
       final db = await GroceryDatabase.open();
+      await SaleRepository(db).requireInvoiceHistoryAccess(widget.userId);
       await InvoicePrintService(db).printInvoice(invoice['id'] as int, thermal: thermal);
     } catch (error) {
       if (!mounted) return;
@@ -79,6 +78,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     setState(() => _printing = true);
     try {
       final db = await GroceryDatabase.open();
+      await SaleRepository(db).requireInvoiceHistoryAccess(widget.userId);
       final path = await InvoicePrintService(db).saveInvoicePdf(
         invoice['id'] as int,
         thermal: thermal,
