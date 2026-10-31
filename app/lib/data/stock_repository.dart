@@ -56,8 +56,37 @@ class StockRepository {
     'بيع',
   };
 
-  /// يسجل الحركة ويحدّث رصيد الصنف في معاملة واحدة.
+  /// يتحقق من هوية المستخدم وصلاحية الكاشير قبل أي تعديل يدوي للمخزون.
+  Future<void> _requireAdjustmentPermission(Transaction txn, int userId) async {
+    final accounts = await txn.query(
+      'users',
+      columns: ['role', 'is_active'],
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير موجود أو غير نشط.');
+    }
+    final role = accounts.single['role'] as String;
+    if (role == 'manager') return;
+    if (role != 'cashier') throw StateError('نوع الحساب غير مسموح له بتعديل المخزون.');
+
+    final permissions = await txn.query(
+      'cashier_permissions',
+      columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'stock_adjustments'",
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية تسويات المخزون.');
+    }
+  }
+
+  /// يسجل الحركة ويحدّث رصيد الصنف في معاملة واحدة بعد التحقق من المستخدم.
   Future<StockMovement> recordMovement({
+    required int userId,
     required int productId,
     required String movementType,
     required double quantityDelta,
@@ -73,6 +102,7 @@ class StockRepository {
     }
 
     return _database.transaction((txn) async {
+      await _requireAdjustmentPermission(txn, userId);
       final rows = await txn.query(
         'products',
         columns: ['id', 'stock_quantity'],
