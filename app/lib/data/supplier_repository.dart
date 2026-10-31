@@ -246,15 +246,28 @@ class SupplierRepository {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
         if (accounts.single['role'] == 'cashier') {
-          final limit = await _cashierLimit(
+          final purchaseLimit = await _cashierLimit(
             txn,
             userId: userId,
             permissionKey: 'supplier_purchases',
             label: 'تسجيل فواتير الشراء',
           );
-          if (limit != null && total > limit) {
-            throw StateError('قيمة فاتورة الشراء تتجاوز الحد المسموح ($limit ج.س).');
+          if (purchaseLimit != null && total > purchaseLimit) {
+            throw StateError('قيمة فاتورة الشراء تتجاوز الحد المسموح ($purchaseLimit ج.س).');
           }
+          if (paidAmount > 0) {
+            final paymentLimit = await _cashierLimit(
+              txn,
+              userId: userId,
+              permissionKey: 'supplier_payments',
+              label: 'سداد مستحقات الموردين',
+            );
+            if (paymentLimit != null && paidAmount > paymentLimit) {
+              throw StateError('المبلغ المدفوع مع الفاتورة يتجاوز الحد المسموح ($paymentLimit ج.س).');
+            }
+          }
+        } else if (accounts.single['role'] != 'manager') {
+          throw StateError('نوع الحساب غير مصرح له بتسجيل فاتورة شراء.');
         }
       }
       final now = DateTime.now().toUtc().toIso8601String();
@@ -626,6 +639,8 @@ class SupplierRepository {
           if (limit != null && amount > limit) {
             throw StateError('دفعة المورد تتجاوز الحد المسموح ($limit ج.س).');
           }
+        } else if (accounts.single['role'] != 'manager') {
+          throw StateError('نوع الحساب غير مصرح له بسداد مستحقات الموردين.');
         }
       }
       final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
