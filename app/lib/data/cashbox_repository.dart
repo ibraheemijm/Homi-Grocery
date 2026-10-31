@@ -74,7 +74,31 @@ class CashboxRepository {
   CashboxRepository(this._database);
   final Database _database;
 
-  Future<CashboxSummary> summary({DateTime? day}) async {
+  // يمنع قراءة بيانات الخزينة دون حساب نشط وصلاحية صريحة للكاشير.
+  Future<void> _requireReadAccess(int userId) async {
+    final accounts = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (accounts.single['role'] == 'manager') return;
+    if (accounts.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض الخزينة.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_cashbox'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض الخزينة.');
+    }
+  }
+
+  Future<CashboxSummary> summary({required int userId, DateTime? day}) async {
+    await _requireReadAccess(userId);
     final selected = day ?? DateTime.now();
     final localStart = DateTime(selected.year, selected.month, selected.day);
     final start = localStart.toUtc().toIso8601String();
@@ -106,7 +130,8 @@ class CashboxRepository {
     );
   }
 
-  Future<List<CashTransaction>> recent({DateTime? day, String? paymentMethod, int limit = 100}) async {
+  Future<List<CashTransaction>> recent({required int userId, DateTime? day, String? paymentMethod, int limit = 100}) async {
+    await _requireReadAccess(userId);
     final selected = day ?? DateTime.now();
     final localStart = DateTime(selected.year, selected.month, selected.day);
     final start = localStart.toUtc().toIso8601String();
@@ -129,7 +154,7 @@ class CashboxRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
-    int? userId,
+    required int userId,
     int? shiftId,
   }) async {
     if (!const ['in', 'out'].contains(direction)) {
@@ -142,14 +167,14 @@ class CashboxRepository {
       throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
-      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+      if (paymentMethod.trim() == 'نقدي') {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
           userId: userId,
         );
       }
-      if (userId != null) {
+      {
         final accounts = await txn.query(
           'users',
           columns: ['role', 'is_active'],
