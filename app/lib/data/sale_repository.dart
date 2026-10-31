@@ -2,6 +2,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import 'product_repository.dart';
+import 'cash_shift_repository.dart';
 
 class SaleLine {
   const SaleLine({required this.product, required this.quantity});
@@ -127,6 +128,13 @@ class SaleRepository {
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
+      if (paidAmount > 0 && paymentChannel == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final normalizedCustomer = hasDebt ? customerName?.trim() : null;
       var linkedCustomerId = hasDebt ? customerId : null;
       if (hasDebt && linkedCustomerId != null) {
@@ -404,6 +412,13 @@ class SaleRepository {
       throw ArgumentError('ربط رد المبلغ بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
+      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final sales = await txn.query(
         'sales',
         columns: ['id'],
