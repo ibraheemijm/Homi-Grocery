@@ -62,6 +62,36 @@ void main() {
   });
 
 
+  test('يحسب بيع نصف وربع الكيلوجرام ويخصم الوزن الكسري من المخزون', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر',
+      unit: 'كيلوجرام',
+      sellingPrice: 2000,
+      stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    final halfKilo = SaleLine(product: product, quantity: 0.5);
+    final quarterKilo = SaleLine(product: product, quantity: 0.25);
+
+    expect(halfKilo.lineTotal, 1000);
+    expect(quarterKilo.lineTotal, 500);
+
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 0.75)],
+      discount: 0,
+      paidAmount: 1500,
+      paymentMethod: 'نقدي',
+    );
+
+    expect(sale.total, 1500);
+    expect((await products.getById(productId))!.stockQuantity, 1.25);
+    final item = (await database.query(
+      'sale_items', where: 'sale_id = ?', whereArgs: [sale.id],
+    )).single;
+    expect(item['quantity'], 0.75);
+    expect(item['unit'], 'كيلوجرام');
+  });
+
   test('البيع النقدي لا يحفظ اسم الزبون ولا ينشئ حسابًا حتى مع تطابق الاسم', () async {
     await database.insert('customers', {
       'name': 'محمد أحمد',
