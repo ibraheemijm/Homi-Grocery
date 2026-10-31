@@ -57,6 +57,29 @@ class CashShiftRepository {
 
   final Database _database;
 
+  /// يتحقق من ملكية الوردية وحالتها قبل أي حركة نقدية مرتبطة بمستخدم.
+  /// يسمح بغياب المستخدم والوردية فقط للاستدعاءات القديمة غير المرتبطة بجلسة.
+  static Future<void> validateActiveShift(
+    DatabaseExecutor executor, {
+    required int? shiftId,
+    required int? userId,
+  }) async {
+    if (shiftId == null && userId == null) return;
+    if (shiftId == null || userId == null) {
+      throw const CashShiftException('الحركة النقدية تتطلب مستخدمًا ووردية نشطة.');
+    }
+    final rows = await executor.query(
+      'cash_shifts',
+      columns: ['id'],
+      where: "id = ? AND user_id = ? AND status = 'open'",
+      whereArgs: [shiftId, userId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw const CashShiftException('الوردية غير نشطة أو لا تخص المستخدم الحالي.');
+    }
+  }
+
   static const String _selectShift = '''
     SELECT s.*, u.display_name
     FROM cash_shifts s
