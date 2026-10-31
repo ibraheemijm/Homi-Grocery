@@ -10,11 +10,19 @@ import 'package:homi_grocery/data/sale_repository.dart';
 
 void main() {
   late Database database;
+  late int managerId;
 
   setUp(() async {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'dashboard_manager', 'display_name': 'مدير اللوحة',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
@@ -42,7 +50,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'زبون اللوحة',
     );
-    final customer = (await customers.balances()).single;
+    final customer = (await customers.balances(userId: managerId)).single;
     await customers.recordPayment(customerId: customer.id, amount: 100);
 
     await products.add(const GroceryProduct(
