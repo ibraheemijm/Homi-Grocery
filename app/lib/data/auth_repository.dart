@@ -1,7 +1,6 @@
 // إدارة الحسابات المحلية وتسجيل الدخول دون إرسال بيانات الاعتماد إلى أي خادم.
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
