@@ -332,7 +332,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 : _selectedIndex == 8
                                                     ? const SettingsScreen()
                                                     : _selectedIndex == 9
-                                        ? const StockMovementsScreen()
+                                        ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
                                             ? const NotificationsScreen()
                                             : _selectedIndex == 11
