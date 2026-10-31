@@ -127,6 +127,27 @@ class SaleRepository {
     ''', [normalized, '%$normalized%', '%$normalized%', limit]);
   }
 
+  Future<void> _requireReturnReadAccess(int userId) async {
+    final accounts = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'manager') return;
+    if (role != 'cashier') throw StateError('نوع الحساب غير مصرح له بقراءة بيانات المرتجعات.');
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'returns'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية قراءة بيانات المرتجعات.');
+    }
+  }
+
   // حفظ الفاتورة وبنودها وتحديث المخزون في معاملة واحدة.
   Future<SaleRecord> createSale({
     required List<SaleLine> lines,
@@ -509,26 +530,7 @@ class SaleRepository {
 
   /// الحد المتبقي من النقد الذي يمكن رده فعليًا بعد أن غطت المرتجعات دين الفاتورة الأصلي.
   Future<int> maximumRefundableAmount(int saleId, {required int userId}) async {
-    final accounts = await _database.query(
-      'users', columns: ['role', 'is_active'],
-      where: 'id = ?', whereArgs: [userId], limit: 1,
-    );
-    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
-      throw StateError('الحساب غير نشط أو غير موجود.');
-    }
-    final role = accounts.single['role'];
-    if (role == 'cashier') {
-      await _database.transaction((txn) async {
-        await _requireCashierPermission(
-          txn,
-          userId: userId,
-          permissionKey: 'returns',
-          permissionLabel: 'تسجيل مرتجعات البيع',
-        );
-      });
-    } else if (role != 'manager') {
-      throw StateError('لا يملك المستخدم صلاحية عرض مبلغ المرتجع المتاح.');
-    }
+    await _requireReturnReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT MAX(0,
         COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
@@ -641,7 +643,8 @@ class SaleRepository {
   }
 
   /// مجموع الكميات المرتجعة لبند فاتورة.
-  Future<double> returnedQuantity(int saleItemId) async {
+  Future<double> returnedQuantity(int saleItemId, {required int userId}) async {
+    await _requireReturnReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT COALESCE(SUM(quantity), 0) AS quantity
       FROM sale_return_items WHERE sale_item_id = ?
