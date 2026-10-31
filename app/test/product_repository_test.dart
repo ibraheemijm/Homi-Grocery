@@ -85,6 +85,7 @@ void main() {
       'sale_id': sale.single['id'],
       'product_id': usedId,
       'product_name': 'منتج مستخدم',
+      'unit': 'حبة',
       'quantity': 1,
       'unit_price': 100,
       'line_total': 100,
