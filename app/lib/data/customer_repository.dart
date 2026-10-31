@@ -142,6 +142,34 @@ class CustomerRepository {
       throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          final permissions = await txn.query(
+            'cashier_permissions',
+            columns: ['is_allowed', 'max_amount'],
+            where: "user_id = ? AND permission_key = 'customer_collections'",
+            whereArgs: [userId],
+            limit: 1,
+          );
+          if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+            throw StateError('لا يملك الكاشير صلاحية تحصيل ديون الزبائن.');
+          }
+          final limit = (permissions.single['max_amount'] as num?)?.toInt();
+          if (limit != null && amount > limit) {
+            throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
+          }
+        }
+      }
       if (paymentMethod == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
