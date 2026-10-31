@@ -34,6 +34,30 @@ void main() {
 
   tearDown(() async => database.close());
 
+  test('يحمي ملخص اللوحة وسجل الفواتير بصلاحيات القراءة المخصصة', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'dashboard_reader', 'display_name': 'قارئ اللوحة',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final dashboard = DashboardRepository(database);
+    await expectLater(dashboard.load(userId: cashierId), throwsA(isA<StateError>()));
+    await expectLater(dashboard.loadRecentInvoices(userId: cashierId), throwsA(isA<StateError>()));
+
+    for (final key in ['view_reports', 'view_invoice_history']) {
+      await database.insert('cashier_permissions', {
+        'user_id': cashierId,
+        'permission_key': key,
+        'is_allowed': 1,
+        'max_amount': null,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
+    expect(await dashboard.load(userId: cashierId), isA<DashboardStats>());
+    expect(await dashboard.loadRecentInvoices(userId: cashierId), isEmpty);
+  });
+
   test('تحسب المبيعات والمدفوعات والديون والأصناف المنخفضة من قاعدة البيانات', () async {
     final products = ProductRepository(database);
     final sales = SaleRepository(database);
