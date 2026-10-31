@@ -164,7 +164,6 @@ void main() {
   });
 
   test('يشترط الوردية النشطة لاسترداد مرتجع المورد نقدًا', () async {
-    final auth = AuthRepository(database);
     final manager = managerAccount;
     final shift = await CashShiftRepository(database).openShift(
       userId: manager.id,
