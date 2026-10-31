@@ -8,6 +8,7 @@ class DailyReport {
     required this.salesCount,
     required this.purchaseTotal,
     required this.purchaseCount,
+    required this.supplierReturns,
     required this.customerCollections,
     required this.supplierPayments,
     required this.supplierRefunds,
@@ -28,6 +29,7 @@ class DailyReport {
   final int salesCount;
   final int purchaseTotal;
   final int purchaseCount;
+  final int supplierReturns;
   final int customerCollections;
   final int supplierPayments;
   final int supplierRefunds;
@@ -69,6 +71,9 @@ class PeriodReport {
     required this.salesTotal,
     required this.salesCount,
     required this.returnsTotal,
+    required this.purchaseTotal,
+    required this.purchaseCount,
+    required this.supplierReturns,
     required this.products,
     required this.grossProfit,
   });
@@ -79,10 +84,14 @@ class PeriodReport {
   final int salesTotal;
   final int salesCount;
   final int returnsTotal;
+  final int purchaseTotal;
+  final int purchaseCount;
+  final int supplierReturns;
   final List<BestSellingProduct> products;
   /// null عندما تتضمن الفترة تكلفة تاريخية مجهولة لأي بيع أو مرتجع.
   final int? grossProfit;
   int get netSalesTotal => salesTotal - returnsTotal;
+  int get netPurchasesTotal => purchaseTotal - supplierReturns;
 }
 
 class ReportsRepository {
@@ -114,6 +123,14 @@ class ReportsRepository {
         COALESCE((SELECT SUM(amount) FROM sale_returns
           WHERE created_at >= ? AND created_at < ?), 0) AS returns_total
     ''', [utcStart, utcEnd, utcStart, utcEnd, utcStart, utcEnd]);
+    final purchases = await _database.rawQuery('''
+      SELECT COALESCE(SUM(total), 0) AS total, COUNT(*) AS count
+      FROM purchases WHERE created_at >= ? AND created_at < ?
+    ''', [utcStart, utcEnd]);
+    final supplierReturns = await _database.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM supplier_returns WHERE created_at >= ? AND created_at < ?
+    ''', [utcStart, utcEnd]);
     final cost = await _database.rawQuery('''
       SELECT
         COALESCE(SUM(si.cost_price * si.quantity), 0) AS sold_cost,
@@ -174,6 +191,9 @@ class ReportsRepository {
       salesTotal: (totals.single['sales_total'] as num).toInt(),
       salesCount: (totals.single['sales_count'] as num).toInt(),
       returnsTotal: (totals.single['returns_total'] as num).toInt(),
+      purchaseTotal: (purchases.single['total'] as num).toInt(),
+      purchaseCount: (purchases.single['count'] as num).toInt(),
+      supplierReturns: (supplierReturns.single['total'] as num).toInt(),
       grossProfit: ((cost.single['missing_costs'] as num? ?? 0).toInt() > 0 ||
               (returnedCost.single['missing_costs'] as num? ?? 0).toInt() > 0)
           ? null
@@ -230,6 +250,10 @@ class ReportsRepository {
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM customer_payments WHERE created_at >= ? AND created_at < ?
     ''', [start, end]);
+    final supplierReturns = await _database.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM supplier_returns WHERE created_at >= ? AND created_at < ?
+    ''', [start, end]);
     final supplierPayments = await _database.rawQuery('''
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM supplier_payments WHERE created_at >= ? AND created_at < ?
@@ -263,6 +287,7 @@ class ReportsRepository {
       salesCount: (sales.single['count'] as num).toInt(),
       purchaseTotal: (purchases.single['total'] as num).toInt(),
       purchaseCount: (purchases.single['count'] as num).toInt(),
+      supplierReturns: (supplierReturns.single['total'] as num).toInt(),
       customerCollections: (customerCollections.single['total'] as num).toInt(),
       supplierPayments: (supplierPayments.single['total'] as num).toInt(),
       supplierRefunds: (supplierRefunds.single['total'] as num).toInt(),
