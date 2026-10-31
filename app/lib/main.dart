@@ -315,11 +315,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : _selectedIndex == 2
                                 ? const InvoicesScreen()
                             : _selectedIndex == 3
-                                ? const CustomersScreen()
+                                ? CustomersScreen(userId: widget.user.id)
                                 : _selectedIndex == 4
                                     ? const ProductsScreen()
                                     : _selectedIndex == 5
-                                        ? const SuppliersScreen()
+                                        ? SuppliersScreen(userId: widget.user.id)
                                         : _selectedIndex == 6
                                             ? CashboxScreen(userId: widget.user.id)
                                             : _selectedIndex == 7
