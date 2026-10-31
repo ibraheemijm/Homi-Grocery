@@ -11,6 +11,7 @@ void main() {
   late CashboxRepository cashbox;
   late AuthRepository auth;
   late CashShiftRepository shifts;
+  late int managerId;
 
   setUp(() async {
     sqfliteFfiInit();
@@ -21,27 +22,34 @@ void main() {
     await GroceryDatabase.createCashShiftsSchema(database);
     auth = AuthRepository(database);
     shifts = CashShiftRepository(database);
+    managerId = await database.insert('users', {
+      'username': 'cashbox_test_manager', 'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     cashbox = CashboxRepository(database);
   });
 
   tearDown(() async => database.close());
 
   test('يحسب المقبوضات والمدفوعات اليومية والرصيد التراكمي', () async {
+    final managerShiftId = (await shifts.openShift(userId: managerId, openingCash: 0)).id;
     await cashbox.recordManualMovement(
-      direction: 'in', category: 'دخل متنوع', amount: 1500,
+      direction: 'in', category: 'دخل متنوع', amount: 1500, userId: managerId, shiftId: managerShiftId,
     );
     await cashbox.recordManualMovement(
-      direction: 'out', category: 'كهرباء', amount: 400,
-    );
-
-    await cashbox.recordManualMovement(
-      direction: 'in', category: 'تحويل وارد', amount: 700, paymentMethod: 'تحويل بنكي',
-    );
-    await cashbox.recordManualMovement(
-      direction: 'out', category: 'تحويل صادر', amount: 100, paymentMethod: 'تحويل بنكي',
+      direction: 'out', category: 'كهرباء', amount: 400, userId: managerId, shiftId: managerShiftId,
     );
 
-    final summary = await cashbox.summary();
+    await cashbox.recordManualMovement(
+      direction: 'in', category: 'تحويل وارد', amount: 700, paymentMethod: 'تحويل بنكي', userId: managerId,
+    );
+    await cashbox.recordManualMovement(
+      direction: 'out', category: 'تحويل صادر', amount: 100, paymentMethod: 'تحويل بنكي', userId: managerId,
+    );
+
+    final summary = await cashbox.summary(userId: managerId);
     expect(summary.todayIncome, 2200);
     expect(summary.todayExpense, 500);
     expect(summary.todayNet, 1700);
@@ -53,29 +61,25 @@ void main() {
     expect(summary.todayBankExpense, 100);
     expect(summary.todayCashNet, 1100);
     expect(summary.todayBankNet, 600);
-    expect(await cashbox.recent(), hasLength(4));
-    expect(await cashbox.recent(paymentMethod: 'نقدي'), hasLength(2));
-    expect(await cashbox.recent(paymentMethod: 'تحويل بنكي'), hasLength(2));
+    expect(await cashbox.recent(userId: managerId), hasLength(4));
+    expect(await cashbox.recent(userId: managerId, paymentMethod: 'نقدي'), hasLength(2));
+    expect(await cashbox.recent(userId: managerId, paymentMethod: 'تحويل بنكي'), hasLength(2));
   });
 
   test('يرفض المبالغ غير الصالحة واتجاه الحركة غير المعروف', () async {
     await expectLater(
-      cashbox.recordManualMovement(direction: 'in', category: 'دخل', amount: 0),
+      cashbox.recordManualMovement(direction: 'in', category: 'دخل', amount: 0, userId: managerId),
       throwsArgumentError,
     );
     await expectLater(
-      cashbox.recordManualMovement(direction: 'unknown', category: 'دخل', amount: 10),
+      cashbox.recordManualMovement(direction: 'unknown', category: 'دخل', amount: 10, userId: managerId),
       throwsArgumentError,
     );
-    expect(await cashbox.recent(), isEmpty);
+    expect(await cashbox.recent(userId: managerId), isEmpty);
   });
 
   test('يربط الحركة اليدوية النقدية بالمستخدم والوردية ولا يربط التحويل بالدرج', () async {
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = AuthUser(id: managerId, username: 'cashbox_test_manager', displayName: 'مدير الاختبار', role: 'manager');
     final shift = await shifts.openShift(userId: manager.id, openingCash: 0);
     await cashbox.recordManualMovement(
       direction: 'in',
@@ -100,11 +104,7 @@ void main() {
   });
 
   test('يرفض الحركة النقدية إذا كانت الوردية لمستخدم آخر أو مغلقة', () async {
-    final manager = await auth.createInitialManager(
-      username: 'store_admin',
-      displayName: 'مدير المتجر',
-      password: 'StrongPass!2026',
-    );
+    final manager = AuthUser(id: managerId, username: 'cashbox_test_manager', displayName: 'مدير الاختبار', role: 'manager');
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashier_one',
@@ -137,11 +137,7 @@ void main() {
   });
 
   test('يقيد مصروفات الكاشير بصلاحية وحد مالي ويرفض الإيرادات اليدوية', () async {
-    final manager = await auth.createInitialManager(
-      username: 'cashbox_manager',
-      displayName: 'المدير',
-      password: 'ManagerPass!2026',
-    );
+    final manager = AuthUser(id: managerId, username: 'cashbox_test_manager', displayName: 'مدير الاختبار', role: 'manager');
     final cashier = await auth.createCashier(
       manager: manager,
       username: 'cashbox_cashier',
@@ -206,7 +202,7 @@ void main() {
       userId: cashier.id,
       shiftId: shift.id,
     );
-    final movement = (await cashbox.recent()).single;
+    final movement = (await cashbox.recent(userId: managerId)).single;
     expect(movement.amount, 200);
     expect(movement.direction, 'out');
   });
