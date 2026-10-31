@@ -36,7 +36,7 @@ void main() {
     final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
     final purchase = await suppliers.createPurchase(
       supplierId: supplierId,
-      lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كيلوجرام', quantity: 3, unitCost: 120)],
+      lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كيلوجرام', quantity: 3, unitCost: 120, sellingPrice: 180)],
       discount: 20,
       paidAmount: 100,
       paymentMethod: 'جزئي',
@@ -106,6 +106,7 @@ void main() {
     );
 
     expect((await products.getById(productId))!.stockQuantity, 3);
+    expect((await products.getById(productId))!.sellingPrice, 180);
     expect(await database.query('purchases'), isEmpty);
     expect(await database.query('purchase_items'), isEmpty);
     expect(await database.query('stock_movements', where: "reference_type = 'purchase'"), isEmpty);
