@@ -161,6 +161,10 @@ void main() {
     );
     expect((await products.getById(productId))!.stockQuantity, 4);
     expect(await stock.history(productId, userId: managerId), isEmpty);
+    await expectLater(
+      stock.history(productId, userId: cashierId),
+      throwsA(isA<StateError>()),
+    );
 
     await database.insert('cashier_permissions', {
       'user_id': cashierId,
@@ -178,6 +182,7 @@ void main() {
 
     expect(movement.stockAfter, 7);
     expect((await products.getById(productId))!.stockQuantity, 7);
+    expect(await stock.history(productId, userId: cashierId), hasLength(1));
   });
 
 }
