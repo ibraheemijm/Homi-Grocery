@@ -18,6 +18,8 @@ dependencies:
   file_picker: ^10.3.7
   pdf: ^3.11.3
   printing: ^5.14.2
+  # تجزئة كلمات المرور محليًا باستخدام HMAC-SHA256.
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:
