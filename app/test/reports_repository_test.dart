@@ -125,6 +125,7 @@ void main() {
     expect(report.grossProfit, 160);
     expect(report.purchaseTotal, 250);
     expect(report.purchaseCount, 1);
+    expect(report.supplierReturns, 25);
     expect(report.customerCollections, 100);
     expect(report.supplierPayments, 50);
     expect(report.supplierRefunds, 10);
@@ -284,6 +285,50 @@ void main() {
     expect(report.products.map((product) => product.netQuantity), [7, 6, -15]);
 
   });
+  test('يجمع مرتجعات الموردين داخل حدود التقرير الشهري دون خلطها بالاسترداد النقدي', () async {
+    final start = DateTime(2026, 5, 1);
+    final end = DateTime(2026, 6, 1);
+    final mayAt = DateTime(2026, 5, 10, 12).toUtc().toIso8601String();
+    final aprilAt = DateTime(2026, 4, 10, 12).toUtc().toIso8601String();
+    final supplierId = await database.insert('suppliers', {
+      'name': 'مورد الفترة',
+      'created_at': mayAt,
+    });
+    Future<int> addPurchase(String number, String date, int amount) =>
+        database.insert('purchases', {
+          'invoice_number': number,
+          'supplier_id': supplierId,
+          'subtotal': amount,
+          'discount': 0,
+          'total': amount,
+          'paid_amount': 0,
+          'payment_method': 'آجل',
+          'created_at': date,
+        });
+    final mayPurchase = await addPurchase('PUR-MAY', mayAt, 300);
+    final aprilPurchase = await addPurchase('PUR-APRIL', aprilAt, 200);
+    await database.insert('supplier_returns', {
+      'purchase_id': mayPurchase,
+      'amount': 75,
+      'created_at': mayAt,
+    });
+    await database.insert('supplier_returns', {
+      'purchase_id': aprilPurchase,
+      'amount': 50,
+      'created_at': mayAt,
+    });
+
+    final report = await ReportsRepository(database).loadPeriod(
+      start: start,
+      end: end,
+    );
+
+    expect(report.purchaseTotal, 0);
+    expect(report.purchaseCount, 0);
+    expect(report.supplierReturns, 125);
+    expect(report.netPurchasesTotal, -125);
+  });
+
   test('لا يعرض ربح الفترة إذا كان المرتجع الحالي يعود إلى فاتورة أقدم بلا تكلفة محفوظة', () async {
     final now = DateTime.now();
     final oldSaleAt = DateTime(now.year - 1, now.month, now.day, 12)
