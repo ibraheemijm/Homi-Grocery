@@ -717,6 +717,19 @@ void main() {
       ),
       throwsStateError,
     );
+    await expectLater(
+      suppliers.createPurchase(
+        supplierId: supplierId,
+        lines: [line],
+        paidAmount: 201,
+        discount: 100,
+        paymentChannel: 'تحويل بنكي',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    expect(await database.query('purchases'), isEmpty);
+
     final purchase = await suppliers.createPurchase(
       supplierId: supplierId,
       lines: [line],
