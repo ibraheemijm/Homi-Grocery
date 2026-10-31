@@ -543,6 +543,13 @@ class SupplierRepository {
       throw ArgumentError('ربط دفعة المورد بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       if (userId != null) {
         final accounts = await txn.query(
           'users',
