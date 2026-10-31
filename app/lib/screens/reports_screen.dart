@@ -5,6 +5,7 @@ import '../data/grocery_database.dart';
 import '../data/report_print_service.dart';
 import '../data/reports_repository.dart';
 import '../data/pdf_file_name.dart';
+import '../data/pdf_file_exporter.dart';
 
 /// تقارير حسب اليوم؛ لا يعرض ربحًا تقديريًا قبل حفظ تكلفة الصنف وقت البيع.
 class ReportsScreen extends StatefulWidget {
@@ -72,7 +73,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  Future<void> _printDailyReport(DailyReport report) async {
+  Future<void> _printDailyReport(DailyReport report, {bool saveToFile = false}) async {
     try {
       final database = await GroceryDatabase.open();
       final rows = await database.query(
@@ -98,16 +99,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
         storeName: storeName.isEmpty ? 'Homi Grocery' : storeName,
       );
       if (!mounted) return;
-      await Printing.layoutPdf(
-        name: buildPdfFileName(
-          language: filenameLanguage,
-          arabicLabel: 'تقرير-يومي',
-          englishLabel: 'Daily-Report',
-          sharedSuffix: _compactDateLabel(report.day),
-          includeExportDate: false,
-        ),
-        onLayout: (_) async => bytes,
+      final fileName = buildPdfFileName(
+        language: filenameLanguage,
+        arabicLabel: 'تقرير-يومي',
+        englishLabel: 'Daily-Report',
+        sharedSuffix: _compactDateLabel(report.day),
+        includeExportDate: false,
       );
+      if (saveToFile) {
+        final path = await savePdfBytes(
+          bytes: bytes,
+          fileName: fileName,
+          dialogTitle: 'حفظ التقرير اليومي PDF',
+        );
+        if (path != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تم حفظ التقرير: $path')),
+          );
+        }
+      } else {
+        await Printing.layoutPdf(
+          name: fileName,
+          onLayout: (_) async => bytes,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +131,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  Future<void> _printPeriodReport(PeriodReport report) async {
+  Future<void> _printPeriodReport(PeriodReport report, {bool saveToFile = false}) async {
     try {
       final database = await GroceryDatabase.open();
       final rows = await database.query(
@@ -148,15 +163,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final periodLabel = _periodMode == 'year'
           ? report.start.year.toString()
           : '${report.start.year}-${report.start.month.toString().padLeft(2, '0')}';
-      await Printing.layoutPdf(
-        name: buildPdfFileName(
-          language: filenameLanguage,
-          arabicLabel: 'تقرير-$modeLabel',
-          englishLabel: '$englishModeLabel-Report',
-          sharedSuffix: periodLabel,
-        ),
-        onLayout: (_) async => bytes,
+      final fileName = buildPdfFileName(
+        language: filenameLanguage,
+        arabicLabel: 'تقرير-$modeLabel',
+        englishLabel: '$englishModeLabel-Report',
+        sharedSuffix: periodLabel,
       );
+      if (saveToFile) {
+        final path = await savePdfBytes(
+          bytes: bytes,
+          fileName: fileName,
+          dialogTitle: 'حفظ تقرير الفترة PDF',
+        );
+        if (path != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تم حفظ التقرير: $path')),
+          );
+        }
+      } else {
+        await Printing.layoutPdf(
+          name: fileName,
+          onLayout: (_) async => bytes,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -276,10 +305,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _printPeriodReport(period),
-                          icon: const Icon(Icons.picture_as_pdf_rounded),
-                          label: const Text('طباعة / حفظ تقرير الفترة PDF'),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _printPeriodReport(period),
+                              icon: const Icon(Icons.print_rounded),
+                              label: const Text('طباعة تقرير الفترة'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: () => _printPeriodReport(period, saveToFile: true),
+                              icon: const Icon(Icons.save_alt_rounded),
+                              label: const Text('حفظ PDF باسم التقرير'),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         Card(
@@ -373,10 +413,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _printDailyReport(report),
-                  icon: const Icon(Icons.picture_as_pdf_rounded),
-                  label: const Text('حفظ التقرير اليومي PDF'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _printDailyReport(report),
+                      icon: const Icon(Icons.print_rounded),
+                      label: const Text('طباعة التقرير اليومي'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _printDailyReport(report, saveToFile: true),
+                      icon: const Icon(Icons.save_alt_rounded),
+                      label: const Text('حفظ PDF باسم التقرير'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Text('حركة البيع والشراء', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
