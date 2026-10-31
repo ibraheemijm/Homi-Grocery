@@ -296,15 +296,25 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                           () => enabled[setting.key] = value,
                         ),
                       ),
-                      TextField(
-                        controller: limits[setting.key],
-                        enabled: enabled[setting.key] ?? false,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'الحد الأقصى للعملية (ج.س) — اختياري',
-                          isDense: true,
+                      if (const {
+                        'credit_sales',
+                        'discounts',
+                        'returns',
+                        'return_refunds',
+                        'customer_collections',
+                        'cash_expenses',
+                        'supplier_purchases',
+                        'supplier_payments',
+                      }.contains(setting.key))
+                        TextField(
+                          controller: limits[setting.key],
+                          enabled: enabled[setting.key] ?? false,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'الحد الأقصى للعملية (ج.س) — اختياري',
+                            isDense: true,
+                          ),
                         ),
-                      ),
                       const Divider(height: 20),
                     ],
                   )),
@@ -330,6 +340,18 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
             FilledButton(
               onPressed: () {
                 for (final setting in settings) {
+                  if (!const {
+                    'credit_sales',
+                    'discounts',
+                    'returns',
+                    'return_refunds',
+                    'customer_collections',
+                    'cash_expenses',
+                    'supplier_purchases',
+                    'supplier_payments',
+                  }.contains(setting.key)) {
+                    continue;
+                  }
                   final raw = limits[setting.key]!.text.trim();
                   if (raw.isNotEmpty &&
                       (int.tryParse(raw) == null || int.parse(raw) < 0)) {
@@ -348,8 +370,24 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
       ),
     );
 
+    if (confirmed != true || !mounted) {
+      for (final controller in limits.values) {
+        controller.dispose();
+      }
+      return;
+    }
     final updated = settings.map((setting) {
-      final raw = limits[setting.key]!.text.trim();
+      final hasAmountLimit = const {
+        'credit_sales',
+        'discounts',
+        'returns',
+        'return_refunds',
+        'customer_collections',
+        'cash_expenses',
+        'supplier_purchases',
+        'supplier_payments',
+      }.contains(setting.key);
+      final raw = hasAmountLimit ? limits[setting.key]!.text.trim() : '';
       return CashierPermissionSetting(
         key: setting.key,
         label: setting.label,
@@ -360,7 +398,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     for (final controller in limits.values) {
       controller.dispose();
     }
-    if (confirmed != true || !mounted) return;
 
     setState(() => _working = true);
     try {
