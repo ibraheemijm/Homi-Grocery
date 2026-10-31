@@ -93,6 +93,27 @@ class SupplierRepository {
   SupplierRepository(this._database);
   final Database _database;
 
+  /// يتحقق من صلاحية الكاشير ويعيد الحد المالي للعملية عند ضبطه.
+  static Future<int?> _cashierLimit(
+    Transaction txn, {
+    required int userId,
+    required String permissionKey,
+    required String label,
+  }) async {
+    final rows = await txn.query(
+      'cashier_permissions',
+      columns: ['is_allowed', 'max_amount'],
+      where: 'user_id = ? AND permission_key = ?',
+      whereArgs: [userId, permissionKey],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية $label.');
+    }
+    return (rows.single['max_amount'] as num?)?.toInt();
+  }
+
+
   Future<int> addSupplier({required String name, String? phone, String? notes}) async {
     final normalized = name.trim();
     if (normalized.isEmpty) throw ArgumentError('اسم المورد مطلوب.');
@@ -172,6 +193,29 @@ class SupplierRepository {
       if (discount > subtotal) throw ArgumentError('الخصم يتجاوز إجمالي الشراء.');
       final total = subtotal - discount;
       if (paidAmount > total) throw ArgumentError('المدفوع يتجاوز إجمالي الفاتورة.');
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          final limit = await _cashierLimit(
+            txn,
+            userId: userId,
+            permissionKey: 'supplier_purchases',
+            label: 'تسجيل فواتير الشراء',
+          );
+          if (limit != null && total > limit) {
+            throw StateError('قيمة فاتورة الشراء تتجاوز الحد المسموح ($limit ج.س).');
+          }
+        }
+      }
       final now = DateTime.now().toUtc().toIso8601String();
       final invoiceNumber = 'PUR-${DateTime.now().toUtc().microsecondsSinceEpoch}';
       final purchaseId = await txn.insert('purchases', {
@@ -492,6 +536,29 @@ class SupplierRepository {
       throw ArgumentError('ربط دفعة المورد بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          final limit = await _cashierLimit(
+            txn,
+            userId: userId,
+            permissionKey: 'supplier_payments',
+            label: 'سداد مستحقات الموردين',
+          );
+          if (limit != null && amount > limit) {
+            throw StateError('دفعة المورد تتجاوز الحد المسموح ($limit ج.س).');
+          }
+        }
+      }
       if (paymentMethod == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
