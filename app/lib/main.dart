@@ -318,7 +318,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 },
                               )
                             : _selectedIndex == 2
-                                ? const InvoicesScreen()
+                                ? InvoicesScreen(userId: widget.user.id)
                             : _selectedIndex == 3
                                 ? CustomersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                 : _selectedIndex == 4
