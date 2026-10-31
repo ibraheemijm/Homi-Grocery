@@ -231,7 +231,6 @@ class SaleRepository {
               throw StateError('الرصيد الآجل يتجاوز الحد المسموح ($limit ج.س).');
             }
           }
-        }
       }
       if (role == 'cashier' || (shiftId != null && paidAmount > 0 && paymentChannel == 'نقدي')) {
         await CashShiftRepository.validateActiveShift(
