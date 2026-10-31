@@ -305,6 +305,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                         'cash_expenses',
                         'supplier_purchases',
                         'supplier_payments',
+        'supplier_returns',
+        'supplier_return_refunds',
                       }.contains(setting.key))
                         TextField(
                           controller: limits[setting.key],
@@ -349,6 +351,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                     'cash_expenses',
                     'supplier_purchases',
                     'supplier_payments',
+        'supplier_returns',
+        'supplier_return_refunds',
                   }.contains(setting.key)) {
                     continue;
                   }
@@ -386,6 +390,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
         'cash_expenses',
         'supplier_purchases',
         'supplier_payments',
+        'supplier_returns',
+        'supplier_return_refunds',
       }.contains(setting.key);
       final raw = hasAmountLimit ? limits[setting.key]!.text.trim() : '';
       return CashierPermissionSetting(
