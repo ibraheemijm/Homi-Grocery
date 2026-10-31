@@ -139,6 +139,59 @@ void main() {
     expect(purchase.paidAmount, 40);
   });
 
+  test('يشترط الوردية النشطة لاسترداد مرتجع المورد نقدًا', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الاسترداد النقدي');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [
+        PurchaseLine(
+          productId: productId,
+          productName: 'حليب',
+          unit: 'عبوة',
+          quantity: 1,
+          unitCost: 100,
+        ),
+      ],
+      paidAmount: 100,
+      paymentChannel: 'نقدي',
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id))
+        .single['id'] as int;
+    final returnId = await suppliers.createSupplierReturn(
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+    await suppliers.recordSupplierReturnRefund(
+      returnId: returnId,
+      amount: 50,
+      paymentMethod: 'نقدي',
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    final refund = (await database.query(
+      'cash_transactions',
+      where: "reference_type = 'supplier_return_refund'",
+    )).single;
+    expect(refund['user_id'], manager.id);
+    expect(refund['shift_id'], shift.id);
+    expect(refund['direction'], 'in');
+  });
+
   test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
     final riceId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 2,
