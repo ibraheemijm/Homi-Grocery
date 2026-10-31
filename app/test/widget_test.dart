@@ -74,6 +74,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('الأقسام الأخرى'), findsOneWidget);
+
+    // قد يكون خيار النسخ أسفل الجزء المرئي من القائمة؛ نمرر قائمة النافذة نفسها إليه.
+    final moreSheet = find.byType(BottomSheet);
+    final sheetScrollable = find.descendant(
+      of: moreSheet,
+      matching: find.byType(Scrollable),
+    ).first;
+    await tester.scrollUntilVisible(
+      find.text('النسخ الاحتياطي والاستعادة'),
+      220,
+      scrollable: sheetScrollable,
+    );
     expect(find.text('النسخ الاحتياطي والاستعادة'), findsOneWidget);
 
     await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
