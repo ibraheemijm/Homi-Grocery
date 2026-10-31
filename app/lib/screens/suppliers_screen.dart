@@ -174,17 +174,17 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     name.dispose(); phone.dispose(); note.dispose();
   }
 
-  _PurchaseDraftLine _newPurchaseDraft(GroceryProduct product) {
-    final cost = product.purchasePrice;
-    final selling = product.sellingPrice;
-    final percentage = cost > 0
+  _PurchaseDraftLine _newPurchaseDraft([GroceryProduct? product]) {
+    final cost = product?.purchasePrice;
+    final selling = product?.sellingPrice;
+    final percentage = cost != null && cost > 0 && selling != null
         ? ((selling - cost) / cost * 100).toStringAsFixed(2)
-        : '0';
+        : '';
     return _PurchaseDraftLine(
-      productId: product.id!,
-      productName: product.name,
-      cost: cost.toString(),
-      sellingPrice: selling.toString(),
+      productId: product?.id ?? -1,
+      productName: product?.name ?? '',
+      cost: cost?.toString() ?? '',
+      sellingPrice: selling?.toString() ?? '',
       percentage: percentage,
     );
   }
@@ -217,21 +217,153 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     }
   }
 
+  /// يضيف منتجًا جديدًا من داخل الفاتورة دون فقد بيانات سطور الشراء.
+  Future<void> _addProductForPurchase(
+    _PurchaseDraftLine draft,
+    StateSetter refresh,
+    Set<int> newlyCreatedProductIds,
+  ) async {
+    final name = TextEditingController(text: draft.productName);
+    final unit = TextEditingController();
+    final sellingPrice = TextEditingController();
+    final barcode = TextEditingController();
+    try {
+      final details = await showDialog<Map<String, String>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('إضافة منتج جديد'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('أدخل بيانات تعريف المنتج يدويًا. تكلفة الشراء والكمية ستُدخلان في سطر الفاتورة.'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: name,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'اسم المنتج *', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: unit,
+                    decoration: const InputDecoration(labelText: 'وحدة القياس الأساسية *', hintText: 'مثل: حبة، كرتونة، كيلوجرام', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: sellingPrice,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'سعر البيع * (ج.س)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: barcode,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'الباركود (اختياري)', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final productName = name.text.trim();
+                final productUnit = unit.text.trim();
+                final price = int.tryParse(sellingPrice.text.trim());
+                if (productName.isEmpty || productUnit.isEmpty || price == null || price < 0) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('أدخل اسم المنتج ووحدته وسعر بيع صحيحًا.')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, {
+                  'name': productName,
+                  'unit': productUnit,
+                  'sellingPrice': price.toString(),
+                  'barcode': barcode.text.trim(),
+                });
+              },
+              child: const Text('إنشاء وإضافة للفاتورة'),
+            ),
+          ],
+        ),
+      );
+      if (details == null || !mounted) return;
+
+      final duplicate = await _productsRepository!.findByNormalizedName(details['name']!);
+      if (duplicate != null) {
+        draft.productId = -1;
+        draft.productName = duplicate.name;
+        draft.fieldVersion++;
+        refresh(() {});
+        _message(
+          duplicate.isActive
+              ? 'هذا المنتج موجود بالفعل. اختره من قائمة الأصناف بدل إنشاء نسخة مكررة.'
+              : 'يوجد منتج مؤرشف بهذا الاسم. أعد تفعيله من شاشة الأصناف قبل استخدامه.',
+        );
+        return;
+      }
+
+      final productId = await _productsRepository!.addUnique(
+        GroceryProduct(
+          name: details['name']!,
+          unit: details['unit']!,
+          purchasePrice: 0,
+          sellingPrice: int.parse(details['sellingPrice']!),
+          stockQuantity: 0,
+          minimumQuantity: 0,
+          barcode: details['barcode'],
+        ),
+      );
+      final product = await _productsRepository!.getById(productId);
+      if (product == null) throw StateError('تم إنشاء المنتج لكن تعذر تحميل بياناته.');
+      _products = await _productsRepository!.search('');
+      newlyCreatedProductIds.add(productId);
+      refresh(() {
+        draft.productId = productId;
+        draft.productName = product.name;
+        draft.fieldVersion++;
+        draft.sellingPrice.text = details['sellingPrice']!;
+        // تبقى تكلفة الشراء فارغة ليُدخلها المستخدم في سطر فاتورة المورد.
+      });
+      _message('تم إنشاء المنتج وإضافته إلى سطر الفاتورة.');
+    } catch (error) {
+      final duplicate = await _productsRepository!.findByNormalizedName(name.text);
+      if (duplicate != null) {
+        draft.productId = -1;
+        draft.productName = duplicate.name;
+        draft.fieldVersion++;
+        refresh(() {});
+        _message('المنتج موجود بالفعل؛ اختره من قائمة الأصناف.');
+      } else {
+        _message('تعذر إنشاء المنتج: $error');
+      }
+    } finally {
+      name.dispose();
+      unit.dispose();
+      sellingPrice.dispose();
+      barcode.dispose();
+    }
+  }
+
   Future<void> _createPurchase() async {
     if (_suppliers.isEmpty) {
       _message('أضف موردًا أولًا قبل تسجيل فاتورة شراء.');
       return;
     }
-    if (_products.isEmpty) {
-      _message('أضف صنفًا إلى المخزون أولًا.');
-      return;
-    }
-
     int supplierId = _suppliers.first.id;
     String paymentChannel = 'نقدي';
     final drafts = <_PurchaseDraftLine>[
-      _newPurchaseDraft(_products.first),
+      _newPurchaseDraft(),
     ];
+    final newlyCreatedProductIds = <int>{};
     final discount = TextEditingController(text: '0');
     final paid = TextEditingController(text: '0');
     final note = TextEditingController();
@@ -260,7 +392,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             Row(children: [
               const Expanded(child: Text('أصناف الفاتورة', style: TextStyle(fontWeight: FontWeight.w800))),
               TextButton.icon(
-                onPressed: () => refresh(() => drafts.insert(0, _newPurchaseDraft(_products.first))),
+                onPressed: () => refresh(() => drafts.insert(0, _newPurchaseDraft())),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('إضافة صنف'),
               ),
@@ -283,7 +415,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         ),
                     ]),
                     Autocomplete<GroceryProduct>(
-                      key: ValueKey(draft),
+                      key: ValueKey('${draft.productId}-${draft.fieldVersion}'),
                       displayStringForOption: (product) => product.name,
                       initialValue: TextEditingValue(text: draft.productName),
                       optionsBuilder: (value) {
@@ -360,6 +492,18 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                           ),
                         );
                       },
+                    ),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton.icon(
+                        onPressed: () => _addProductForPurchase(
+                          draft,
+                          refresh,
+                          newlyCreatedProductIds,
+                        ),
+                        icon: const Icon(Icons.add_box_outlined),
+                        label: const Text('إضافة منتج جديد'),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(children: [
@@ -529,8 +673,17 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         _products = await _productsRepository!.search('');
         _message('تم حفظ فاتورة الشراء بجميع أصنافها وتحديث المخزون.');
       } catch (error) {
+        for (final productId in newlyCreatedProductIds) {
+          await _productsRepository!.archiveIfUnused(productId);
+        }
+        _products = await _productsRepository!.search('');
         _message('لم تُحفظ الفاتورة: $error');
       }
+    } else {
+      for (final productId in newlyCreatedProductIds) {
+        await _productsRepository!.archiveIfUnused(productId);
+      }
+      _products = await _productsRepository!.search('');
     }
     for (final draft in drafts) { draft.dispose(); }
     discount.dispose();
@@ -862,9 +1015,9 @@ class _PurchaseDraftLine {
     required this.productId,
     required this.productName,
     String quantity = '1',
-    String cost = '0',
-    String sellingPrice = '0',
-    String percentage = '0',
+    String cost = '',
+    String sellingPrice = '',
+    String percentage = '',
   })  : quantity = TextEditingController(text: quantity),
         cost = TextEditingController(text: cost),
         sellingPrice = TextEditingController(text: sellingPrice),
@@ -872,6 +1025,7 @@ class _PurchaseDraftLine {
 
   int productId;
   String productName;
+  int fieldVersion = 0;
   String pricingMode = 'markup';
   final TextEditingController quantity;
   final TextEditingController cost;
