@@ -2,6 +2,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/customer_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/product_repository.dart';
@@ -17,12 +19,14 @@ void main() {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     customers = CustomerRepository(database);
     products = ProductRepository(database);
@@ -58,6 +62,73 @@ void main() {
     final after = (await customers.balances()).single;
     expect(after.totalPaid, 300);
     expect(after.balance, 500);
+  });
+
+  test('يشترط وردية المستخدم النشطة للتحصيل النقدي فقط', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'أرز', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: 'عميل الوردية',
+    );
+    final customer = (await customers.balances()).single;
+
+    await customers.recordPayment(
+      customerId: customer.id,
+      amount: 20,
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    await expectLater(
+      customers.recordPayment(
+        customerId: customer.id,
+        amount: 20,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await CashShiftRepository(database).closeShift(
+      shiftId: shift.id,
+      userId: manager.id,
+      closingCash: 20,
+    );
+    await expectLater(
+      customers.recordPayment(
+        customerId: customer.id,
+        amount: 20,
+        userId: manager.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    final entries = await database.query(
+      'cash_transactions',
+      where: "reference_type = 'customer_payment'",
+    );
+    expect(entries, hasLength(1));
+    expect(entries.single['shift_id'], shift.id);
   });
 
   test('يخصم مرتجع البيع من رصيد الزبون ومن حد التحصيل', () async {
