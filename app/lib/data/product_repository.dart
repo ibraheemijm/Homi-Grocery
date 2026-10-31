@@ -199,6 +199,16 @@ class ProductRepository {
     );
   }
 
+  /// إعادة تفعيل صنف مؤرشف دون تغيير بياناته أو سجلاته السابقة.
+  Future<int> restore(int id) {
+    return _database.update(
+      'products',
+      {'is_active': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   /// تعطيل الصنف بدل حذفه نهائيًا للحفاظ على سلامة سجل العمليات المستقبلية.
   Future<int> archive(int id) {
     return _database.update(
