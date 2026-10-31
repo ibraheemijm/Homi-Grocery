@@ -212,7 +212,8 @@ void main() {
       saleId: sale.id,
       quantitiesBySaleItemId: {saleItemId: 1},
       note: 'اختبار ربط التقرير',
-    );
+    
+      userId: managerId);
 
     final report = await ReportsRepository(database).load(userId: managerId, day: now);
 
