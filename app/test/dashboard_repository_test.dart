@@ -51,7 +51,7 @@ void main() {
       customerName: 'زبون اللوحة',
     );
     final customer = (await customers.balances(userId: managerId)).single;
-    await customers.recordPayment(customerId: customer.id, amount: 100);
+    await customers.recordPayment(customerId: customer.id, amount: 100, userId: managerId);
 
     await products.add(const GroceryProduct(
       name: 'حليب منخفض', sellingPrice: 100, stockQuantity: 1, minimumQuantity: 2,
@@ -84,8 +84,9 @@ void main() {
     await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
-    );
-    await sales.recordReturnRefund(saleId: sale.id, amount: 250);
+    
+      userId: managerId);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 250, userId: managerId);
 
     final stats = await DashboardRepository(database).load(now: DateTime.now());
     expect(stats.todaySales, 250);
