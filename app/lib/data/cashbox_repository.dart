@@ -200,6 +200,8 @@ class CashboxRepository {
           if (limit != null && amount > limit) {
             throw StateError('المصروف يتجاوز الحد المسموح ($limit ج.س).');
           }
+        } else if (accounts.single['role'] != 'manager') {
+          throw StateError('نوع الحساب غير مصرح له بتسجيل حركة خزينة.');
         }
       }
       return txn.insert('cash_transactions', {
