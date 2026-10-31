@@ -2,6 +2,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/data/sale_repository.dart';
@@ -15,11 +17,13 @@ void main() {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
     products = ProductRepository(database);
@@ -398,7 +402,17 @@ void main() {
     expect((await products.getById(productId))!.stockQuantity, -1);
   });
 
-  test('يربط البيع النقدي بمستخدم الوردية ولا يربط التحويل البنكي بدرج النقدية', () async {
+  test('يربط البيع النقدي بالوردية النشطة ويستثني التحويل البنكي', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
     final productId = await products.add(const GroceryProduct(
       name: 'ماء', sellingPrice: 100, stockQuantity: 4,
     ));
@@ -409,16 +423,16 @@ void main() {
       discount: 0,
       paidAmount: 100,
       paymentMethod: 'نقدي',
-      userId: 7,
-      shiftId: 12,
+      userId: manager.id,
+      shiftId: shift.id,
     );
     final cashEntry = (await database.query(
       'cash_transactions',
       where: "reference_type = 'sale' AND reference_id = ?",
       whereArgs: [cashSale.id],
     )).single;
-    expect(cashEntry['user_id'], 7);
-    expect(cashEntry['shift_id'], 12);
+    expect(cashEntry['user_id'], manager.id);
+    expect(cashEntry['shift_id'], shift.id);
 
     final bankSale = await sales.createSale(
       lines: [SaleLine(product: product, quantity: 1)],
@@ -426,17 +440,69 @@ void main() {
       paidAmount: 100,
       paymentMethod: 'نقدي',
       paymentChannel: 'تحويل بنكي',
-      userId: 7,
-      shiftId: 12,
+      userId: manager.id,
+      shiftId: shift.id,
     );
     final bankEntry = (await database.query(
       'cash_transactions',
       where: "reference_type = 'sale' AND reference_id = ?",
       whereArgs: [bankSale.id],
     )).single;
-    expect(bankEntry['user_id'], 7);
+    expect(bankEntry['user_id'], manager.id);
     expect(bankEntry['shift_id'], isNull);
     expect(bankEntry['payment_method'], 'تحويل بنكي');
+  });
+
+  test('يرفض البيع النقدي إذا كانت الوردية غير مملوكة أو مغلقة', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 4,
+    ));
+    final product = (await products.getById(productId))!;
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 100,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await CashShiftRepository(database).closeShift(
+      shiftId: shift.id,
+      userId: manager.id,
+      closingCash: 0,
+    );
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 100,
+        paymentMethod: 'نقدي',
+        userId: manager.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    expect(await sales.recentSales(), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
   });
 
 }
