@@ -98,14 +98,39 @@ class ReportsRepository {
   ReportsRepository(this._database);
   final Database _database;
 
+  // التقارير بيانات مالية حساسة؛ لا تُقرأ دون مستخدم نشط وصلاحية صريحة للكاشير.
+  Future<void> _requireReadAccess(int userId) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض التقارير.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_reports'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض التقارير.');
+    }
+  }
+
   /// تقرير فترة تقويمية؛ الكميات الصافية = المبيعات خلال الفترة ناقص
   /// المرتجعات المسجلة خلالها، مع إبقاء المرتجعات ظاهرة حتى إن تجاوزت المبيعات.
   /// يجمع سجل الأصناف بمعرّف الصنف والوحدة، لا بالاسم التاريخي وحده.
   Future<PeriodReport> loadPeriod({
+    required int userId,
     required DateTime start,
     required DateTime end,
     int topLimit = 10,
   }) async {
+    await _requireReadAccess(userId);
     if (!end.isAfter(start)) {
       throw ArgumentError('نهاية الفترة يجب أن تأتي بعد بدايتها.');
     }
@@ -211,7 +236,8 @@ class ReportsRepository {
     );
   }
 
-  Future<DailyReport> load({DateTime? day}) async {
+  Future<DailyReport> load({required int userId, DateTime? day}) async {
+    await _requireReadAccess(userId);
     final selected = day ?? DateTime.now();
     final localStart = DateTime(selected.year, selected.month, selected.day);
     final start = localStart.toUtc().toIso8601String();
