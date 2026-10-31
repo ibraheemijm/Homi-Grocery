@@ -1,6 +1,8 @@
 // مستودع الموردين والمشتريات: حفظ ذري للفواتير وتحديث المخزون والمدفوعات.
 import 'package:sqflite/sqflite.dart';
 
+import 'cash_shift_repository.dart';
+
 class SupplierBalance {
   const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid});
   final int id;
@@ -157,6 +159,13 @@ class SupplierRepository {
       }
     }
     return _database.transaction((txn) async {
+      if (paidAmount > 0 && paymentChannel == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final supplier = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
       if (supplier.isEmpty) throw StateError('المورد غير موجود.');
       final subtotal = lines.fold<int>(0, (sum, line) => sum + line.lineTotal);
@@ -421,6 +430,13 @@ class SupplierRepository {
       throw ArgumentError('حدد طريقة استلام المبلغ.');
     }
     return _database.transaction((txn) async {
+      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final rows = await txn.rawQuery('''
         SELECT sr.id, sr.amount FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
       ''', [returnId]);
@@ -444,9 +460,6 @@ class SupplierRepository {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
         'created_at': createdAt,
       });
-      if (shiftId != null && userId == null) {
-        throw ArgumentError('ربط استرداد المورد بالوردية يتطلب تحديد المستخدم.');
-      }
       await txn.insert('cash_transactions', {
         'direction': 'in',
         'category': 'استرداد نقدي من مورد',
@@ -479,6 +492,13 @@ class SupplierRepository {
       throw ArgumentError('ربط دفعة المورد بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
       if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
       final result = await txn.rawQuery('''
