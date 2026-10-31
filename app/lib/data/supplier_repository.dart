@@ -180,6 +180,13 @@ class SupplierRepository {
       }
     }
     return _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       if (paidAmount > 0 && paymentChannel == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
@@ -558,13 +565,6 @@ class SupplierRepository {
             throw StateError('دفعة المورد تتجاوز الحد المسموح ($limit ج.س).');
           }
         }
-      }
-      if (paymentMethod == 'نقدي' && userId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
       }
       final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
       if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
