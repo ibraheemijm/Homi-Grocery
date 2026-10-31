@@ -1,18 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/cashbox_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 
 void main() {
   late Database database;
   late CashboxRepository cashbox;
+  late AuthRepository auth;
+  late CashShiftRepository shifts;
 
   setUp(() async {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
+    auth = AuthRepository(database);
+    shifts = CashShiftRepository(database);
     cashbox = CashboxRepository(database);
   });
 
@@ -63,26 +71,69 @@ void main() {
   });
 
   test('يربط الحركة اليدوية النقدية بالمستخدم والوردية ولا يربط التحويل بالدرج', () async {
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final shift = await shifts.openShift(userId: manager.id, openingCash: 0);
     await cashbox.recordManualMovement(
       direction: 'in',
       category: 'إيداع',
       amount: 300,
-      userId: 7,
-      shiftId: 12,
+      userId: manager.id,
+      shiftId: shift.id,
     );
     await cashbox.recordManualMovement(
       direction: 'in',
       category: 'تحويل',
       amount: 500,
       paymentMethod: 'تحويل بنكي',
-      userId: 7,
-      shiftId: 12,
+      userId: manager.id,
+      shiftId: shift.id,
     );
     final rows = await database.query('cash_transactions', orderBy: 'id');
-    expect(rows[0]['user_id'], 7);
-    expect(rows[0]['shift_id'], 12);
-    expect(rows[1]['user_id'], 7);
+    expect(rows[0]['user_id'], manager.id);
+    expect(rows[0]['shift_id'], shift.id);
+    expect(rows[1]['user_id'], manager.id);
     expect(rows[1]['shift_id'], isNull);
+  });
+
+  test('يرفض الحركة النقدية إذا كانت الوردية لمستخدم آخر أو مغلقة', () async {
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await shifts.openShift(userId: manager.id, openingCash: 0);
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'in',
+        category: 'محاولة غير مصرح بها',
+        amount: 100,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await shifts.closeShift(shiftId: shift.id, userId: manager.id, closingCash: 0);
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'in',
+        category: 'وردية مغلقة',
+        amount: 100,
+        userId: manager.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    expect(await database.query('cash_transactions'), isEmpty);
   });
 
 }
