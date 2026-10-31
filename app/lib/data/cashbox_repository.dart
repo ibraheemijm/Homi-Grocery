@@ -142,6 +142,13 @@ class CashboxRepository {
       throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
+      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       if (userId != null) {
         final accounts = await txn.query(
           'users',
@@ -172,13 +179,6 @@ class CashboxRepository {
             throw StateError('المصروف يتجاوز الحد المسموح ($limit ج.س).');
           }
         }
-      }
-      if (paymentMethod.trim() == 'نقدي' && userId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
       }
       return txn.insert('cash_transactions', {
         'direction': direction,
