@@ -14,6 +14,7 @@ void main() {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createSalesSchema(database);
     repository = ProductRepository(database);
   });
 
