@@ -136,11 +136,16 @@ class SupplierRepository {
     String paymentMethod = 'آجل',
     String paymentChannel = 'نقدي',
     String? note,
+    int? userId,
+    int? shiftId,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
     if (discount < 0 || paidAmount < 0) throw ArgumentError('الخصم والمدفوع لا يمكن أن يكونا سالبين.');
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
       throw ArgumentError('طريقة دفع فاتورة الشراء غير مدعومة.');
+    }
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط فاتورة الشراء بالوردية يتطلب تحديد المستخدم.');
     }
     for (final line in lines) {
       if (line.productId <= 0 ||
@@ -174,6 +179,8 @@ class SupplierRepository {
           'payment_method': paymentChannel,
           'reference_type': 'purchase',
           'reference_id': purchaseId,
+          'user_id': userId,
+          'shift_id': paymentChannel == 'نقدي' ? shiftId : null,
           'note': 'فاتورة شراء $invoiceNumber',
           'created_at': now,
         });
@@ -404,6 +411,8 @@ class SupplierRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
+    int? userId,
+    int? shiftId,
   }) async {
     if (returnId <= 0 || amount <= 0) {
       throw ArgumentError('حدد مرتجعًا ومبلغ رد صالحين.');
@@ -435,6 +444,9 @@ class SupplierRepository {
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
         'created_at': createdAt,
       });
+      if (shiftId != null && userId == null) {
+        throw ArgumentError('ربط استرداد المورد بالوردية يتطلب تحديد المستخدم.');
+      }
       await txn.insert('cash_transactions', {
         'direction': 'in',
         'category': 'استرداد نقدي من مورد',
@@ -442,6 +454,8 @@ class SupplierRepository {
         'payment_method': paymentMethod.trim(),
         'reference_type': 'supplier_return_refund',
         'reference_id': refundId,
+        'user_id': userId,
+        'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
         'note': note?.trim().isEmpty == true ? 'استرداد مرتجع المورد #$returnId' : note?.trim(),
         'created_at': createdAt,
       });
@@ -449,10 +463,20 @@ class SupplierRepository {
     });
   }
 
-  Future<void> recordPayment({required int supplierId, required int amount, String paymentMethod = 'نقدي', String? note}) async {
+  Future<void> recordPayment({
+    required int supplierId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    int? userId,
+    int? shiftId,
+  }) async {
     if (amount <= 0) throw ArgumentError('قيمة الدفع يجب أن تكون أكبر من صفر.');
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
       throw ArgumentError('طريقة الدفع غير مدعومة.');
+    }
+    if (shiftId != null && userId == null) {
+      throw ArgumentError('ربط دفعة المورد بالوردية يتطلب تحديد المستخدم.');
     }
     await _database.transaction((txn) async {
       final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
@@ -478,6 +502,8 @@ class SupplierRepository {
         'payment_method': paymentMethod,
         'reference_type': 'supplier_payment',
         'reference_id': paymentId,
+        'user_id': userId,
+        'shift_id': paymentMethod == 'نقدي' ? shiftId : null,
         'note': note?.trim().isEmpty == true ? null : note?.trim(),
         'created_at': createdAt,
       });
