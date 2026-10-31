@@ -12,6 +12,7 @@ void main() {
   late Database database;
   late ProductRepository products;
   late SupplierRepository suppliers;
+  late int managerId;
 
   setUp(() async {
     sqfliteFfiInit();
@@ -27,11 +28,31 @@ void main() {
     await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSupplierReturnsSchema(database);
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'test_manager', 'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     products = ProductRepository(database);
     suppliers = SupplierRepository(database);
   });
 
   tearDown(() async => database.close());
+
+
+  test('يمنع الكاشير من قراءة أرصدة الموردين افتراضيًا', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'test_cashier', 'display_name': 'كاشير الاختبار',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      suppliers.balances(userId: cashierId),
+      throwsA(isA<StateError>()),
+    );
+  });
 
   test('يحفظ فاتورة الشراء ويزيد المخزون ويسجل حركة الشراء', () async {
     final productId = await products.add(const GroceryProduct(
@@ -57,7 +78,7 @@ void main() {
     final movements = await database.query('stock_movements', where: "reference_type = 'purchase'");
     expect(movements, hasLength(1));
     expect(movements.single['quantity_delta'], 3);
-    expect((await suppliers.balances()).single.balance, 240);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 240);
     final cashEntries = await database.query('cash_transactions', where: "reference_type = 'purchase'");
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['direction'], 'out');
@@ -275,9 +296,9 @@ void main() {
       paidAmount: 20,
     );
 
-    expect((await suppliers.balances()).single.balance, 80);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 80);
     await suppliers.recordPayment(supplierId: supplierId, amount: 30, paymentMethod: 'تحويل بنكي', note: 'دفعة بنكية');
-    expect((await suppliers.balances()).single.balance, 50);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 50);
     await expectLater(
       suppliers.recordPayment(supplierId: supplierId, amount: 51),
       throwsArgumentError,
@@ -349,7 +370,7 @@ void main() {
     );
 
     expect((await products.getById(productId))!.stockQuantity, 3);
-    expect((await suppliers.balances()).single.balance, 300);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 300);
     final returns = await database.query('supplier_returns', where: 'id = ?', whereArgs: [returnId]);
     expect(returns.single['amount'], 100);
     final lines = await database.query('supplier_return_items', where: 'return_id = ?', whereArgs: [returnId]);
@@ -386,7 +407,7 @@ void main() {
     expect(returns, hasLength(2));
     expect(first, isNot(second));
     expect(returns.fold<int>(0, (sum, row) => sum + (row['amount'] as int)), 180);
-    expect((await suppliers.balances()).single.balance, 0);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 0);
     expect((await products.getById(productId))!.stockQuantity, 0);
   });
 
@@ -435,7 +456,7 @@ void main() {
       quantitiesByPurchaseItemId: {itemId: 1},
     );
 
-    var balance = (await suppliers.balances()).single;
+    var balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.balance, -100);
     expect(balance.credit, 100);
     expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 100);
@@ -450,7 +471,7 @@ void main() {
       amount: 40,
       paymentMethod: 'تحويل بنكي',
     );
-    balance = (await suppliers.balances()).single;
+    balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.balance, -60);
     expect(balance.credit, 60);
     expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 60);
@@ -566,7 +587,7 @@ void main() {
       paymentMethod: 'تحويل بنكي',
       userId: cashier.id,
     );
-    expect((await suppliers.balances()).single.balance, 100);
+    expect((await suppliers.balances(userId: managerId)).single.balance, 100);
   });
 
 }
