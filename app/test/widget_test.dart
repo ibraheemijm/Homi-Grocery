@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/screens/cashier_management_screen.dart';
 
 class _TestDashboardApp extends StatefulWidget {
   const _TestDashboardApp();
@@ -135,4 +136,26 @@ void main() {
     expect(find.text('إنشاء نسخة احتياطية الآن'), findsOneWidget);
     expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
   });
+
+  testWidgets('لا يصل حساب الكاشير إلى لوحة المدير قبل اكتمال واجهته', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CashierAccessPendingScreen(
+          cashier: const AuthUser(
+            id: 2,
+            username: 'cashier_one',
+            displayName: 'الكاشير الأول',
+            role: 'cashier',
+          ),
+          onLogout: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('مرحبًا الكاشير الأول'), findsOneWidget);
+    expect(find.textContaining('لن نعرض لك لوحة المدير'), findsOneWidget);
+    expect(find.text('مبيعات اليوم'), findsNothing);
+    expect(find.text('إدارة الكاشيرين'), findsNothing);
+  });
+
 }
