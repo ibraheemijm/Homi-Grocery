@@ -544,7 +544,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         note: 'إجمالي الفواتير اليوم',
                         icon: Icons.trending_up_rounded,
                         tint: const Color(0xFFDCE9DF),
-                        onTap: () => setState(() => _selectedIndex = 1),
+                        onTap: () => setState(() => _selectedIndex = 7),
                       ),
                       _MetricCard(
                         title: 'المقبوض اليوم',
