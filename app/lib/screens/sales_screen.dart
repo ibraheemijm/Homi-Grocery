@@ -165,9 +165,11 @@ class _SalesScreenState extends State<SalesScreen> {
       final viewRows = await database.query('app_metadata', columns: ['value'], where: 'key = ?', whereArgs: ['sales_view_mode'], limit: 1);
       final viewMode = viewRows.isEmpty ? 'grid' : viewRows.single['value'] as String;
       _productsRepository = ProductRepository(database);
-      _customersRepository = CustomerRepository(database);
       _salesRepository = SaleRepository(database);
-      _recent = await _salesRepository!.recentSales(limit: 50);
+      if (!widget.cashierMode) {
+        _customersRepository = CustomerRepository(database);
+        _recent = await _salesRepository!.recentSales(limit: 50);
+      }
       _matches = await _productsRepository!.search('');
       if (!mounted) return;
       setState(() { _salesViewMode = const {'grid', 'rows', 'rowsWithIcons'}.contains(viewMode) ? viewMode : 'grid'; _loading = false; _error = null; });
