@@ -49,7 +49,8 @@ void main() {
       paidAmount: 200,
       paymentMethod: 'جزئي',
       customerName: 'زبون اللوحة',
-    );
+    
+      userId: managerId);
     final customer = (await customers.balances(userId: managerId)).single;
     await customers.recordPayment(customerId: customer.id, amount: 100, userId: managerId);
 
@@ -76,7 +77,8 @@ void main() {
       discount: 0,
       paidAmount: 500,
       paymentMethod: 'نقدي',
-    );
+    
+      userId: managerId);
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
