@@ -58,7 +58,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
       if (mounted) setState(() => _movements = []);
       return;
     }
-    final rows = await _stockRepository!.history(id == null || id == -1 ? null : id);
+    final rows = await _stockRepository!.history(id == null || id == -1 ? null : id, userId: widget.userId);
     if (mounted) setState(() => _movements = rows);
   }
 
