@@ -572,6 +572,65 @@ void main() {
     expect(await sales.recentSales(), hasLength(1));
   });
 
+  test('يمنع الكاشير من تسجيل مرتجع أو رد مبلغ حتى عند استدعاء المستودع مباشرة', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'صابون', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      userId: cashier.id,
+      shiftId: shift.id,
+    );
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+
+    await expectLater(
+      sales.returnItems(
+        saleId: sale.id,
+        quantitiesBySaleItemId: {itemId: 1},
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+    await expectLater(
+      sales.recordReturnRefund(
+        saleId: sale.id,
+        amount: 100,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+  });
+
   test('يرفض البيع النقدي إذا كانت الوردية غير مملوكة أو مغلقة', () async {
     final auth = AuthRepository(database);
     final manager = await auth.createInitialManager(
