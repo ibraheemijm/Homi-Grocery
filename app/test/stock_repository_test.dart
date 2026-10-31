@@ -133,4 +133,51 @@ void main() {
     expect((await products.getById(id))!.stockQuantity, -3);
     expect((await stock.history(id)).single.note, 'تصحيح جرد');
   });
+
+  test('يمنع الكاشير من تعديل المخزون افتراضيًا ولا يسمح إلا بعد منح الصلاحية', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر',
+      stockQuantity: 4,
+    ));
+    final cashierId = await database.insert('users', {
+      'username': 'cashier_stock_test',
+      'display_name': 'كاشير الاختبار',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 100000,
+      'role': 'cashier',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    await expectLater(
+      stock.recordMovement(
+        userId: cashierId,
+        productId: productId,
+        movementType: 'إضافة',
+        quantityDelta: 3,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect((await products.getById(productId))!.stockQuantity, 4);
+    expect(await stock.history(productId), isEmpty);
+
+    await database.insert('cashier_permissions', {
+      'user_id': cashierId,
+      'permission_key': 'stock_adjustments',
+      'is_allowed': 1,
+      'max_amount': null,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final movement = await stock.recordMovement(
+      userId: cashierId,
+      productId: productId,
+      movementType: 'إضافة',
+      quantityDelta: 3,
+    );
+
+    expect(movement.stockAfter, 7);
+    expect((await products.getById(productId))!.stockQuantity, 7);
+  });
+
 }
