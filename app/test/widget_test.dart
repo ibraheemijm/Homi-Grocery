@@ -4,19 +4,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
 
-Widget _dashboardApp() => MaterialApp(
-      home: DashboardScreen(
-        isDark: false,
-        onToggleTheme: () {},
-        user: const AuthUser(
-          id: 1,
-          username: 'manager',
-          displayName: 'مدير الاختبار',
-          role: 'manager',
+class _TestDashboardApp extends StatefulWidget {
+  const _TestDashboardApp();
+
+  @override
+  State<_TestDashboardApp> createState() => _TestDashboardAppState();
+}
+
+class _TestDashboardAppState extends State<_TestDashboardApp> {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        themeMode: _themeMode,
+        theme: ThemeData.light(),
+        darkTheme: ThemeData.dark(),
+        home: DashboardScreen(
+          isDark: _themeMode == ThemeMode.dark,
+          onToggleTheme: () => setState(() {
+            _themeMode = _themeMode == ThemeMode.light
+                ? ThemeMode.dark
+                : ThemeMode.light;
+          }),
+          user: const AuthUser(
+            id: 1,
+            username: 'manager',
+            displayName: 'مدير الاختبار',
+            role: 'manager',
+          ),
+          onLogout: () {},
         ),
-        onLogout: () {},
-      ),
-    );
+      );
+}
+
+Widget _dashboardApp() => const _TestDashboardApp();
 
 void main() {
   testWidgets('تظهر اللوحة الرئيسية باللغة العربية على شاشة الهاتف',
