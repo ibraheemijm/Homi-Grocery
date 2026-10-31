@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'font_preferences.dart';
+import 'pdf_file_name.dart';
 
 /// تجمع بيانات الفاتورة من قاعدة البيانات وتعرض نافذة الطباعة أو الحفظ PDF.
 class InvoicePrintSummary {
@@ -84,10 +85,28 @@ class InvoicePrintService {
     final summary = await loadSummary(saleId);
     final bytes = await _buildInvoicePdfFromSummary(saleId, summary, thermal: thermal);
     final sale = summary.sale;
+    final languageRows = await _database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['pdf_filename_language'],
+      limit: 1,
+    );
+    final filenameLanguage = languageRows.isEmpty
+        ? 'both'
+        : languageRows.single['value'] as String;
+    final invoiceNumber = sale['invoice_number'].toString();
+    final fileName = buildPdfFileName(
+      language: filenameLanguage,
+      arabicLabel: thermal
+          ? 'إيصال-حراري-رقم-$invoiceNumber'
+          : 'فاتورة-رقم-$invoiceNumber',
+      englishLabel: thermal
+          ? 'Thermal-Receipt-$invoiceNumber'
+          : 'Invoice-$invoiceNumber',
+    );
     await Printing.layoutPdf(
-      name: thermal
-          ? 'إيصال-حراري-${sale['invoice_number']}.pdf'
-          : 'فاتورة-${sale['invoice_number']}.pdf',
+      name: fileName,
       format: _pageFormat(thermal),
       onLayout: (_) async => bytes,
     );
