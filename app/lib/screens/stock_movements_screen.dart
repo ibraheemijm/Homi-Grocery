@@ -6,7 +6,9 @@ import '../data/product_repository.dart';
 import '../data/stock_repository.dart';
 
 class StockMovementsScreen extends StatefulWidget {
-  const StockMovementsScreen({super.key});
+  const StockMovementsScreen({required this.userId, super.key});
+
+  final int userId;
 
   @override
   State<StockMovementsScreen> createState() => _StockMovementsScreenState();
@@ -152,6 +154,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
     if (result == true && mounted) {
       try {
         await _stockRepository!.recordMovement(
+          userId: widget.userId,
           productId: productId,
           movementType: type,
           quantityDelta: double.parse(quantity.text.trim()),
