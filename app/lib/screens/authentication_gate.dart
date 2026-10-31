@@ -2,10 +2,12 @@
 import 'package:flutter/material.dart';
 
 import '../data/auth_repository.dart';
+import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
 
 typedef AuthenticatedBuilder = Widget Function(
   AuthUser user,
+  int shiftId,
   VoidCallback onLogout,
 );
 
@@ -24,6 +26,7 @@ class AuthenticationGate extends StatefulWidget {
 class _AuthenticationGateState extends State<AuthenticationGate> {
   AuthRepository? _repository;
   AuthUser? _user;
+  CashShift? _shift;
   bool _needsSetup = false;
   bool _loading = true;
   String? _error;
@@ -55,19 +58,172 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     }
   }
 
+  Future<void> _activateUser(AuthUser user) async {
+    final database = await GroceryDatabase.open();
+    final shifts = CashShiftRepository(database);
+    final openShift = await shifts.getOpenShift();
+    if (openShift != null) {
+      if (openShift.userId != user.id) {
+        throw const CashShiftException(
+          'توجد وردية مفتوحة لمستخدم آخر. سجّل الدخول بالحساب صاحب الوردية وأغلقها أولًا.',
+        );
+      }
+      if (mounted) setState(() {
+        _shift = openShift;
+        _user = user;
+      });
+      return;
+    }
+
+    final openingCash = await _askCashAmount(
+      title: 'فتح وردية جديدة',
+      message: 'أدخل النقدية الفعلية الموجودة في درجك الآن. ستُسجل كرصد افتتاحي.',
+      actionLabel: 'فتح الوردية',
+    );
+    if (openingCash == null) {
+      throw const CashShiftException('تم إلغاء الدخول؛ يجب إدخال رصيد بداية الدرج لفتح الوردية.');
+    }
+    final shift = await shifts.openShift(
+      userId: user.id,
+      openingCash: openingCash,
+    );
+    if (mounted) setState(() {
+      _shift = shift;
+      _user = user;
+    });
+  }
+
+  Future<int?> _askCashAmount({
+    required String title,
+    required String message,
+    required String actionLabel,
+  }) async {
+    final controller = TextEditingController(text: '0');
+    String? error;
+    final result = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, refresh) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(message),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'المبلغ بالجنيه السوداني',
+                    prefixIcon: Icon(Icons.payments_outlined),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(error!, style: TextStyle(color: Theme.of(dialogContext).colorScheme.error)),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final amount = int.tryParse(controller.text.trim());
+                if (amount == null || amount < 0) {
+                  refresh(() => error = 'أدخل مبلغًا صحيحًا لا يقل عن صفر.');
+                  return;
+                }
+                Navigator.pop(dialogContext, amount);
+              },
+              child: Text(actionLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
   Future<void> _logout() async {
     final current = _user;
+    final shift = _shift;
+    if (current == null || shift == null) return;
     try {
-      if (current != null) await _repository?.logout(current);
-    } finally {
-      if (mounted) setState(() => _user = null);
+      final closingCash = await _askCashAmount(
+        title: 'إغلاق الوردية وتسليم العهدة',
+        message: 'عدّ النقدية الفعلية الموجودة في الدرج وأدخل المبلغ قبل تسجيل الخروج.',
+        actionLabel: 'إغلاق الوردية والخروج',
+      );
+      if (closingCash == null || !mounted) return;
+
+      final database = await GroceryDatabase.open();
+      final closed = await CashShiftRepository(database).closeShift(
+        shiftId: shift.id,
+        userId: current.id,
+        closingCash: closingCash,
+      );
+      if (current.isManager && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('ملخص تسوية الوردية'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('النقد المتوقع: ${closed.expectedCash} ج.س'),
+                Text('النقد الفعلي: ${closed.closingCash} ج.س'),
+                Text(
+                  'الفرق: ${closed.difference} ج.س',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: (closed.difference ?? 0) < 0
+                        ? Theme.of(dialogContext).colorScheme.error
+                        : Theme.of(dialogContext).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('متابعة'),
+              ),
+            ],
+          ),
+        );
+      }
+      await _repository?.logout(current);
+      if (mounted) setState(() {
+        _user = null;
+        _shift = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إغلاق الوردية: $error')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_user case final user?) {
-      return widget.authenticatedBuilder(user, _logout);
+      final shift = _shift;
+      if (shift != null) {
+        return widget.authenticatedBuilder(user, shift.id, _logout);
+      }
     }
     if (_loading) {
       return const Scaffold(
@@ -86,12 +242,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
             displayName: displayName,
             password: password,
           );
-          if (mounted) {
-            setState(() {
-              _user = user;
-              _needsSetup = false;
-            });
-          }
+          if (mounted) setState(() => _needsSetup = false);
+          await _activateUser(user);
           return user;
         },
       );
@@ -102,7 +254,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
           username: username,
           password: password,
         );
-        if (mounted) setState(() => _user = user);
+        await _activateUser(user);
         return user;
       },
     );
