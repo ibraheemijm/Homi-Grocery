@@ -225,7 +225,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   ) async {
     final name = TextEditingController(text: draft.productName);
     final unit = TextEditingController();
-    final sellingPrice = TextEditingController();
+    final purchasePrice = TextEditingController();
     final barcode = TextEditingController();
     try {
       final details = await showDialog<Map<String, String>>(
@@ -253,9 +253,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextField(
-                    controller: sellingPrice,
+                    controller: purchasePrice,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'سعر البيع * (ج.س)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'سعر الشراء للوحدة * (ج.س)', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -276,17 +276,17 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               onPressed: () {
                 final productName = name.text.trim();
                 final productUnit = unit.text.trim();
-                final price = int.tryParse(sellingPrice.text.trim());
-                if (productName.isEmpty || productUnit.isEmpty || price == null || price < 0) {
+                final cost = int.tryParse(purchasePrice.text.trim());
+                if (productName.isEmpty || productUnit.isEmpty || cost == null || cost < 0) {
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(content: Text('أدخل اسم المنتج ووحدته وسعر بيع صحيحًا.')),
+                    const SnackBar(content: Text('أدخل اسم المنتج ووحدته وسعر شراء صحيحًا.')),
                   );
                   return;
                 }
                 Navigator.pop(dialogContext, {
                   'name': productName,
                   'unit': productUnit,
-                  'sellingPrice': price.toString(),
+                  'purchasePrice': cost.toString(),
                   'barcode': barcode.text.trim(),
                 });
               },
@@ -315,8 +315,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         GroceryProduct(
           name: details['name']!,
           unit: details['unit']!,
-          purchasePrice: 0,
-          sellingPrice: int.parse(details['sellingPrice']!),
+          purchasePrice: int.parse(details['purchasePrice']!),
+          sellingPrice: 0,
           stockQuantity: 0,
           minimumQuantity: 0,
           barcode: details['barcode'],
@@ -330,7 +330,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         draft.productId = productId;
         draft.productName = product.name;
         draft.fieldVersion++;
-        draft.sellingPrice.text = details['sellingPrice']!;
+        draft.cost.text = details['purchasePrice']!;
+        draft.sellingPrice.text = '0';
         // تبقى تكلفة الشراء فارغة ليُدخلها المستخدم في سطر فاتورة المورد.
       });
       _message('تم إنشاء المنتج وإضافته إلى سطر الفاتورة.');
@@ -348,7 +349,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     } finally {
       name.dispose();
       unit.dispose();
-      sellingPrice.dispose();
+      purchasePrice.dispose();
       barcode.dispose();
     }
   }
