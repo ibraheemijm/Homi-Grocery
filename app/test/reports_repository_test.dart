@@ -187,7 +187,8 @@ void main() {
       paidAmount: 225,
       paymentMethod: 'جزئي',
       customerName: 'زبون اختبار التقرير الفعلي',
-    );
+    
+      userId: managerId);
     final customer = (await database.query(
       'customers',
       columns: ['id'],
