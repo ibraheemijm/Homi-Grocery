@@ -61,9 +61,10 @@ class AuthRepository {
     final cleanName = displayName.trim();
     _validateCredentials(cleanUsername, cleanName, password);
 
+    final secureRandom = Random.secure();
     final salt = List<int>.generate(
       _saltLength,
-      (_) => Random.secure().nextInt(256),
+      (_) => secureRandom.nextInt(256),
     );
     final passwordHash = await _hashPassword(password, salt);
     final now = DateTime.now().toUtc().toIso8601String();
@@ -203,8 +204,8 @@ class AuthRepository {
     if (displayName.isEmpty || displayName.length > 80) {
       throw const AuthException('أدخل اسمًا ظاهرًا صحيحًا لا يتجاوز 80 حرفًا.');
     }
-    if (password.length < 10) {
-      throw const AuthException('كلمة المرور يجب ألا تقل عن 10 أحرف.');
+    if (password.length < 10 || password.length > 128) {
+      throw const AuthException('كلمة المرور يجب أن تكون بين 10 و128 حرفًا.');
     }
   }
 
