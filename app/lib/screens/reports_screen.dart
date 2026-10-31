@@ -101,8 +101,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await Printing.layoutPdf(
         name: buildPdfFileName(
           language: filenameLanguage,
-          arabicLabel: 'تقرير-يومي-${_compactDateLabel(report.day)}',
-          englishLabel: 'Daily-Report-${_compactDateLabel(report.day)}',
+          arabicLabel: 'تقرير-يومي',
+          englishLabel: 'Daily-Report',
+          sharedSuffix: _compactDateLabel(report.day),
           includeExportDate: false,
         ),
         onLayout: (_) async => bytes,
@@ -150,8 +151,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await Printing.layoutPdf(
         name: buildPdfFileName(
           language: filenameLanguage,
-          arabicLabel: 'تقرير-$modeLabel-$periodLabel',
-          englishLabel: '$englishModeLabel-Report-$periodLabel',
+          arabicLabel: 'تقرير-$modeLabel',
+          englishLabel: '$englishModeLabel-Report',
+          sharedSuffix: periodLabel,
         ),
         onLayout: (_) async => bytes,
       );
