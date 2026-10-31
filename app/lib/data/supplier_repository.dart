@@ -531,7 +531,6 @@ class SupplierRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
-    int? userId,
     int? shiftId,
   }) async {
     if (returnId <= 0 || amount <= 0) {
