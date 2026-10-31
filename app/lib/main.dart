@@ -71,11 +71,12 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
-          authenticatedBuilder: (user, onLogout) => user.isManager
+          authenticatedBuilder: (user, shiftId, onLogout) => user.isManager
               ? DashboardScreen(
                   isDark: _themeMode == ThemeMode.dark,
                   onToggleTheme: _toggleTheme,
                   user: user,
+                  shiftId: shiftId,
                   onLogout: onLogout,
                 )
               : CashierAccessPendingScreen(
@@ -136,6 +137,7 @@ class DashboardScreen extends StatefulWidget {
     required this.isDark,
     required this.onToggleTheme,
     required this.user,
+    required this.shiftId,
     required this.onLogout,
     super.key,
   });
@@ -143,6 +145,7 @@ class DashboardScreen extends StatefulWidget {
   final bool isDark;
   final VoidCallback onToggleTheme;
   final AuthUser user;
+  final int shiftId;
   final VoidCallback onLogout;
 
   @override
@@ -307,6 +310,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : _selectedIndex == 1
                             ? SalesScreen(
                                 userId: widget.user.id,
+                                shiftId: widget.shiftId,
                                 onDataChanged: () {
                                   _loadDashboardStats();
                                   _loadRecentInvoices();
@@ -315,13 +319,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : _selectedIndex == 2
                                 ? const InvoicesScreen()
                             : _selectedIndex == 3
-                                ? CustomersScreen(userId: widget.user.id)
+                                ? CustomersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                 : _selectedIndex == 4
                                     ? const ProductsScreen()
                                     : _selectedIndex == 5
-                                        ? SuppliersScreen(userId: widget.user.id)
+                                        ? SuppliersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                         : _selectedIndex == 6
-                                            ? CashboxScreen(userId: widget.user.id)
+                                            ? CashboxScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                             : _selectedIndex == 7
                                                 ? const ReportsScreen()
                                                 : _selectedIndex == 8
