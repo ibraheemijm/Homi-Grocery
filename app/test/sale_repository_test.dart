@@ -502,6 +502,76 @@ void main() {
     expect(refund['direction'], 'out');
   });
 
+  test('يقصر حساب الكاشير على البيع النقدي الكامل دون خصم أو دين أو تحويل', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 10,
+    ));
+    final product = (await products.getById(productId))!;
+
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      userId: cashier.id,
+      shiftId: shift.id,
+    );
+    expect(sale.total, 100);
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 1,
+        paidAmount: 99,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 0,
+        paymentMethod: 'آجل',
+        customerName: 'زبون',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 100,
+        paymentMethod: 'نقدي',
+        paymentChannel: 'تحويل بنكي',
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    expect(await sales.recentSales(), hasLength(1));
+  });
+
   test('يرفض البيع النقدي إذا كانت الوردية غير مملوكة أو مغلقة', () async {
     final auth = AuthRepository(database);
     final manager = await auth.createInitialManager(
