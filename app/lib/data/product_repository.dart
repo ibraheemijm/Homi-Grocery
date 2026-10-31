@@ -73,6 +73,71 @@ class ProductRepository {
     });
   }
 
+  /// إضافة صنف مع منع تكرار الاسم بعد تطبيع المسافات والحروف العربية.
+  /// يشمل الفحص الأصناف المؤرشفة حتى لا يُعاد إنشاء الصنف نفسه باسم مختلف شكليًا.
+  Future<int> addUnique(GroceryProduct product) async {
+    _validate(product);
+    return _database.transaction((txn) async {
+      final rows = await txn.query('products', columns: ['name']);
+      final normalizedName = normalizeProductName(product.name);
+      final duplicate = rows.any(
+        (row) => normalizeProductName(row['name'] as String) == normalizedName,
+      );
+      if (duplicate) {
+        throw StateError('يوجد صنف بالاسم نفسه أو باسم مطابق بعد توحيد الكتابة.');
+      }
+      return txn.insert('products', {
+        ...product.toMap(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+  }
+
+  /// العثور على صنف بالاسم المطبع، بما في ذلك الأصناف المؤرشفة.
+  Future<GroceryProduct?> findByNormalizedName(String name) async {
+    final normalizedName = normalizeProductName(name);
+    if (normalizedName.isEmpty) return null;
+    final rows = await _database.query('products', orderBy: 'id ASC');
+    for (final row in rows) {
+      if (normalizeProductName(row['name'] as String) == normalizedName) {
+        return GroceryProduct.fromMap(row);
+      }
+    }
+    return null;
+  }
+
+  /// يؤرشف الصنف المنشأ أثناء فاتورة ملغاة إذا لم يُستخدم في أي عملية.
+  /// لا يحذف السجل ولا يمس صنفًا دخل في بيع أو شراء أو حركة مخزون.
+  Future<bool> archiveIfUnused(int productId) async {
+    return _database.transaction((txn) async {
+      final products = await txn.query(
+        'products',
+        columns: ['stock_quantity'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+      if (products.isEmpty ||
+          (products.single['stock_quantity'] as num).abs() > 0.0000001) {
+        return false;
+      }
+      for (final table in ['sale_items', 'purchase_items', 'stock_movements']) {
+        final rows = await txn.rawQuery(
+          'SELECT COUNT(*) AS count FROM $table WHERE product_id = ?',
+          [productId],
+        );
+        if ((rows.single['count'] as num).toInt() > 0) return false;
+      }
+      await txn.update(
+        'products',
+        {'is_active': 0},
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+      return true;
+    });
+  }
+
   /// تحديث بيانات صنف موجود، مع التأكد من وجود معرّف له.
   Future<int> update(GroceryProduct product) async {
     _validate(product);
@@ -156,4 +221,16 @@ class ProductRepository {
       throw ArgumentError('كمية المخزون أو حد التنبيه غير صالح.');
     }
   }
+}
+
+
+/// توحيد اختلافات الكتابة الشائعة في أسماء الأصناف العربية قبل المقارنة.
+String normalizeProductName(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[\\u064B-\\u065F\\u0670\\u0640]'), '')
+      .replaceAll(RegExp(r'[أإآٱ]'), 'ا')
+      .replaceAll('ى', 'ي')
+      .replaceAll(RegExp(r'\\s+'), ' ');
 }
