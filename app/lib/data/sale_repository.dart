@@ -460,7 +460,6 @@ class SaleRepository {
           if (limit != null && totalAmount > limit) {
             throw StateError('قيمة المرتجع تتجاوز الحد المسموح ($limit ج.س).');
           }
-        }
       }
 
       final now = DateTime.now().toUtc().toIso8601String();
@@ -561,9 +560,6 @@ class SaleRepository {
     if (paymentMethod.trim().isEmpty) {
       throw ArgumentError('حدد طريقة رد المبلغ.');
     }
-    if (shiftId != null && userId == null) {
-      throw ArgumentError('ربط رد المبلغ بالوردية يتطلب تحديد المستخدم.');
-    }
     return _database.transaction((txn) async {
       final accounts = await txn.query(
         'users',
@@ -589,7 +585,6 @@ class SaleRepository {
           if (limit != null && amount > limit) {
             throw StateError('مبلغ الرد يتجاوز الحد المسموح ($limit ج.س).');
           }
-        }
       }
       if (paymentMethod.trim() == 'نقدي' && (role == 'cashier' || shiftId != null)) {
         await CashShiftRepository.validateActiveShift(
