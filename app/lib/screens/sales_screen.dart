@@ -996,6 +996,7 @@ class _SalesScreenState extends State<SalesScreen> {
         saleId: sale.id,
         quantitiesBySaleItemId: quantities,
         note: note,
+        userId: widget.userId,
       );
       _recent = await _salesRepository!.recentSales(limit: 50);
       widget.onDataChanged?.call();
