@@ -8,8 +8,9 @@ void main() {
     expect(
       buildPdfFileName(
         language: 'ar',
-        arabicLabel: 'فاتورة رقم 125',
-        englishLabel: 'Invoice 125',
+        arabicLabel: 'فاتورة-رقم',
+        englishLabel: 'Invoice',
+        sharedSuffix: '125',
         exportedAt: exportedAt,
       ),
       'فاتورة-رقم-125-20261031-094830.pdf',
@@ -43,12 +44,13 @@ void main() {
     expect(
       buildPdfFileName(
         language: 'both',
-        arabicLabel: 'تقرير-يومي-20261031',
-        englishLabel: 'Daily-Report-20261031',
+        arabicLabel: 'تقرير-يومي',
+        englishLabel: 'Daily-Report',
+        sharedSuffix: '20261031',
         exportedAt: exportedAt,
         includeExportDate: false,
       ),
-      'تقرير-يومي-20261031-Daily-Report-20261031-094830.pdf',
+      'تقرير-يومي-Daily-Report-20261031-094830.pdf',
     );
   });
 
