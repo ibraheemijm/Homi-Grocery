@@ -620,7 +620,7 @@ void main() {
     expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return_refund'"), isEmpty);
 
     await expectLater(
-      suppliers.recordSupplierReturnRefund(userId: managerId, returnId: returnId, amount: 101),
+      suppliers.recordSupplierReturnRefund(userId: managerId, returnId: returnId, amount: 101, paymentMethod: 'تحويل بنكي'),
       throwsArgumentError,
     );
     await suppliers.recordSupplierReturnRefund(
