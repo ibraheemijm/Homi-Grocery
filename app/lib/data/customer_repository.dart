@@ -165,48 +165,48 @@ class CustomerRepository {
     }
     await _database.transaction((txn) async {
       final accounts = await txn.query(
-          'users',
-          columns: ['role', 'is_active'],
-          where: 'id = ?',
-          whereArgs: [userId],
-          limit: 1,
-        );
-        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
-          throw StateError('الحساب غير نشط أو غير موجود.');
-        }
-        final role = accounts.single['role'];
-        if (role != 'manager' && role != 'cashier') {
-          throw StateError('نوع الحساب غير مصرح له بتحصيل ديون الزبائن.');
-        }
-        if (role == 'cashier') {
-          if (paymentMethod == 'نقدي') {
-            await CashShiftRepository.validateActiveShift(
-              txn,
-              shiftId: shiftId,
-              userId: userId,
-            );
-          }
-          final permissions = await txn.query(
-            'cashier_permissions',
-            columns: ['is_allowed', 'max_amount'],
-            where: "user_id = ? AND permission_key = 'customer_collections'",
-            whereArgs: [userId],
-            limit: 1,
-          );
-          if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
-            throw StateError('لا يملك الكاشير صلاحية تحصيل ديون الزبائن.');
-          }
-          final limit = (permissions.single['max_amount'] as num?)?.toInt();
-          if (limit != null && amount > limit) {
-            throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
-          }
-        } else if (paymentMethod == 'نقدي' && shiftId != null) {
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+        throw StateError('الحساب غير نشط أو غير موجود.');
+      }
+      final role = accounts.single['role'];
+      if (role != 'manager' && role != 'cashier') {
+        throw StateError('نوع الحساب غير مصرح له بتحصيل ديون الزبائن.');
+      }
+      if (role == 'cashier') {
+        if (paymentMethod == 'نقدي') {
           await CashShiftRepository.validateActiveShift(
             txn,
             shiftId: shiftId,
             userId: userId,
           );
         }
+        final permissions = await txn.query(
+          'cashier_permissions',
+          columns: ['is_allowed', 'max_amount'],
+          where: "user_id = ? AND permission_key = 'customer_collections'",
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+          throw StateError('لا يملك الكاشير صلاحية تحصيل ديون الزبائن.');
+        }
+        final limit = (permissions.single['max_amount'] as num?)?.toInt();
+        if (limit != null && amount > limit) {
+          throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
+        }
+      } else if (paymentMethod == 'نقدي' && shiftId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
       final result = await txn.rawQuery('''
