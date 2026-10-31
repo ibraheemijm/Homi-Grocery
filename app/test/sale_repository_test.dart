@@ -453,6 +453,55 @@ void main() {
     expect(bankEntry['payment_method'], 'تحويل بنكي');
   });
 
+  test('يشترط الوردية النشطة لرد مبالغ المرتجعات نقدًا', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 100,
+      paymentMethod: 'نقدي',
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    final itemId = (await database.query(
+      'sale_items',
+      columns: ['id'],
+      where: 'sale_id = ?',
+      whereArgs: [sale.id],
+    )).single['id'] as int;
+    await sales.returnItems(
+      saleId: sale.id,
+      quantitiesBySaleItemId: {itemId: 1},
+    );
+    await sales.recordReturnRefund(
+      saleId: sale.id,
+      amount: 100,
+      paymentMethod: 'نقدي',
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    final refund = (await database.query(
+      'cash_transactions',
+      where: "reference_type = 'sale_return_refund'",
+    )).single;
+    expect(refund['user_id'], manager.id);
+    expect(refund['shift_id'], shift.id);
+    expect(refund['direction'], 'out');
+  });
+
   test('يرفض البيع النقدي إذا كانت الوردية غير مملوكة أو مغلقة', () async {
     final auth = AuthRepository(database);
     final manager = await auth.createInitialManager(
