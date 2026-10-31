@@ -136,8 +136,8 @@ class SaleRepository {
           whereArgs: [userId],
           limit: 1,
         );
-        if (accounts.isNotEmpty && accounts.single['is_active'] != 1) {
-          throw StateError('الحساب غير نشط ولا يمكنه تسجيل مبيعات.');
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود ولا يمكنه تسجيل مبيعات.');
         }
         if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
           if (discount != 0 ||
