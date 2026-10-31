@@ -960,6 +960,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         amount: value,
         paymentMethod: result['method']! as String,
         userId: widget.userId,
+        shiftId: widget.shiftId,
       );
       await _load();
       _message('تم تسجيل المبلغ المستلم وإضافته إلى الخزينة.');
@@ -1015,6 +1016,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           paymentMethod: result['method']! as String,
           note: note.text,
           userId: widget.userId,
+          shiftId: widget.shiftId,
         );
         await _load();
         _message('تم تسجيل دفعة المورد.');
