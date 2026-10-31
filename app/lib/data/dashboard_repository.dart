@@ -19,7 +19,29 @@ class DashboardRepository {
   DashboardRepository(this._database);
   final Database _database;
 
-  Future<DashboardStats> load({DateTime? now}) async {
+  Future<void> _requireReadPermission(int userId, String permissionKey) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = users.single['role'];
+    if (role == 'manager') return;
+    if (role != 'cashier') throw StateError('نوع الحساب غير مصرح له بقراءة بيانات اللوحة.');
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: 'user_id = ? AND permission_key = ?',
+      whereArgs: [userId, permissionKey], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية قراءة هذه البيانات.');
+    }
+  }
+
+  Future<DashboardStats> load({required int userId, DateTime? now}) async {
+    await _requireReadPermission(userId, 'view_reports');
     final localNow = now ?? DateTime.now();
     final start = DateTime(localNow.year, localNow.month, localNow.day).toUtc();
     final end = start.add(const Duration(days: 1));
@@ -92,7 +114,8 @@ class RecentInvoice {
 
 /// قراءة أحدث الفواتير الحقيقية بدل عرض حالة فارغة ثابتة.
 extension RecentInvoicesLoader on DashboardRepository {
-  Future<List<RecentInvoice>> loadRecentInvoices({int limit = 5}) async {
+  Future<List<RecentInvoice>> loadRecentInvoices({required int userId, int limit = 5}) async {
+    await _requireReadPermission(userId, 'view_invoice_history');
     final safeLimit = limit.clamp(1, 20);
     final rows = await _database.rawQuery('''
       SELECT id, invoice_number, customer_name, total, paid_amount, created_at
