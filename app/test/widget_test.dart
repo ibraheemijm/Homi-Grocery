@@ -63,9 +63,11 @@ void main() {
     await tester.pumpWidget(const HomiGroceryApp());
     await tester.pump();
 
-    await tester.tap(find.text('المزيد'));
-    // رسوم التطبيق المستمرة تمنع pumpAndSettle؛ ننتظر انتقال القائمة بإطار زمني ثابت.
-    await tester.pump(const Duration(milliseconds: 400));
+    // نفتح القائمة من أيقونتها لتجنب الالتباس بين نصوص التنقل وعناصرها.
+    await tester.tap(find.byIcon(Icons.grid_view_rounded));
+    // رسوم التطبيق المستمرة تمنع pumpAndSettle؛ ننتظر اكتمال انتقال القائمة.
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('النسخ الاحتياطي والاستعادة'), findsOneWidget);
 
     await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
     // شاشة النسخ تعرض مؤشر تحميل متحركًا أثناء فتح قاعدة البيانات؛ لا ننتظر سكون كل الرسوم.
