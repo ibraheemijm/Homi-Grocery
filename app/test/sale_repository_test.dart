@@ -781,6 +781,11 @@ void main() {
       stockQuantity: 10,
     ));
     final product = (await products.getById(productId))!;
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      shiftId: shift.id,
+      openingCash: 100,
+    );
 
     await expectLater(
       sales.createSale(
@@ -790,6 +795,8 @@ void main() {
         paymentMethod: 'آجل',
         customerName: 'عميل اختبار',
         userId: cashier.id,
+      shiftId: shift.id,
+        shiftId: shift.id,
       ),
       throwsStateError,
     );
@@ -820,6 +827,8 @@ void main() {
         paymentMethod: 'جزئي',
         customerName: 'عميل اختبار',
         userId: cashier.id,
+      shiftId: shift.id,
+        shiftId: shift.id,
       ),
       throwsStateError,
     );
@@ -830,6 +839,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'عميل اختبار آخر',
       userId: cashier.id,
+      shiftId: shift.id,
     );
     expect(allowed.remainingAmount, 40);
   });
