@@ -48,6 +48,7 @@ void main() {
     expect(purchase.remainingAmount, 240);
     expect((await products.getById(productId))!.stockQuantity, 7);
     expect((await products.getById(productId))!.purchasePrice, 120);
+    expect((await products.getById(productId))!.sellingPrice, 180);
     expect(await database.query('purchase_items'), hasLength(1));
     final movements = await database.query('stock_movements', where: "reference_type = 'purchase'");
     expect(movements, hasLength(1));
@@ -106,7 +107,7 @@ void main() {
     );
 
     expect((await products.getById(productId))!.stockQuantity, 3);
-    expect((await products.getById(productId))!.sellingPrice, 180);
+    expect((await products.getById(productId))!.sellingPrice, 150);
     expect(await database.query('purchases'), isEmpty);
     expect(await database.query('purchase_items'), isEmpty);
     expect(await database.query('stock_movements', where: "reference_type = 'purchase'"), isEmpty);
