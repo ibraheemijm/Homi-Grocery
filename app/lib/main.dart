@@ -861,11 +861,14 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
@@ -885,13 +888,7 @@ class _MetricCard extends StatelessWidget {
                     color: tint,
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: IconButton(
-                    tooltip: 'فتح $title',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-                    onPressed: onTap,
-                    icon: Icon(icon, color: brandGreen, size: 20),
-                  ),
+                  child: Icon(icon, color: brandGreen, size: 20),
                 ),
               ],
             ),
@@ -908,7 +905,8 @@ class _MetricCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
