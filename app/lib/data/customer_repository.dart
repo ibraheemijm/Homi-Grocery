@@ -163,9 +163,6 @@ class CustomerRepository {
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
       throw ArgumentError('طريقة التحصيل غير مدعومة.');
     }
-    if (shiftId != null && userId == null) {
-      throw ArgumentError('ربط التحصيل بالوردية يتطلب تحديد المستخدم.');
-    }
     await _database.transaction((txn) async {
       final accounts = await txn.query(
           'users',
