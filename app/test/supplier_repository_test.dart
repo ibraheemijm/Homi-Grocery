@@ -189,13 +189,15 @@ void main() {
       userId: manager.id,
       shiftId: shift.id,
     );
-    final itemId = (await suppliers.returnablePurchaseItems(purchase.id))
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id, userId: managerId))
         .single['id'] as int;
     final returnId = await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
     );
     await suppliers.recordSupplierReturnRefund(
+      userId: managerId,
       returnId: returnId,
       amount: 50,
       paymentMethod: 'نقدي',
@@ -322,7 +324,7 @@ void main() {
       note: 'اختبار السجل',
     );
 
-    final history = await suppliers.purchaseHistory();
+    final history = await suppliers.purchaseHistory(userId: managerId);
     expect(history, hasLength(1));
     expect(history.single.id, purchase.id);
     expect(history.single.invoiceNumber, purchase.invoiceNumber);
@@ -334,18 +336,18 @@ void main() {
     expect(history.single.remainingAmount, 140);
     expect(history.single.note, 'اختبار السجل');
 
-    final items = await suppliers.purchaseItems(purchase.id);
+    final items = await suppliers.purchaseItems(purchase.id, userId: managerId);
     expect(items, hasLength(1));
     expect(items.single.productName, 'سكر وقت الشراء');
     expect(items.single.unitCost, 125);
     expect(items.single.lineTotal, 250);
-    expect(await suppliers.purchaseHistory(supplierId: supplierId), hasLength(1));
-    expect(await suppliers.purchaseHistory(supplierId: supplierId + 1), isEmpty);
+    expect(await suppliers.purchaseHistory(userId: managerId, supplierId: supplierId), hasLength(1));
+    expect(await suppliers.purchaseHistory(userId: managerId, supplierId: supplierId + 1), isEmpty);
   });
 
   test('يرفض حد سجل مشتريات غير صالح', () async {
-    await expectLater(suppliers.purchaseHistory(limit: 0), throwsArgumentError);
-    await expectLater(suppliers.purchaseHistory(limit: 1001), throwsArgumentError);
+    await expectLater(suppliers.purchaseHistory(userId: managerId, limit: 0), throwsArgumentError);
+    await expectLater(suppliers.purchaseHistory(userId: managerId, limit: 1001), throwsArgumentError);
   });
 
   test('مرتجع المورد يخفض المخزون والمستحق ويسجل حركة عكسية ذريًا', () async {
@@ -358,10 +360,11 @@ void main() {
       lines: [PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلوجرام', quantity: 4, unitCost: 100)],
       paidAmount: 0,
     );
-    final items = await suppliers.returnablePurchaseItems(purchase.id);
+    final items = await suppliers.returnablePurchaseItems(purchase.id, userId: managerId);
     final itemId = items.single['id'] as int;
 
     final returnId = await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
       note: 'صنف تالف',
@@ -392,12 +395,14 @@ void main() {
       discount: 20,
       paidAmount: 0,
     );
-    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id, userId: managerId)).single['id'] as int;
     final first = await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
     );
     final second = await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
     );
@@ -419,14 +424,16 @@ void main() {
       lines: [PurchaseLine(productId: productId, productName: 'زيت', unit: 'عبوة', quantity: 2, unitCost: 50)],
       paidAmount: 0,
     );
-    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id, userId: managerId)).single['id'] as int;
 
     await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
     );
     await expectLater(
       suppliers.createSupplierReturn(
+      userId: managerId,
         purchaseId: purchase.id,
         quantitiesByPurchaseItemId: {itemId: 2},
       ),
@@ -448,8 +455,9 @@ void main() {
       paidAmount: 100,
       paymentMethod: 'نقدي',
     );
-    final itemId = (await suppliers.returnablePurchaseItems(purchase.id)).single['id'] as int;
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id, userId: managerId)).single['id'] as int;
     final returnId = await suppliers.createSupplierReturn(
+      userId: managerId,
       purchaseId: purchase.id,
       quantitiesByPurchaseItemId: {itemId: 1},
     );
@@ -457,7 +465,7 @@ void main() {
     var balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.balance, -100);
     expect(balance.credit, 100);
-    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 100);
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId, userId: managerId), 100);
     expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return_refund'"), isEmpty);
 
     await expectLater(
@@ -465,6 +473,7 @@ void main() {
       throwsArgumentError,
     );
     await suppliers.recordSupplierReturnRefund(
+      userId: managerId,
       returnId: returnId,
       amount: 40,
       paymentMethod: 'تحويل بنكي',
@@ -472,7 +481,7 @@ void main() {
     balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.balance, -60);
     expect(balance.credit, 60);
-    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId), 60);
+    expect(await suppliers.maximumRefundableSupplierReturnAmount(returnId, userId: managerId), 60);
     final cashEntries = await database.query(
       'cash_transactions',
       where: "reference_type = 'supplier_return_refund'",
