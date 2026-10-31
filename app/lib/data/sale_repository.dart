@@ -340,25 +340,6 @@ class SaleRepository {
         if (accounts.isEmpty || accounts.single['is_active'] != 1) {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
-        if (accounts.single['role'] == 'cashier') {
-          final limit = await _requireCashierPermission(
-            txn,
-            userId: userId,
-            permissionKey: 'returns',
-            permissionLabel: 'تسجيل مرتجعات البيع',
-          );
-          // يُفحص سقف المرتجع بعد حساب قيمته الفعلية داخل المعاملة.
-          if (limit != null) {
-            final saleRows = await txn.query(
-              'sales',
-              columns: ['total', 'paid_amount'],
-              where: 'id = ?',
-              whereArgs: [saleId],
-              limit: 1,
-            );
-            if (saleRows.isEmpty) throw StateError('الفاتورة غير موجودة.');
-          }
-        }
       }
       final sales = await txn.query(
         'sales',
