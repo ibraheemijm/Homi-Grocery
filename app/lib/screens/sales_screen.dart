@@ -9,10 +9,11 @@ import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({this.onDataChanged, this.userId, super.key});
+  const SalesScreen({this.onDataChanged, this.userId, this.shiftId, super.key});
 
   final VoidCallback? onDataChanged;
   final int? userId;
+  final int? shiftId;
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -824,6 +825,7 @@ class _SalesScreenState extends State<SalesScreen> {
         customerName: customerNameForDebt,
         customerId: hasDebt ? _selectedCustomerId : null,
         userId: widget.userId,
+        shiftId: widget.shiftId,
       );
       _cart = [];
       _customer.clear();
