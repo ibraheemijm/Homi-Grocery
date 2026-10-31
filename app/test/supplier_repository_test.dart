@@ -74,6 +74,7 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد الصلاحيات');
     final purchase = await suppliers.createPurchase(
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(
         productId: productId,
@@ -200,6 +201,7 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
     final purchase = await suppliers.createPurchase(
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كيلوجرام', quantity: 3, unitCost: 120, sellingPrice: 180)],
       discount: 20,
@@ -355,6 +357,8 @@ void main() {
     final supplierId = await suppliers.addSupplier(name: 'مورد متعدد الأصناف');
 
     final purchase = await suppliers.createPurchase(
+        paymentChannel: 'تحويل بنكي',
+        userId: managerId,
       supplierId: supplierId,
       lines: [
         PurchaseLine(productId: riceId, productName: 'أرز', unit: 'كيلوجرام', quantity: 3, unitCost: 110),
@@ -380,6 +384,7 @@ void main() {
 
     await expectLater(
       suppliers.createPurchase(
+        userId: managerId,
         supplierId: supplierId,
         lines: [
           PurchaseLine(productId: productId, productName: 'طحين', unit: 'كيلوجرام', quantity: 2, unitCost: 100),
@@ -405,11 +410,14 @@ void main() {
     final line = PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلوجرام', quantity: 2, unitCost: 100);
 
     await expectLater(
-      suppliers.createPurchase(supplierId: supplierId, lines: [line], discount: 201, paidAmount: 0),
+      suppliers.createPurchase(
+        userId: managerId,supplierId: supplierId, lines: [line], discount: 201, paidAmount: 0),
       throwsArgumentError,
     );
     await expectLater(
-      suppliers.createPurchase(supplierId: supplierId, lines: [line], paidAmount: 201),
+      suppliers.createPurchase(
+        paymentChannel: 'تحويل بنكي',
+        userId: managerId,supplierId: supplierId, lines: [line], paidAmount: 201),
       throwsArgumentError,
     );
     expect((await products.getById(productId))!.stockQuantity, 2);
@@ -423,16 +431,20 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد الزيت');
     await suppliers.createPurchase(
+        paymentChannel: 'تحويل بنكي',
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'زيت', unit: 'عبوة', quantity: 2, unitCost: 50)],
       paidAmount: 20,
     );
 
     expect((await suppliers.balances(userId: managerId)).single.balance, 80);
-    await suppliers.recordPayment(supplierId: supplierId, amount: 30, paymentMethod: 'تحويل بنكي', note: 'دفعة بنكية');
+    await suppliers.recordPayment(
+        userId: managerId,supplierId: supplierId, amount: 30, paymentMethod: 'تحويل بنكي', note: 'دفعة بنكية');
     expect((await suppliers.balances(userId: managerId)).single.balance, 50);
     await expectLater(
-      suppliers.recordPayment(supplierId: supplierId, amount: 51),
+      suppliers.recordPayment(
+        userId: managerId,supplierId: supplierId, amount: 51, paymentMethod: 'تحويل بنكي'),
       throwsArgumentError,
     );
     expect(await database.query('supplier_payments'), hasLength(1));
@@ -447,6 +459,8 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
     final purchase = await suppliers.createPurchase(
+        paymentChannel: 'تحويل بنكي',
+        userId: managerId,
       supplierId: supplierId,
       lines: [
         PurchaseLine(productId: productId, productName: 'سكر وقت الشراء', unit: 'كيلوجرام', quantity: 2, unitCost: 125),
@@ -488,6 +502,7 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد الأرز');
     final purchase = await suppliers.createPurchase(
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلوجرام', quantity: 4, unitCost: 100)],
       paidAmount: 0,
@@ -522,6 +537,7 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد السكر بخصم');
     final purchase = await suppliers.createPurchase(
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كيلوجرام', quantity: 2, unitCost: 100)],
       discount: 20,
@@ -552,6 +568,7 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد الزيت');
     final purchase = await suppliers.createPurchase(
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'زيت', unit: 'عبوة', quantity: 2, unitCost: 50)],
       paidAmount: 0,
@@ -582,6 +599,8 @@ void main() {
     ));
     final supplierId = await suppliers.addSupplier(name: 'مورد الحليب');
     final purchase = await suppliers.createPurchase(
+        paymentChannel: 'تحويل بنكي',
+        userId: managerId,
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'حليب', unit: 'عبوة', quantity: 1, unitCost: 100)],
       paidAmount: 100,
