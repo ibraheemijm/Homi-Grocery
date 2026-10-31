@@ -518,7 +518,7 @@ void main() {
             key: setting.key,
             label: setting.label,
             isAllowed: true,
-            maxAmount: 500,
+            maxAmount: 350,
           );
         }
         if (setting.key == 'supplier_payments') {
