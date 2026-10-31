@@ -398,7 +398,7 @@ class GroceryDatabase {
         user_id INTEGER NOT NULL REFERENCES users(id),
         opening_cash INTEGER NOT NULL CHECK (opening_cash >= 0),
         closing_cash INTEGER CHECK (closing_cash IS NULL OR closing_cash >= 0),
-        expected_cash INTEGER CHECK (expected_cash IS NULL OR expected_cash >= 0),
+        expected_cash INTEGER,
         difference INTEGER,
         status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
         opened_at TEXT NOT NULL,
