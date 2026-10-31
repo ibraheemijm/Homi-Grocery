@@ -149,7 +149,31 @@ class StockRepository {
 
   /// يعرض سجل صنف محدد أو سجل جميع الأصناف من الأحدث إلى الأقدم.
   /// تمرير null يعرض كل الأصناف دون تعديل أي رصيد.
-  Future<List<StockMovement>> history(int? productId, {int limit = 100}) async {
+  Future<List<StockMovement>> history(
+    int? productId, {
+    required int userId,
+    int limit = 100,
+  }) async {
+    final accounts = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'cashier') {
+      final permissions = await _database.query(
+        'cashier_permissions', columns: ['is_allowed'],
+        where: "user_id = ? AND permission_key = 'stock_adjustments'",
+        whereArgs: [userId], limit: 1,
+      );
+      if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+        throw StateError('لا يملك الكاشير صلاحية عرض حركات المخزون.');
+      }
+    } else if (role != 'manager') {
+      throw StateError('نوع الحساب غير مصرح له بعرض حركات المخزون.');
+    }
     if (limit < 1) throw ArgumentError('عدد الحركات يجب أن يكون أكبر من صفر.');
     final rows = await _database.rawQuery(
       '''
