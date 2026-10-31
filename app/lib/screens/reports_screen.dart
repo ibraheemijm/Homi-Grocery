@@ -9,7 +9,9 @@ import '../data/pdf_file_name.dart';
 
 /// تقارير حسب اليوم؛ لا يعرض ربحًا تقديريًا قبل حفظ تكلفة الصنف وقت البيع.
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({super.key});
+  const ReportsScreen({required this.userId, super.key});
+
+  final int userId;
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
@@ -41,12 +43,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final end = _periodMode == 'month'
         ? DateTime(_periodDate.year, _periodDate.month + 1)
         : DateTime(_periodDate.year + 1);
-    return ReportsRepository(db).loadPeriod(start: start, end: end);
+    return ReportsRepository(db).loadPeriod(userId: widget.userId, start: start, end: end);
   }
 
   Future<DailyReport> _load() async {
     final db = await GroceryDatabase.open();
-    return ReportsRepository(db).load(day: _day);
+    return ReportsRepository(db).load(userId: widget.userId, day: _day);
   }
 
   String _money(int amount) => '${amount.toString()} ج.س';
