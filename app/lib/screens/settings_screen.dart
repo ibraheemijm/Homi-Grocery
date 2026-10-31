@@ -21,6 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _uiFont = FontPreferences.defaultUiFont;
   String _documentFont = FontPreferences.defaultDocumentFont;
   String _salesViewMode = 'grid';
+  String _pdfFilenameLanguage = 'both';
   bool _importingFont = false;
   bool _occasionEnabled = false;
   bool _loading = true;
@@ -49,7 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final rows = await db.query(
         'app_metadata',
         columns: ['key', 'value'],
-        where: 'key IN (?, ?, ?, ?, ?, ?)',
+        where: 'key IN (?, ?, ?, ?, ?, ?, ?)',
         whereArgs: [
           'store_name',
           'clock_24h',
@@ -57,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'occasion_text',
           'occasion_start',
           'sales_view_mode',
+          'pdf_filename_language',
         ],
       );
       final values = {
@@ -77,6 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _uiFont = FontPreferences.uiFont;
         _documentFont = FontPreferences.documentFont;
         _salesViewMode = values['sales_view_mode'] ?? 'grid';
+        _pdfFilenameLanguage = values['pdf_filename_language'] ?? 'both';
         _clock24 = values['clock_24h'] != 'false';
         _occasionEnabled = values['occasion_enabled'] == 'true';
         _occasionText.text = values['occasion_text'] ?? '';
@@ -144,6 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'store_name': name,
         'clock_24h': _clock24.toString(),
         'sales_view_mode': _salesViewMode,
+        'pdf_filename_language': _pdfFilenameLanguage,
         'occasion_enabled': _occasionEnabled.toString(),
         'occasion_text': _occasionText.text.trim(),
         'occasion_start': _occasionStart.text.trim(),
@@ -212,6 +216,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                             onChanged: (value) {
                               if (value != null) setState(() => _salesViewMode = value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            initialValue: _pdfFilenameLanguage,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'لغة أسماء ملفات PDF',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'ar', child: Text('العربية')),
+                              DropdownMenuItem(value: 'en', child: Text('English')),
+                              DropdownMenuItem(value: 'both', child: Text('العربية والإنجليزية')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _pdfFilenameLanguage = value);
+                              }
                             },
                           ),
                           const SizedBox(height: 12),
