@@ -9,11 +9,12 @@ import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({this.onDataChanged, this.userId, this.shiftId, super.key});
+  const SalesScreen({this.onDataChanged, this.userId, this.shiftId, this.cashierMode = false, super.key});
 
   final VoidCallback? onDataChanged;
   final int? userId;
   final int? shiftId;
+  final bool cashierMode;
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -310,7 +311,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               const SizedBox(height: 12),
                               _buildCart(theme, compact: true),
                               const SizedBox(height: 12),
-                              _buildRecent(theme, compact: true),
+                              if (!widget.cashierMode) _buildRecent(theme, compact: true),
                             ],
                           ),
                         );
@@ -336,14 +337,16 @@ class _SalesScreenState extends State<SalesScreen> {
                                     child: Column(
                                       children: [
                                         Expanded(
-                                          flex: 3,
+                                          flex: widget.cashierMode ? 5 : 3,
                                           child: _buildCart(theme, compact: false),
                                         ),
-                                        const SizedBox(height: 12),
-                                        Expanded(
-                                          flex: 2,
-                                          child: _buildRecent(theme, compact: false),
-                                        ),
+                                        if (!widget.cashierMode) ...[
+                                          const SizedBox(height: 12),
+                                          Expanded(
+                                            flex: 2,
+                                            child: _buildRecent(theme, compact: false),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -363,14 +366,16 @@ class _SalesScreenState extends State<SalesScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'المبيعات',
+            widget.cashierMode ? 'نقطة البيع' : 'المبيعات',
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 5),
           Text(
-            'أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.',
+            widget.cashierMode
+                ? 'أضف الأصناف إلى الفاتورة ثم استلم كامل المبلغ نقدًا.'
+                : 'أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.',
             style: theme.textTheme.bodyMedium,
           ),
         ],
@@ -568,6 +573,7 @@ class _SalesScreenState extends State<SalesScreen> {
               else
                 Expanded(child: _buildCartLines(theme)),
               const Divider(height: 20),
+              if (!widget.cashierMode) ...[
               TextField(
                 controller: _customer,
                 onChanged: _searchCustomers,
@@ -617,8 +623,14 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              _totalRow('الإجمالي قبل الخصم', _subtotal),
-              _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
+                _totalRow('الإجمالي قبل الخصم', _subtotal),
+                _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
+
+              ] else ...[
+                const Text('نوع العملية: بيع نقدي كامل دون خصم أو دين.'),
+                const SizedBox(height: 12),
+                _totalRow('الإجمالي', _total),
+              ],
               const Divider(),
               _totalRow('المطلوب دفعه', _total, strong: true),
               const SizedBox(height: 12),
@@ -735,69 +747,75 @@ class _SalesScreenState extends State<SalesScreen> {
   );
 
   // اختيار طريقة الدفع والمبلغ المستلم، مع السماح بالبيع الآجل والجزئي.
+  // الكاشير لا يختار طريقة سداد؛ مساره نقدي كامل فقط.
   Future<void> _checkout() async {
-    final paidController = TextEditingController(text: '$_total');
-    String method = 'نقدي';
-    String paymentChannel = 'نقدي';
-    final result = await showDialog<Map<String, Object?>>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(builder: (context, refreshDialog) => AlertDialog(
-        title: const Text('تأكيد الدفع'),
-        content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
-          _totalRow('إجمالي الفاتورة', _total),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: method,
-            decoration: const InputDecoration(labelText: 'طريقة السداد', border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-              DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
-              DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              refreshDialog(() {
-                method = value;
-                if (method == 'نقدي') paidController.text = '$_total';
-                if (method == 'جزئي') paidController.text = _total > 1 ? '${_total ~/ 2}' : '0';
-                if (method == 'آجل') paidController.text = '0';
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: paymentChannel,
-            decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-              DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
-            ],
-            onChanged: (value) {
-              if (value != null) refreshDialog(() => paymentChannel = value);
-            },
-          ),
-          const SizedBox(height: 8),
-          const Text('المتبقي سيظهر في الفاتورة. متابعة ديون الزبائن ستضاف ضمن وحدة الحسابات.', style: TextStyle(fontSize: 12)),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
-          FilledButton(onPressed: () {
-            final paid = int.tryParse(paidController.text.trim());
-            if (paid == null || paid < 0 || paid > _total ||
-                (method == 'نقدي' && paid != _total) ||
-                (method == 'آجل' && paid != 0) ||
-                (method == 'جزئي' && (paid == 0 || paid == _total))) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
-              return;
-            }
-            Navigator.pop(dialogContext, {'paid': paid, 'method': method, 'channel': paymentChannel});
-          }, child: const Text('حفظ الفاتورة')),
-        ],
-      )),
-    );
-    paidController.dispose();
+    Map<String, Object?>? result;
+    if (widget.cashierMode) {
+      result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي'};
+    } else {
+      final paidController = TextEditingController(text: '$_total');
+      String method = 'نقدي';
+      String paymentChannel = 'نقدي';
+      result = await showDialog<Map<String, Object?>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(builder: (context, refreshDialog) => AlertDialog(
+          title: const Text('تأكيد الدفع'),
+          content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _totalRow('إجمالي الفاتورة', _total),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: method,
+              decoration: const InputDecoration(labelText: 'طريقة السداد', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
+                DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                refreshDialog(() {
+                  method = value;
+                  if (method == 'نقدي') paidController.text = '$_total';
+                  if (method == 'جزئي') paidController.text = _total > 1 ? '${_total ~/ 2}' : '0';
+                  if (method == 'آجل') paidController.text = '0';
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: paymentChannel,
+              decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+              ],
+              onChanged: (value) {
+                if (value != null) refreshDialog(() => paymentChannel = value);
+              },
+            ),
+            const SizedBox(height: 8),
+            const Text('المتبقي سيظهر في الفاتورة. متابعة ديون الزبائن ستضاف ضمن وحدة الحسابات.', style: TextStyle(fontSize: 12)),
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
+            FilledButton(onPressed: () {
+              final paid = int.tryParse(paidController.text.trim());
+              if (paid == null || paid < 0 || paid > _total ||
+                  (method == 'نقدي' && paid != _total) ||
+                  (method == 'آجل' && paid != 0) ||
+                  (method == 'جزئي' && (paid == 0 || paid == _total))) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
+                return;
+              }
+              Navigator.pop(dialogContext, {'paid': paid, 'method': method, 'channel': paymentChannel});
+            }, child: const Text('حفظ الفاتورة')),
+          ],
+        )),
+      );
+      paidController.dispose();
+    }
     if (result == null || !mounted) return;
 
     setState(() => _saving = true);
