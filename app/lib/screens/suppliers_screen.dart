@@ -46,7 +46,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _load() async {
     if (_repository == null) return;
-    final rows = await _repository!.balances(query: _search.text);
+    final rows = await _repository!.balances(userId: widget.userId!, query: _search.text);
     if (mounted) setState(() => _suppliers = rows);
   }
 
