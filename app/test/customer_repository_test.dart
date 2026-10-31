@@ -314,4 +314,78 @@ void main() {
       throwsArgumentError,
     );
   });
+  test('يفرض صلاحية التحصيل وحده المالي على حساب الكاشير', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'collection_manager',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'collection_cashier',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة التحصيل',
+      sellingPrice: 500,
+      stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 2)],
+      discount: 0,
+      paidAmount: 500,
+      paymentMethod: 'جزئي',
+      customerName: 'عميل التحصيل',
+    );
+    final customer = (await customers.balances()).single;
+
+    await expectLater(
+      customers.recordPayment(
+        customerId: customer.id,
+        amount: 100,
+        paymentMethod: 'تحويل بنكي',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+
+    final settings = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'customer_collections'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 300,
+            )
+          : setting
+      ).toList(),
+    );
+    await expectLater(
+      customers.recordPayment(
+        customerId: customer.id,
+        amount: 301,
+        paymentMethod: 'تحويل بنكي',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    await customers.recordPayment(
+      customerId: customer.id,
+      amount: 300,
+      paymentMethod: 'تحويل بنكي',
+      userId: cashier.id,
+    );
+    expect((await customers.balances()).single.balance, 200);
+  });
+
 }
