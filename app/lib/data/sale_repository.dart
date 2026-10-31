@@ -140,7 +140,8 @@ class SaleRepository {
           throw StateError('الحساب غير نشط أو غير موجود ولا يمكنه تسجيل مبيعات.');
         }
         if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
-          if (discount != 0 ||
+          if (total <= 0 ||
+              discount != 0 ||
               paymentMethod != 'نقدي' ||
               paidAmount != total ||
               paymentChannel != 'نقدي') {
