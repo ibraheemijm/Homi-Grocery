@@ -197,11 +197,10 @@ void main() {
       quantitiesByPurchaseItemId: {itemId: 1},
     );
     await suppliers.recordSupplierReturnRefund(
-      userId: managerId,
+      userId: manager.id,
       returnId: returnId,
       amount: 50,
       paymentMethod: 'نقدي',
-      userId: manager.id,
       shiftId: shift.id,
     );
     final refund = (await database.query(
@@ -469,7 +468,7 @@ void main() {
     expect(await database.query('cash_transactions', where: "reference_type = 'supplier_return_refund'"), isEmpty);
 
     await expectLater(
-      suppliers.recordSupplierReturnRefund(returnId: returnId, amount: 101),
+      suppliers.recordSupplierReturnRefund(userId: managerId, returnId: returnId, amount: 101),
       throwsArgumentError,
     );
     await suppliers.recordSupplierReturnRefund(
