@@ -231,7 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadRecentInvoices() async {
     try {
       final database = await GroceryDatabase.open();
-      final rows = await DashboardRepository(database).loadRecentInvoices();
+      final rows = await DashboardRepository(database).loadRecentInvoices(userId: widget.user.id);
       if (!mounted) return;
       setState(() {
         _recentInvoices = rows;
@@ -266,7 +266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadDashboardStats() async {
     try {
       final database = await GroceryDatabase.open();
-      final stats = await DashboardRepository(database).load();
+      final stats = await DashboardRepository(database).load(userId: widget.user.id);
       if (mounted) setState(() { _stats = stats; _statsError = null; });
     } catch (error) {
       if (mounted) setState(() => _statsError = error.toString());
