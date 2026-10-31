@@ -2,6 +2,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
@@ -15,12 +17,14 @@ void main() {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createPurchasesSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSupplierReturnsSchema(database);
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
     products = ProductRepository(database);
@@ -59,6 +63,80 @@ void main() {
     expect(cashEntries.single['direction'], 'out');
     expect(cashEntries.single['amount'], 100);
     expect(cashEntries.single['payment_method'], 'تحويل بنكي');
+  });
+
+  test('يشترط وردية المستخدم النشطة لشراء النقد وسداد المورد نقدًا', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: manager.id,
+      openingCash: 0,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الوردية');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [
+        PurchaseLine(
+          productId: productId,
+          productName: 'سكر',
+          unit: 'كيلوجرام',
+          quantity: 1,
+          unitCost: 100,
+        ),
+      ],
+      paidAmount: 40,
+      paymentChannel: 'نقدي',
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+    await suppliers.recordPayment(
+      supplierId: supplierId,
+      amount: 20,
+      userId: manager.id,
+      shiftId: shift.id,
+    );
+
+    await expectLater(
+      suppliers.recordPayment(
+        supplierId: supplierId,
+        amount: 10,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    await CashShiftRepository(database).closeShift(
+      shiftId: shift.id,
+      userId: manager.id,
+      closingCash: 60,
+    );
+    await expectLater(
+      suppliers.recordPayment(
+        supplierId: supplierId,
+        amount: 10,
+        userId: manager.id,
+        shiftId: shift.id,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+
+    final entries = await database.query('cash_transactions');
+    expect(entries, hasLength(2));
+    expect(entries.every((row) => row['shift_id'] == shift.id), isTrue);
+    expect(purchase.paidAmount, 40);
   });
 
   test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
