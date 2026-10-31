@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
+import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
 
 class SuppliersScreen extends StatefulWidget {
@@ -188,36 +189,30 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
-  // يحسب سعر البيع وفق الزيادة على التكلفة أو هامش الربح من سعر البيع.
+  // يحسب سعر البيع وفق الطريقة المختارة ويترك القيمة الحالية إذا كان الإدخال غير مكتمل.
   void _updateSellingPriceFromPercentage(_PurchaseDraftLine draft) {
     final cost = int.tryParse(draft.cost.text.trim());
     final percentage = double.tryParse(draft.percentage.text.trim());
-    if (cost == null || cost < 0 || percentage == null) return;
-    double selling;
-    if (draft.pricingMode == 'markup') {
-      selling = cost * (1 + percentage / 100);
-    } else {
-      if (percentage >= 100) return;
-      selling = cost / (1 - percentage / 100);
-    }
-    if (!selling.isFinite || selling < 0 || selling > 9000000000000000) return;
-    draft.setSellingPrice(selling.round().toString());
+    if (cost == null || percentage == null) return;
+    final selling = calculatePurchaseSellingPrice(
+      cost: cost,
+      percentage: percentage,
+      mode: draft.pricingMode,
+    );
+    if (selling != null) draft.setSellingPrice(selling.toString());
   }
 
   // يعكس النسبة تلقائيًا عندما يغيّر المستخدم سعر البيع يدويًا.
   void _updatePercentageFromSellingPrice(_PurchaseDraftLine draft) {
     final cost = int.tryParse(draft.cost.text.trim());
     final selling = int.tryParse(draft.sellingPrice.text.trim());
-    if (cost == null || selling == null || selling < 0) return;
-    double percentage;
-    if (draft.pricingMode == 'markup') {
-      if (cost == 0) return;
-      percentage = (selling - cost) / cost * 100;
-    } else {
-      if (selling == 0) return;
-      percentage = (selling - cost) / selling * 100;
-    }
-    if (percentage.isFinite) {
+    if (cost == null || selling == null) return;
+    final percentage = calculatePurchaseProfitPercentage(
+      cost: cost,
+      sellingPrice: selling,
+      mode: draft.pricingMode,
+    );
+    if (percentage != null && percentage.isFinite) {
       draft.setPercentage(percentage.toStringAsFixed(2));
     }
   }
