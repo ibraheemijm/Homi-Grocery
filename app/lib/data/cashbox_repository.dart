@@ -1,6 +1,8 @@
 // الخزينة: سجل الحركات النقدية الفعلية وملخص اليوم دون خلطها بإجمالي الديون.
 import 'package:sqflite/sqflite.dart';
 
+import 'cash_shift_repository.dart';
+
 class CashTransaction {
   const CashTransaction({
     required this.id,
@@ -139,16 +141,25 @@ class CashboxRepository {
     if (shiftId != null && userId == null) {
       throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب تحديد المستخدم.');
     }
-    return _database.insert('cash_transactions', {
-      'direction': direction,
-      'category': category.trim(),
-      'amount': amount,
-      'payment_method': paymentMethod.trim(),
-      'reference_type': 'manual',
-      'user_id': userId,
-      'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
-      'note': note?.trim().isEmpty == true ? null : note?.trim(),
-      'created_at': DateTime.now().toUtc().toIso8601String(),
+    return _database.transaction((txn) async {
+      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
+      return txn.insert('cash_transactions', {
+        'direction': direction,
+        'category': category.trim(),
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'reference_type': 'manual',
+        'user_id': userId,
+        'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
     });
   }
 }
