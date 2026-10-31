@@ -145,5 +145,8 @@ void main() {
       (await repository.search('شاي', includeInactive: true)).length,
       1,
     );
+    expect(await repository.restore(id), 1);
+    expect((await repository.getById(id))!.isActive, isTrue);
+    expect((await repository.search('شاي')).length, 1);
   });
 }
