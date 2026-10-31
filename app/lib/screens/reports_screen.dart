@@ -53,6 +53,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _dateLabel(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+  String _compactDateLabel(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
+
   Future<void> _choosePeriodDate() async {
     final selected = await showDatePicker(
       context: context,
@@ -98,8 +101,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await Printing.layoutPdf(
         name: buildPdfFileName(
           language: filenameLanguage,
-          arabicLabel: 'تقرير-يومي-${_dateLabel(report.day)}',
-          englishLabel: 'Daily-Report-${_dateLabel(report.day)}',
+          arabicLabel: 'تقرير-يومي-${_compactDateLabel(report.day)}',
+          englishLabel: 'Daily-Report-${_compactDateLabel(report.day)}',
+          includeExportDate: false,
         ),
         onLayout: (_) async => bytes,
       );
