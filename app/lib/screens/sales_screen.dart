@@ -164,7 +164,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _productsRepository = ProductRepository(database);
       _customersRepository = CustomerRepository(database);
       _salesRepository = SaleRepository(database);
-      _recent = await _salesRepository!.recentSales(limit: 8);
+      _recent = await _salesRepository!.recentSales(limit: 50);
       _matches = await _productsRepository!.search('');
       if (!mounted) return;
       setState(() { _salesViewMode = const {'grid', 'rows', 'rowsWithIcons'}.contains(viewMode) ? viewMode : 'grid'; _loading = false; _error = null; });
@@ -767,7 +767,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _customerSearchTimer?.cancel();
       _customerSearchRequest++;
       _discountController.text = '0';
-      _recent = await _salesRepository!.recentSales(limit: 8);
+      _recent = await _salesRepository!.recentSales(limit: 50);
       widget.onDataChanged?.call();
       await _searchProducts(_search.text);
       if (!mounted) return;
@@ -910,7 +910,7 @@ class _SalesScreenState extends State<SalesScreen> {
         quantitiesBySaleItemId: quantities,
         note: note,
       );
-      _recent = await _salesRepository!.recentSales(limit: 8);
+      _recent = await _salesRepository!.recentSales(limit: 50);
       widget.onDataChanged?.call();
       if (!mounted) return;
       setState(() {});
