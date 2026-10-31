@@ -430,7 +430,7 @@ class SupplierRepository {
       throw ArgumentError('حدد طريقة استلام المبلغ.');
     }
     return _database.transaction((txn) async {
-      if (paymentMethod.trim() == 'نقدي' && userId != null) {
+      if (paymentMethod.trim() == 'نقدي' && (userId != null || shiftId != null)) {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
