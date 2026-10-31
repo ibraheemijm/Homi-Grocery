@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'data/dashboard_repository.dart';
 import 'data/grocery_database.dart';
 import 'data/font_preferences.dart';
+import 'data/auth_repository.dart';
+import 'screens/authentication_gate.dart';
 
 import 'screens/invoices_screen.dart';
 import 'screens/cashbox_screen.dart';
@@ -56,6 +58,28 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
           _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     });
   }
+  // طلب تأكيد قبل إنهاء جلسة المستخدم الحالي.
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تسجيل الخروج'),
+        content: const Text('هل تريد إنهاء الجلسة الحالية؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('تسجيل الخروج'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onLogout();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -67,9 +91,13 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         themeMode: _themeMode,
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
-        home: DashboardScreen(
-          isDark: _themeMode == ThemeMode.dark,
-          onToggleTheme: _toggleTheme,
+        home: AuthenticationGate(
+          authenticatedBuilder: (user, onLogout) => DashboardScreen(
+            isDark: _themeMode == ThemeMode.dark,
+            onToggleTheme: _toggleTheme,
+            user: user,
+            onLogout: onLogout,
+          ),
         ),
       ),
     );
@@ -123,11 +151,15 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     required this.isDark,
     required this.onToggleTheme,
+    required this.user,
+    required this.onLogout,
     super.key,
   });
 
   final bool isDark;
   final VoidCallback onToggleTheme;
+  final AuthUser user;
+  final VoidCallback onLogout;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -517,10 +549,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const CircleAvatar(
-                    backgroundColor: brandMint,
-                    foregroundColor: brandGreen,
-                    child: Icon(Icons.person_rounded),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.user.displayName,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        widget.user.isManager ? 'مدير' : 'كاشير',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'تسجيل الخروج',
+                    onPressed: _confirmLogout,
+                    icon: const Icon(Icons.logout_rounded),
                   ),
                 ],
               ),
