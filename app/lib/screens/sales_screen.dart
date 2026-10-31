@@ -1,4 +1,5 @@
 // شاشة البيع السريع: اختيار الأصناف، حساب الفاتورة وحفظها مع تحديث المخزون.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,8 @@ class _SalesScreenState extends State<SalesScreen> {
   SaleRepository? _salesRepository;
   List<CustomerBalance> _customerMatches = [];
   bool _showCustomerSuggestions = false;
+  Timer? _customerSearchTimer;
+  int _customerSearchRequest = 0;
   List<GroceryProduct> _matches = [];
   List<SaleLine> _cart = [];
   List<SaleRecord> _recent = [];
@@ -38,37 +41,95 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() { super.initState(); _initialize(); }
 
-  // اعتبر الاسم متعارضًا إذا أعاد البحث أسماء قريبة، وليس عند التطابق الحرفي فقط.
-  bool get _hasPotentialCustomerConflict => _selectedCustomerId == null &&
-      _customer.text.trim().isNotEmpty &&
-      _customerMatches.isNotEmpty;
-
-  // اقتراح أسماء الزبائن أثناء الكتابة، ولا يعتمد الربط إلا عند اختيار اقتراح صراحةً.
-  Future<void> _searchCustomers(String value) async {
+  // يؤخر البحث قليلًا حتى لا يُنفّذ استعلامًا مع كل ضغطة مفتاح.
+  void _searchCustomers(String value) {
     _selectedCustomerId = null;
+    _customerSearchTimer?.cancel();
     final query = value.trim();
+    final request = ++_customerSearchRequest;
     if (query.isEmpty || _customersRepository == null) {
-      if (!mounted) return;
       setState(() {
         _customerMatches = [];
         _showCustomerSuggestions = false;
       });
       return;
     }
-    try {
-      final matches = await _customersRepository!.balances(query: query);
-      if (!mounted || _customer.text.trim() != query) return;
-      setState(() {
-        _customerMatches = matches.take(8).toList(growable: false);
-        _showCustomerSuggestions = _customerMatches.isNotEmpty;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _customerMatches = [];
-        _showCustomerSuggestions = false;
-      });
-    }
+    _customerSearchTimer = Timer(const Duration(milliseconds: 280), () async {
+      try {
+        final matches = await _customersRepository!.balances(query: query);
+        if (!mounted ||
+            request != _customerSearchRequest ||
+            _customer.text.trim() != query) {
+          return;
+        }
+        setState(() {
+          _customerMatches = matches.take(8).toList(growable: false);
+          _showCustomerSuggestions = _customerMatches.isNotEmpty;
+        });
+      } catch (_) {
+        if (!mounted || request != _customerSearchRequest) return;
+        setState(() {
+          _customerMatches = [];
+          _showCustomerSuggestions = false;
+        });
+      }
+    });
+  }
+
+  // عند حفظ الدين فقط نتحقق من الأسماء المشابهة، ولا نقاطع الكتابة بالتنبيهات.
+  Future<String?> _resolveNewDebtCustomerName(String name) async {
+    final matches = await _customersRepository!.balances(query: name);
+    if (matches.isEmpty) return name;
+
+    _customerNickname.clear();
+    final resolved = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('اسم مشابه في دفتر الحسابات'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('وجدنا أسماء مشابهة: ${matches.take(4).map((item) => item.name).join('، ')}.'),
+              const SizedBox(height: 10),
+              const Text('إذا كان هذا زبونًا جديدًا، أضف لقبًا لتمييز حسابه. أو ألغِ للعودة واختيار الحساب الصحيح من الاقتراحات.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _customerNickname,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'لقب للزبون الجديد',
+                  hintText: 'مثال: السوق أو الحي',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('العودة للاختيار'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final nickname = _customerNickname.text.trim();
+              if (nickname.isEmpty) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('أدخل لقبًا لتمييز الزبون الجديد.')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, '$name - $nickname');
+            },
+            child: const Text('تأكيد الاسم الجديد'),
+          ),
+        ],
+      ),
+    );
+    return resolved;
   }
 
   void _selectCustomer(CustomerBalance customer) {
@@ -81,6 +142,8 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() {
       _customerMatches = [];
       _showCustomerSuggestions = false;
+      _customerSearchTimer?.cancel();
+      _customerSearchRequest++;
     });
     FocusScope.of(context).unfocus();
   }
@@ -140,6 +203,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void dispose() {
+    _customerSearchTimer?.cancel();
     _search.dispose(); _customer.dispose(); _customerNickname.dispose(); _discountController.dispose(); super.dispose();
   }
 
@@ -152,265 +216,428 @@ class _SalesScreenState extends State<SalesScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      FilledButton(onPressed: _initialize, child: const Text('إعادة المحاولة')),
-                    ]),
-                  ))
-                : LayoutBuilder(builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 850;
-                    final catalog = _buildCatalog(theme);
-                    final cart = _buildCart(theme);
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        Text('المبيعات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 5),
-                        Text('أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.', style: theme.textTheme.bodyMedium),
-                        const SizedBox(height: 18),
-                        if (narrow) ...[catalog, const SizedBox(height: 16), cart]
-                        else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(flex: 6, child: catalog),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 5, child: cart),
-                        ]),
-                        const SizedBox(height: 24),
-                        _buildRecent(theme),
-                      ]),
-                    );
-                  }),
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_error!, textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: _initialize,
+                            child: const Text('إعادة المحاولة'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow = constraints.maxWidth < 850;
+                      if (narrow) {
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildSalesHeading(theme),
+                              const SizedBox(height: 14),
+                              _buildCatalog(theme, compact: true),
+                              const SizedBox(height: 12),
+                              _buildCart(theme, compact: true),
+                              const SizedBox(height: 12),
+                              _buildRecent(theme, compact: true),
+                            ],
+                          ),
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildSalesHeading(theme),
+                            const SizedBox(height: 16),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    flex: 6,
+                                    child: _buildCatalog(theme, compact: false),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    flex: 5,
+                                    child: Column(
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child: _buildCart(theme, compact: false),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildRecent(theme, compact: false),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
       ),
     );
   }
 
-  // قائمة البحث واختيار الأصناف المتاحة.
-  Widget _buildCatalog(ThemeData theme) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('اختيار الأصناف', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _search,
-          onChanged: _searchProducts,
-          decoration: InputDecoration(
-            hintText: 'اسم الصنف أو الباركود',
-            prefixIcon: const Icon(Icons.search_rounded),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+  Widget _buildSalesHeading(ThemeData theme) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'المبيعات',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        if (_matches.isEmpty)
-          const Padding(padding: EdgeInsets.all(18), child: Text('لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.', textAlign: TextAlign.center))
-        else if (_salesViewMode == 'grid')
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _matches.take(30).length,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 190,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.92,
-            ),
-            itemBuilder: (context, index) {
-              final product = _matches[index];
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => _addProduct(product),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: product.imagePath != null && File(product.imagePath!).existsSync()
-                                ? Image.file(File(product.imagePath!), fit: BoxFit.contain)
-                                : Icon(Icons.inventory_2_rounded, size: 36, color: theme.colorScheme.primary),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                        Text('${product.sellingPrice} ج.س', style: theme.textTheme.bodySmall),
-                        Align(
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: IconButton.filledTonal(
-                            tooltip: 'إضافة إلى الفاتورة',
-                            onPressed: () => _addProduct(product),
-                            icon: const Icon(Icons.add_rounded),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          )
-        else
-          ..._matches.take(30).map((product) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: _salesViewMode == 'rowsWithIcons'
-                ? CircleAvatar(
-                    backgroundImage: product.imagePath != null && File(product.imagePath!).existsSync()
-                        ? FileImage(File(product.imagePath!))
-                        : null,
-                    child: product.imagePath != null && File(product.imagePath!).existsSync()
-                        ? null
-                        : Icon(Icons.inventory_2_rounded, color: theme.colorScheme.primary),
-                  )
-                : null,
-            title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('السعر: ${product.sellingPrice} ج.س • المتاح: ${_quantity(product.stockQuantity)} ${product.unit}'),
-            trailing: IconButton.filledTonal(
-              tooltip: 'إضافة إلى الفاتورة',
-              onPressed: () => _addProduct(product),
-              icon: const Icon(Icons.add_rounded),
-            ),
-          )),
-      ]),
-    ),
-  );
+          const SizedBox(height: 5),
+          Text(
+            'أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      );
 
-  // السلة والخصم والإجمالي وبدء الدفع.
-  Widget _buildCart(ThemeData theme) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Expanded(child: Text('الفاتورة الحالية', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-          Text('${_cart.length} صنف'),
-        ]),
-        const SizedBox(height: 8),
-        if (_cart.isEmpty)
-          const Padding(padding: EdgeInsets.symmetric(vertical: 28), child: Text('اختر الأصناف من القائمة لإضافتها إلى الفاتورة.', textAlign: TextAlign.center))
-        else
-          ..._cart.asMap().entries.map((entry) {
-            final index = entry.key;
-            final line = entry.value;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              child: Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(line.product.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text('${line.lineTotal} ج.س', style: theme.textTheme.bodySmall),
-                ])),
-                IconButton(onPressed: () => _changeQuantity(index, line.quantity - 1), icon: const Icon(Icons.remove_circle_outline)),
-                SizedBox(width: 34, child: Text(_quantity(line.quantity), textAlign: TextAlign.center)),
-                IconButton(onPressed: () => _changeQuantity(index, line.quantity + 1), icon: const Icon(Icons.add_circle_outline)),
-                IconButton(onPressed: () => setState(() => _cart.removeAt(index)), icon: const Icon(Icons.delete_outline_rounded)),
-              ]),
-            );
-          }),
-        const Divider(height: 24),
-        if (_hasPotentialCustomerConflict)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  // قائمة الأصناف داخل مساحة مستقلة قابلة للتمرير.
+  Widget _buildCatalog(ThemeData theme, {required bool compact}) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 3,
-                child: TextField(
-                  controller: _customer,
-                  onChanged: _searchCustomers,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم الزبون',
-                    hintText: 'عدّل الاسم إذا كان زبونًا مختلفًا',
-                    prefixIcon: Icon(Icons.person_search_rounded),
-                    border: OutlineInputBorder(),
+              Text(
+                'اختيار الأصناف',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _search,
+                onChanged: _searchProducts,
+                decoration: InputDecoration(
+                  hintText: 'اسم الصنف أو الباركود',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(height: 8),
               Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _customerNickname,
-                  decoration: const InputDecoration(
-                    labelText: 'لقب للتمييز',
-                    hintText: 'مثال: السوق',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
+                child: _matches.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'لا توجد أصناف. أضف الأصناف من قسم المخزون أولًا.',
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : _buildProductList(theme),
               ),
             ],
-          )
-        else
-          TextField(
-            controller: _customer,
-            onChanged: _searchCustomers,
-            decoration: const InputDecoration(
-              labelText: 'اسم الزبون (اختياري)',
-              hintText: 'للدين اختر اسمًا من الاقتراحات أو أدخل اسمًا جديدًا',
-              prefixIcon: Icon(Icons.person_search_rounded),
-              border: OutlineInputBorder(),
-            ),
           ),
-        if (_hasPotentialCustomerConflict)
-          const Padding(
-            padding: EdgeInsets.only(top: 6, bottom: 4),
-            child: Text(
-              'هذا الاسم موجود في دفتر الحسابات. للبيع الآجل أو الجزئي: اختر الحساب الموجود من الاقتراحات، أو عدّل الاسم، أو أضف لقبًا للزبون الجديد. البيع النقدي متاح دون ربط الحساب.',
-              style: TextStyle(color: Colors.deepOrange, fontSize: 12),
-            ),
-          ),
-        if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 8),
-            constraints: const BoxConstraints(maxHeight: 220),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              itemCount: _customerMatches.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final customer = _customerMatches[index];
-                return ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.person_outline_rounded),
-                  title: Text(customer.name),
-                  subtitle: Text('الرصيد الحالي: ${customer.balance} ج.س'),
-                  onTap: () => _selectCustomer(customer),
-                );
-              },
-            ),
-          ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _discountController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: false),
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(labelText: 'الخصم بالجنيه', border: OutlineInputBorder()),
         ),
-        const SizedBox(height: 14),
-        _totalRow('الإجمالي قبل الخصم', _subtotal),
-        _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
-        const Divider(),
-        _totalRow('المطلوب دفعه', _total, strong: true),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: _cart.isEmpty || _saving || _discount < 0 || _discount > _subtotal ? null : _checkout,
-          icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.receipt_long_rounded),
-          label: Text(_saving ? 'جارٍ حفظ الفاتورة...' : 'إتمام البيع'),
+      );
+
+  Widget _buildProductList(ThemeData theme) {
+    if (_salesViewMode == 'grid') {
+      return GridView.builder(
+        padding: const EdgeInsets.only(bottom: 4),
+        itemCount: _matches.length,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 190,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 0.92,
         ),
-        if (_discount > _subtotal || _discount < 0)
-          const Padding(padding: EdgeInsets.only(top: 8), child: Text('تحقق من قيمة الخصم.', style: TextStyle(color: Colors.red))),
-      ]),
-    ),
-  );
+        itemBuilder: (context, index) {
+          final product = _matches[index];
+          final hasImage = product.imagePath != null &&
+              File(product.imagePath!).existsSync();
+          return Card(
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _addProduct(product),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: hasImage
+                            ? Image.file(
+                                File(product.imagePath!),
+                                fit: BoxFit.contain,
+                              )
+                            : Icon(
+                                Icons.inventory_2_rounded,
+                                size: 36,
+                                color: theme.colorScheme.primary,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      '${product.sellingPrice} ج.س',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: IconButton.filledTonal(
+                        tooltip: 'إضافة إلى الفاتورة',
+                        onPressed: () => _addProduct(product),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 4),
+      itemCount: _matches.length,
+      itemBuilder: (context, index) {
+        final product = _matches[index];
+        final hasImage = product.imagePath != null &&
+            File(product.imagePath!).existsSync();
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: _salesViewMode == 'rowsWithIcons'
+              ? CircleAvatar(
+                  backgroundImage:
+                      hasImage ? FileImage(File(product.imagePath!)) : null,
+                  child: hasImage
+                      ? null
+                      : Icon(
+                          Icons.inventory_2_rounded,
+                          color: theme.colorScheme.primary,
+                        ),
+                )
+              : null,
+          title: Text(
+            product.name,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            'السعر: ${product.sellingPrice} ج.س • المتاح: ${_quantity(product.stockQuantity)} ${product.unit}',
+          ),
+          trailing: IconButton.filledTonal(
+            tooltip: 'إضافة إلى الفاتورة',
+            onPressed: () => _addProduct(product),
+            icon: const Icon(Icons.add_rounded),
+          ),
+        );
+      },
+    );
+  }
+
+  // بطاقة الفاتورة ثابتة؛ التمرير محصور في بنود السلة فقط.
+  Widget _buildCart(ThemeData theme, {required bool compact}) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'الفاتورة الحالية',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Text('${_cart.length} صنف'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (compact)
+                SizedBox(
+                  height: (_cart.length * 76).clamp(90, 260).toDouble(),
+                  child: _buildCartLines(theme),
+                )
+              else
+                Expanded(child: _buildCartLines(theme)),
+              const Divider(height: 20),
+              TextField(
+                controller: _customer,
+                onChanged: _searchCustomers,
+                decoration: const InputDecoration(
+                  labelText: 'اسم الزبون (اختياري)',
+                  hintText: 'للدين اختر حسابًا من الاقتراحات أو أدخل اسمًا جديدًا',
+                  prefixIcon: Icon(Icons.person_search_rounded),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  constraints: const BoxConstraints(maxHeight: 150),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _customerMatches.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final customer = _customerMatches[index];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.person_outline_rounded),
+                        title: Text(customer.name),
+                        subtitle: Text('الرصيد الحالي: ${customer.balance} ج.س'),
+                        onTap: () => _selectCustomer(customer),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _discountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: false,
+                ),
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'الخصم بالجنيه',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _totalRow('الإجمالي قبل الخصم', _subtotal),
+              _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
+              const Divider(),
+              _totalRow('المطلوب دفعه', _total, strong: true),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _cart.isEmpty ||
+                        _saving ||
+                        _discount < 0 ||
+                        _discount > _subtotal
+                    ? null
+                    : _checkout,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.receipt_long_rounded),
+                label: Text(
+                  _saving ? 'جارٍ حفظ الفاتورة...' : 'إتمام البيع',
+                ),
+              ),
+              if (_discount > _subtotal || _discount < 0)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'تحقق من قيمة الخصم.',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _buildCartLines(ThemeData theme) {
+    if (_cart.isEmpty) {
+      return const Center(
+        child: Text(
+          'اختر الأصناف من القائمة لإضافتها إلى الفاتورة.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: _cart.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final line = _cart[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      '${line.lineTotal} ج.س',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _changeQuantity(index, line.quantity - 1),
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              SizedBox(
+                width: 34,
+                child: Text(_quantity(line.quantity), textAlign: TextAlign.center),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _changeQuantity(index, line.quantity + 1),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _cart.removeAt(index)),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Widget _totalRow(String label, int value, {bool strong = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -490,20 +717,18 @@ class _SalesScreenState extends State<SalesScreen> {
     try {
       final hasDebt = (result['paid']! as int) < _total;
       final typedName = _customer.text.trim();
-      final nickname = _customerNickname.text.trim();
-      final potentialConflictWithoutSelection = _hasPotentialCustomerConflict;
-      if (hasDebt && potentialConflictWithoutSelection && nickname.isEmpty) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('الاسم موجود في دفتر الحسابات. اختر الحساب من الاقتراحات، أو عدّل الاسم، أو أضف لقبًا للزبون الجديد.'),
-        ));
-        return;
+      String? customerNameForDebt;
+      if (hasDebt && typedName.isNotEmpty) {
+        if (_selectedCustomerId != null) {
+          customerNameForDebt = typedName;
+        } else {
+          customerNameForDebt = await _resolveNewDebtCustomerName(typedName);
+          if (customerNameForDebt == null) {
+            if (mounted) setState(() => _saving = false);
+            return;
+          }
+        }
       }
-      final customerNameForDebt = !hasDebt
-          ? null
-          : _selectedCustomerId != null
-              ? typedName
-              : nickname.isEmpty ? typedName : '$typedName - $nickname';
       final sale = await _salesRepository!.createSale(
         lines: List<SaleLine>.from(_cart),
         discount: _discount,
@@ -772,40 +997,78 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // عرض أحدث الفواتير المحفوظة محليًا.
-  Widget _buildRecent(ThemeData theme) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('أحدث الفواتير', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        if (_recent.isEmpty)
-          const Text('لا توجد فواتير محفوظة حتى الآن.')
-        else
-          ..._recent.map((sale) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
-            title: Text(sale.invoiceNumber),
-            subtitle: Text('${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س'),
-            trailing: Column(
+  // أحدث الفواتير في بطاقة مستقلة وتمرير مستقل عن بقية الشاشة.
+  Widget _buildRecent(ThemeData theme, {required bool compact}) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'أحدث الفواتير',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (compact)
+                SizedBox(
+                  height: (_recent.length * 88).clamp(70, 240).toDouble(),
+                  child: _buildRecentList(),
+                )
+              else
+                Expanded(child: _buildRecentList()),
+            ],
+          ),
+        ),
+      );
+
+  Widget _buildRecentList() {
+    if (_recent.isEmpty) {
+      return const Center(child: Text('لا توجد فواتير محفوظة حتى الآن.'));
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: _recent.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final sale = _recent[index];
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const CircleAvatar(
+            child: Icon(Icons.receipt_long_rounded),
+          ),
+          title: Text(sale.invoiceNumber),
+          subtitle: Text(
+            '${sale.paymentMethod} • متبقي ${sale.remainingAmount} ج.س',
+          ),
+          trailing: PopupMenuButton<String>(
+            tooltip: 'إجراءات الفاتورة',
+            onSelected: (value) {
+              if (value == 'return') _returnSale(sale);
+              if (value == 'refund') _refundSale(sale);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'return', child: Text('تسجيل مرتجع')),
+              PopupMenuItem(value: 'refund', child: Text('تسجيل رد نقدي')),
+            ],
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('${sale.total} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
-                TextButton(
-                  onPressed: () => _returnSale(sale),
-                  child: const Text('مرتجع'),
+                Text(
+                  '${sale.total} ج.س',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                TextButton(
-                  onPressed: () => _refundSale(sale),
-                  child: const Text('رد نقدي'),
-                ),
+                const Icon(Icons.more_horiz_rounded),
               ],
             ),
-          )),
-      ]),
-    ),
-  );
+          ),
+        );
+      },
+    );
+  }
 
   String _quantity(double value) => value == value.truncateToDouble()
       ? value.toInt().toString()
