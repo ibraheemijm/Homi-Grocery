@@ -12,6 +12,9 @@ void main() {
       salesTotal: 1200,
       salesCount: 4,
       returnsTotal: 200,
+      purchaseTotal: 700,
+      purchaseCount: 3,
+      supplierReturns: 50,
       products: const [
         BestSellingProduct(
           productId: 1,
@@ -41,6 +44,7 @@ void main() {
       salesCount: 4,
       purchaseTotal: 500,
       purchaseCount: 2,
+      supplierReturns: 35,
       customerCollections: 150,
       supplierPayments: 100,
       supplierRefunds: 20,
@@ -72,6 +76,9 @@ void main() {
       salesTotal: 0,
       salesCount: 0,
       returnsTotal: 0,
+      purchaseTotal: 0,
+      purchaseCount: 0,
+      supplierReturns: 0,
       products: const [],
       grossProfit: null,
     );
