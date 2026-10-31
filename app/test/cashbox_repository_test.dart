@@ -136,4 +136,79 @@ void main() {
     expect(await database.query('cash_transactions'), isEmpty);
   });
 
+  test('يقيد مصروفات الكاشير بصلاحية وحد مالي ويرفض الإيرادات اليدوية', () async {
+    final manager = await auth.createInitialManager(
+      username: 'cashbox_manager',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashbox_cashier',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final shift = await shifts.openShift(userId: cashier.id, openingCash: 500);
+
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'out',
+        category: 'مصروف',
+        amount: 100,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'in',
+        category: 'دخل يدوي',
+        amount: 100,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+
+    final settings = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'cash_expenses'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 200,
+            )
+          : setting
+      ).toList(),
+    );
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'out',
+        category: 'مصروف',
+        amount: 201,
+        userId: cashier.id,
+        shiftId: shift.id,
+      ),
+      throwsStateError,
+    );
+    await cashbox.recordManualMovement(
+      direction: 'out',
+      category: 'مصروف',
+      amount: 200,
+      userId: cashier.id,
+      shiftId: shift.id,
+    );
+    final movement = (await cashbox.recent()).single;
+    expect(movement.amount, 200);
+    expect(movement.direction, 'out');
+  });
+
 }
