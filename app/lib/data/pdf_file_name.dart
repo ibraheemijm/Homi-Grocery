@@ -5,14 +5,18 @@ String buildPdfFileName({
   required String arabicLabel,
   required String englishLabel,
   DateTime? exportedAt,
+  bool includeExportDate = true,
 }) {
   final date = exportedAt ?? DateTime.now();
-  final timestamp = '${date.year.toString().padLeft(4, '0')}'
+  final exportDate = '${date.year.toString().padLeft(4, '0')}'
       '${date.month.toString().padLeft(2, '0')}'
-      '${date.day.toString().padLeft(2, '0')}-'
-      '${date.hour.toString().padLeft(2, '0')}'
+      '${date.day.toString().padLeft(2, '0')}';
+  final exportTime = '${date.hour.toString().padLeft(2, '0')}'
       '${date.minute.toString().padLeft(2, '0')}'
       '${date.second.toString().padLeft(2, '0')}';
+  final timestamp = includeExportDate
+      ? '$exportDate-$exportTime'
+      : exportTime;
   final label = switch (language) {
     'en' => englishLabel,
     'both' => '$arabicLabel-$englishLabel',
