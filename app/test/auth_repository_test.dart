@@ -231,4 +231,132 @@ void main() {
     );
   });
 
+  test('يحفظ صلاحيات الكاشير وحدودها ويمنعها افتراضيًا ويسجل التعديلات', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
+    final defaults = await repository.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    expect(defaults, isNotEmpty);
+    expect(defaults.every((permission) => !permission.isAllowed), isTrue);
+
+    final updated = defaults.map((permission) {
+      if (permission.key == 'credit_sales') {
+        return CashierPermissionSetting(
+          key: permission.key,
+          label: permission.label,
+          isAllowed: true,
+          maxAmount: 25000,
+        );
+      }
+      if (permission.key == 'discounts') {
+        return CashierPermissionSetting(
+          key: permission.key,
+          label: permission.label,
+          isAllowed: true,
+          maxAmount: 500,
+        );
+      }
+      return permission;
+    }).toList();
+
+    await repository.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: updated,
+    );
+
+    final saved = await repository.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    final credit = saved.singleWhere((permission) => permission.key == 'credit_sales');
+    final discount = saved.singleWhere((permission) => permission.key == 'discounts');
+    final returns = saved.singleWhere((permission) => permission.key == 'returns');
+    expect(credit.isAllowed, isTrue);
+    expect(credit.maxAmount, 25000);
+    expect(discount.isAllowed, isTrue);
+    expect(discount.maxAmount, 500);
+    expect(returns.isAllowed, isFalse);
+
+    final audit = await database.query(
+      'auth_audit_log',
+      where: "action LIKE 'cashier_permission_updated:%'",
+    );
+    expect(audit, hasLength(updated.length));
+    expect(
+      audit.any((event) =>
+          (event['action'] as String).contains('credit_sales:true:25000')),
+      isTrue,
+    );
+  });
+
+  test('يرفض حفظ صلاحية مجهولة أو حدًا ماليًا سالبًا أو تعديلًا من الكاشير', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final defaults = await repository.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+
+    await expectLater(
+      repository.saveCashierPermissions(
+        manager: manager,
+        cashierId: cashier.id,
+        permissions: [
+          const CashierPermissionSetting(
+            key: 'unknown_permission',
+            label: 'غير معروفة',
+            isAllowed: true,
+          ),
+        ],
+      ),
+      throwsA(isA<AuthException>()),
+    );
+    await expectLater(
+      repository.saveCashierPermissions(
+        manager: manager,
+        cashierId: cashier.id,
+        permissions: [
+          ...defaults.where((permission) => permission.key != 'credit_sales'),
+          const CashierPermissionSetting(
+            key: 'credit_sales',
+            label: 'البيع بالدين أو الدفع الجزئي',
+            isAllowed: true,
+            maxAmount: -1,
+          ),
+        ],
+      ),
+      throwsA(isA<AuthException>()),
+    );
+    await expectLater(
+      repository.saveCashierPermissions(
+        manager: cashier,
+        cashierId: cashier.id,
+        permissions: defaults,
+      ),
+      throwsA(isA<AuthException>()),
+    );
+  });
+
 }
