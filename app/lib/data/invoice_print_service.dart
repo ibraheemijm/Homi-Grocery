@@ -10,6 +10,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'font_preferences.dart';
 import 'pdf_file_name.dart';
+import 'pdf_file_exporter.dart';
 
 /// تجمع بيانات الفاتورة من قاعدة البيانات وتعرض نافذة الطباعة أو الحفظ PDF.
 class InvoicePrintSummary {
@@ -106,6 +107,38 @@ class InvoicePrintService {
       name: fileName,
       format: _pageFormat(thermal),
       onLayout: (_) async => bytes,
+    );
+  }
+
+  /// يحفظ نسخة PDF عبر نافذة حفظ فعلية تستخدم الاسم المقترح بدل output.
+  Future<String?> saveInvoicePdf(int saleId, {required bool thermal}) async {
+    final summary = await loadSummary(saleId);
+    final bytes = await _buildInvoicePdfFromSummary(
+      saleId,
+      summary,
+      thermal: thermal,
+    );
+    final languageRows = await _database.query(
+      'app_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['pdf_filename_language'],
+      limit: 1,
+    );
+    final filenameLanguage = languageRows.isEmpty
+        ? 'both'
+        : languageRows.single['value'] as String;
+    final invoiceNumber = summary.sale['invoice_number'].toString();
+    final fileName = buildPdfFileName(
+      language: filenameLanguage,
+      arabicLabel: thermal ? 'إيصال-حراري-رقم' : 'فاتورة-رقم',
+      englishLabel: thermal ? 'Thermal-Receipt' : 'Invoice',
+      sharedSuffix: invoiceNumber,
+    );
+    return savePdfBytes(
+      bytes: bytes,
+      fileName: fileName,
+      dialogTitle: thermal ? 'حفظ الإيصال الحراري PDF' : 'حفظ فاتورة PDF',
     );
   }
 
