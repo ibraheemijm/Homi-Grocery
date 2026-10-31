@@ -54,8 +54,8 @@ void main() {
     expect(find.text('اختيار الأصناف'), findsNothing);
   });
 
-  testWidgets('يفتح قسم النسخ الاحتياطي والاستعادة من قائمة التنقل', (tester) async {
-    tester.view.physicalSize = const Size(1200, 900);
+  testWidgets('يفتح قسم النسخ الاحتياطي والاستعادة من قائمة الأقسام الأخرى', (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -63,8 +63,11 @@ void main() {
     await tester.pumpWidget(const HomiGroceryApp());
     await tester.pump();
 
-    await tester.tap(find.text('النسخ الاحتياطي والاستعادة').last);
-    await tester.pump();
+    await tester.tap(find.text('المزيد'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('النسخ الاحتياطي والاستعادة'));
+    await tester.pumpAndSettle();
 
     expect(find.text('النسخ الاحتياطي والاستعادة'), findsWidgets);
     expect(find.text('إنشاء نسخة احتياطية الآن'), findsOneWidget);
