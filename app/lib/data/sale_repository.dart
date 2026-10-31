@@ -275,6 +275,7 @@ class SaleRepository {
     required int saleId,
     required Map<int, double> quantitiesBySaleItemId,
     String? note,
+    int? userId,
   }) async {
     if (quantitiesBySaleItemId.isEmpty) {
       throw ArgumentError('حدد كمية واحدة على الأقل لإرجاعها.');
@@ -286,6 +287,21 @@ class SaleRepository {
     }
 
     return _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          throw StateError('تسجيل المرتجعات غير متاح للكاشير حاليًا.');
+        }
+      }
       final sales = await txn.query(
         'sales',
         columns: ['id', 'subtotal', 'total'],
@@ -434,6 +450,21 @@ class SaleRepository {
       throw ArgumentError('ربط رد المبلغ بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          throw StateError('رد مبالغ المرتجعات غير متاح للكاشير حاليًا.');
+        }
+      }
       if (paymentMethod.trim() == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
