@@ -59,7 +59,7 @@ void main() {
     );
     expect(adjustment.stockBefore, 12);
     expect(adjustment.stockAfter, 10);
-    expect((await stock.history(id)).length, 2);
+    expect((await stock.history(id, userId: managerId)).length, 2);
   });
 
   test('يعرض سجل جميع الأصناف مع اسم كل صنف وبترتيب الأحدث', () async {
@@ -85,7 +85,7 @@ void main() {
       quantityDelta: -1,
     );
 
-    final movements = await stock.history(null);
+    final movements = await stock.history(null, userId: managerId);
 
     expect(movements, hasLength(2));
     expect(movements.first.productId, oilId);
@@ -112,7 +112,7 @@ void main() {
       );
     }
     expect((await products.getById(id))!.stockQuantity, 3);
-    expect(await stock.history(id), isEmpty);
+    expect(await stock.history(id, userId: managerId), isEmpty);
   });
 
   test('يسمح بالمخزون السالب ويسجل الحركة دون فقدان التاريخ', () async {
@@ -131,7 +131,7 @@ void main() {
 
     expect(movement.stockAfter, -3);
     expect((await products.getById(id))!.stockQuantity, -3);
-    expect((await stock.history(id)).single.note, 'تصحيح جرد');
+    expect((await stock.history(id, userId: managerId)).single.note, 'تصحيح جرد');
   });
 
   test('يمنع الكاشير من تعديل المخزون افتراضيًا ولا يسمح إلا بعد منح الصلاحية', () async {
@@ -160,7 +160,7 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect((await products.getById(productId))!.stockQuantity, 4);
-    expect(await stock.history(productId), isEmpty);
+    expect(await stock.history(productId, userId: managerId), isEmpty);
 
     await database.insert('cashier_permissions', {
       'user_id': cashierId,
