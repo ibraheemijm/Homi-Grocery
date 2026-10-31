@@ -627,10 +627,24 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               final q = double.tryParse(line.quantity.text.trim());
               final cost = int.tryParse(line.cost.text.trim());
               final sellingPrice = int.tryParse(line.sellingPrice.text.trim());
-              final percentage = double.tryParse(line.percentage.text.trim());
+              final percentageText = line.percentage.text.trim();
+              final percentage = percentageText.isEmpty
+                  ? null
+                  : double.tryParse(percentageText);
               final validProduct = _products.any((product) => product.id == line.productId);
-              final validMargin = line.pricingMode != 'margin' || (percentage != null && percentage < 100);
-              return validProduct && q != null && q.isFinite && q > 0 && cost != null && cost >= 0 && sellingPrice != null && sellingPrice >= 0 && percentage != null && validMargin;
+              final validPercentage = percentageText.isEmpty ||
+                  (percentage != null &&
+                      percentage.isFinite &&
+                      (line.pricingMode != 'margin' || percentage < 100));
+              return validProduct &&
+                  q != null &&
+                  q.isFinite &&
+                  q > 0 &&
+                  cost != null &&
+                  cost >= 0 &&
+                  sellingPrice != null &&
+                  sellingPrice >= 0 &&
+                  validPercentage;
             });
             if (!validLines || d == null || d < 0 || d > subtotal || p == null || p < 0 || p > subtotal - d) {
               ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تحقق من الكميات والأسعار والخصم والمدفوع.')));
@@ -652,6 +666,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             unit: product.unit,
             quantity: double.parse(draft.quantity.text.trim()),
             unitCost: int.parse(draft.cost.text.trim()),
+            sellingPrice: int.parse(draft.sellingPrice.text.trim()),
           );
         }).toList(growable: false);
         await _repository!.createPurchase(
@@ -663,11 +678,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           paymentChannel: paymentChannel,
           note: note.text,
         );
-        for (final draft in drafts) {
-          await _productsRepository!.updateSellingPrice(
-            productId: draft.productId,
-            sellingPrice: int.parse(draft.sellingPrice.text.trim()),
-          );
+        // ينظف المنتجات التي أُنشئت ثم أزيلت من الفاتورة، دون أرشفة ما استُخدم.
+        for (final productId in newlyCreatedProductIds) {
+          await _productsRepository!.archiveIfUnused(productId);
         }
         await _load();
         _products = await _productsRepository!.search('');
