@@ -467,4 +467,106 @@ void main() {
   test('يرفض اسم المورد الفارغ', () async {
     await expectLater(suppliers.addSupplier(name: '  '), throwsArgumentError);
   });
+  test('يفرض صلاحيات وحدود فواتير الشراء ومدفوعات المورد للكاشير', () async {
+    final auth = AuthRepository(database);
+    final manager = await auth.createInitialManager(
+      username: 'supplier_manager',
+      displayName: 'المدير',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'supplier_cashier',
+      displayName: 'الكاشير',
+      password: 'CashierPass!2026',
+    );
+    final supplierId = await suppliers.addSupplier(name: 'مورد الصلاحيات');
+    final productId = await products.add(const GroceryProduct(
+      name: 'صنف المورد',
+      purchasePrice: 100,
+      sellingPrice: 150,
+      stockQuantity: 0,
+    ));
+    final line = PurchaseLine(
+      productId: productId,
+      productName: 'صنف المورد',
+      unit: 'قطعة',
+      quantity: 1,
+      unitCost: 400,
+    );
+
+    await expectLater(
+      suppliers.createPurchase(
+        supplierId: supplierId,
+        lines: [line],
+        paidAmount: 0,
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+
+    final settings = await auth.getCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) {
+        if (setting.key == 'supplier_purchases') {
+          return CashierPermissionSetting(
+            key: setting.key,
+            label: setting.label,
+            isAllowed: true,
+            maxAmount: 500,
+          );
+        }
+        if (setting.key == 'supplier_payments') {
+          return CashierPermissionSetting(
+            key: setting.key,
+            label: setting.label,
+            isAllowed: true,
+            maxAmount: 200,
+          );
+        }
+        return setting;
+      }).toList(),
+    );
+
+    await expectLater(
+      suppliers.createPurchase(
+        supplierId: supplierId,
+        lines: [line],
+        paidAmount: 0,
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [line],
+      paidAmount: 0,
+      discount: 100,
+      userId: cashier.id,
+    );
+    expect(purchase.total, 300);
+
+    await expectLater(
+      suppliers.recordPayment(
+        supplierId: supplierId,
+        amount: 201,
+        paymentMethod: 'تحويل بنكي',
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    await suppliers.recordPayment(
+      supplierId: supplierId,
+      amount: 200,
+      paymentMethod: 'تحويل بنكي',
+      userId: cashier.id,
+    );
+    expect((await suppliers.balances()).single.balance, 100);
+  });
+
 }
