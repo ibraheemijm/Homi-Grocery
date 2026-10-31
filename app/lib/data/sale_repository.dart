@@ -128,6 +128,28 @@ class SaleRepository {
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isNotEmpty && accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط ولا يمكنه تسجيل مبيعات.');
+        }
+        if (accounts.isNotEmpty && accounts.single['role'] == 'cashier') {
+          if (discount != 0 ||
+              paymentMethod != 'نقدي' ||
+              paidAmount != total ||
+              paymentChannel != 'نقدي') {
+            throw StateError(
+              'صلاحية الكاشير الحالية تقتصر على البيع النقدي الكامل دون خصم أو دين أو تحويل.',
+            );
+          }
+        }
+      }
       if (paidAmount > 0 && paymentChannel == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
