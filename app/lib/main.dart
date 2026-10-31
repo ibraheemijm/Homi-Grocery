@@ -79,8 +79,9 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
                   shiftId: shiftId,
                   onLogout: onLogout,
                 )
-              : CashierAccessPendingScreen(
+              : CashierWorkspaceScreen(
                   cashier: user,
+                  shiftId: shiftId,
                   onLogout: onLogout,
                 ),
         ),
