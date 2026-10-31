@@ -40,7 +40,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _load() async {
     if (_repository == null) return;
-    final rows = await _repository!.balances(query: _search.text);
+    final rows = await _repository!.balances(userId: widget.userId!, query: _search.text);
     if (mounted) setState(() => _customers = rows);
   }
 
@@ -147,7 +147,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _showLedger(CustomerBalance customer) async {
     try {
-      final entries = await _repository!.ledger(customer.id);
+      final entries = await _repository!.ledger(customer.id, userId: widget.userId!);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
