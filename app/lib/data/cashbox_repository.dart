@@ -127,6 +127,8 @@ class CashboxRepository {
     required int amount,
     String paymentMethod = 'نقدي',
     String? note,
+    int? userId,
+    int? shiftId,
   }) async {
     if (!const ['in', 'out'].contains(direction)) {
       throw ArgumentError('نوع حركة الخزينة غير صالح.');
@@ -134,12 +136,17 @@ class CashboxRepository {
     if (category.trim().isEmpty) throw ArgumentError('اسم الحركة مطلوب.');
     if (amount <= 0) throw ArgumentError('المبلغ يجب أن يكون أكبر من صفر.');
     if (paymentMethod.trim().isEmpty) throw ArgumentError('حدد طريقة الدفع.');
+    if (shiftId != null && (userId == null || paymentMethod.trim() != 'نقدي')) {
+      throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب مستخدمًا وطريقة دفع نقدية.');
+    }
     return _database.insert('cash_transactions', {
       'direction': direction,
       'category': category.trim(),
       'amount': amount,
       'payment_method': paymentMethod.trim(),
       'reference_type': 'manual',
+      'user_id': userId,
+      'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
       'note': note?.trim().isEmpty == true ? null : note?.trim(),
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
