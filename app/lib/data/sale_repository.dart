@@ -136,7 +136,7 @@ class SaleRepository {
     String paymentChannel = 'نقدي',
     String? customerName,
     int? customerId,
-    int? userId,
+    required int userId,
     int? shiftId,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
@@ -164,9 +164,6 @@ class SaleRepository {
     if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
       throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
     }
-    if (shiftId != null && userId == null) {
-      throw ArgumentError('ربط حركة البيع بالوردية يتطلب تحديد المستخدم.');
-    }
     if (paymentMethod == 'نقدي' && paidAmount != total) {
       throw ArgumentError('الفاتورة النقدية يجب أن تُدفع بالكامل.');
     }
@@ -191,18 +188,21 @@ class SaleRepository {
     final createdAt = now.toIso8601String();
 
     return _database.transaction((txn) async {
-      if (userId != null) {
-        final accounts = await txn.query(
-          'users',
-          columns: ['role', 'is_active'],
-          where: 'id = ?',
-          whereArgs: [userId],
-          limit: 1,
-        );
-        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
-          throw StateError('الحساب غير نشط أو غير موجود ولا يمكنه تسجيل مبيعات.');
-        }
-        if (accounts.single['role'] == 'cashier') {
+      final accounts = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+        throw StateError('الحساب غير نشط أو غير موجود ولا يمكنه تسجيل مبيعات.');
+      }
+      final role = accounts.single['role'];
+      if (role != 'manager' && role != 'cashier') {
+        throw StateError('نوع الحساب غير مصرح له بتسجيل المبيعات.');
+      }
+      if (role == 'cashier') {
           if (total <= 0 || paymentChannel != 'نقدي') {
             throw StateError(
               'الكاشير لا يسجل بيعًا صفريًا أو يستلم عبر التحويل البنكي.',
@@ -233,7 +233,7 @@ class SaleRepository {
           }
         }
       }
-      if (paidAmount > 0 && paymentChannel == 'نقدي' && userId != null) {
+      if (role == 'cashier' || (shiftId != null && paidAmount > 0 && paymentChannel == 'نقدي')) {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
