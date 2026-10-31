@@ -351,6 +351,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                               const Divider(height: 1),
                               ListTile(
+                                leading: const Icon(Icons.local_shipping_rounded),
+                                title: const Text('إجمالي المشتريات'),
+                                subtitle: Text('${period.purchaseCount} فاتورة شراء'),
+                                trailing: Text(_money(period.purchaseTotal), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.assignment_return_outlined),
+                                title: const Text('مرتجعات المشتريات'),
+                                trailing: Text(_money(period.supplierReturns), style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.account_balance_wallet_outlined),
+                                title: const Text('صافي المشتريات بعد المرتجعات'),
+                                trailing: Text(
+                                  _money(period.netPurchasesTotal),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: period.netPurchasesTotal < 0 ? Colors.red : Colors.green,
+                                  ),
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              ListTile(
                                 leading: const Icon(Icons.trending_up_rounded),
                                 title: const Text('مجمل الربح للفترة'),
                                 subtitle: Text(period.grossProfit == null
@@ -451,6 +476,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                 ),
                 _ReportTile(title: 'إجمالي المشتريات', amount: report.purchaseTotal, note: '${report.purchaseCount} فاتورة شراء', icon: Icons.local_shipping_rounded, money: _money),
+                _ReportTile(title: 'مرتجعات المشتريات', amount: report.supplierReturns, note: 'قيمة البضائع المعادة إلى الموردين في هذا اليوم', icon: Icons.assignment_return_outlined, money: _money),
                 const SizedBox(height: 18),
                 Text('التحصيلات والمرتجعات', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
