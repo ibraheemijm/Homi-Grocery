@@ -7,9 +7,10 @@ import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({this.userId, super.key});
+  const SuppliersScreen({this.userId, this.shiftId, super.key});
 
   final int? userId;
+  final int? shiftId;
 
   @override
   State<SuppliersScreen> createState() => _SuppliersScreenState();
@@ -681,6 +682,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           paymentChannel: paymentChannel,
           note: note.text,
           userId: widget.userId,
+          shiftId: widget.shiftId,
         );
         // ينظف المنتجات التي أُنشئت ثم أزيلت من الفاتورة، دون أرشفة ما استُخدم.
         for (final productId in newlyCreatedProductIds) {
