@@ -961,7 +961,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         returnId: returnId,
         amount: value,
         paymentMethod: result['method']! as String,
-        userId: widget.userId,
         shiftId: widget.shiftId,
       );
       await _load();
