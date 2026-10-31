@@ -142,6 +142,37 @@ class CashboxRepository {
       throw ArgumentError('ربط حركة الخزينة بالوردية يتطلب تحديد المستخدم.');
     }
     return _database.transaction((txn) async {
+      if (userId != null) {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          if (direction != 'out') {
+            throw StateError('لا يملك الكاشير صلاحية تسجيل إيرادات يدوية في الخزينة.');
+          }
+          final permissions = await txn.query(
+            'cashier_permissions',
+            columns: ['is_allowed', 'max_amount'],
+            where: "user_id = ? AND permission_key = 'cash_expenses'",
+            whereArgs: [userId],
+            limit: 1,
+          );
+          if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+            throw StateError('لا يملك الكاشير صلاحية تسجيل المصروفات النقدية.');
+          }
+          final limit = (permissions.single['max_amount'] as num?)?.toInt();
+          if (limit != null && amount > limit) {
+            throw StateError('المصروف يتجاوز الحد المسموح ($limit ج.س).');
+          }
+        }
+      }
       if (paymentMethod.trim() == 'نقدي' && userId != null) {
         await CashShiftRepository.validateActiveShift(
           txn,
