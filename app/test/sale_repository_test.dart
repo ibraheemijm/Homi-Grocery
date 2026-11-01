@@ -1188,22 +1188,23 @@ void main() {
         return setting;
       }).toList(),
     );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
     final returned = await sales.returnItems(
       saleId: sale.id,
       quantitiesBySaleItemId: {itemId: 1},
       userId: cashier.id,
+      shiftId: shift.id,
     );
     expect(returned.amount, 40);
 
-    // أغلق وردية المدير قبل فتح وردية الكاشير لاختبار رد المبلغ.
+    // أغلق وردية المدير قبل اختبار رد المبلغ من وردية الكاشير.
     await CashShiftRepository(database).closeShift(
       shiftId: managerShiftId,
       userId: managerId,
       closingCash: 40,
-    );
-    final shift = await CashShiftRepository(database).openShift(
-      userId: cashier.id,
-      openingCash: 100,
     );
     await expectLater(
       sales.recordReturnRefund(
