@@ -169,6 +169,18 @@ void main() {
     expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
   });
 
+  testWidgets('يعرض أقسام الموردين والخزينة عند منح صلاحيات تشغيلية فقط', (tester) async {
+    const cashier = AuthUser(id: 43, username: 'cashier_operations', displayName: 'كاشير العمليات', role: 'cashier');
+    await tester.pumpWidget(MaterialApp(home: CashierWorkspaceScreen(cashier: cashier, shiftId: 9, onLogout: () {}, permissionLoader: () async => <String>{'supplier_purchases', 'supplier_payments', 'cash_expenses'}, salesScreenBuilder: (_) => const Center(child: Text('بيع تجريبي')))));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byTooltip('الأقسام المسموح بها'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('الموردون والمشتريات'), findsOneWidget);
+    expect(find.text('الخزينة'), findsOneWidget);
+    expect(find.text('التقارير'), findsNothing);
+  });
+
   testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير',
       (tester) async {
     const cashier = AuthUser(
