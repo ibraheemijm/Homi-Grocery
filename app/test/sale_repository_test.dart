@@ -807,6 +807,13 @@ void main() {
           : setting
       ).toList(),
     );
+    // أغلق وردية المدير قبل نقل ملكية الدرج إلى الكاشير.
+    final managerShiftId = await ensureManagerShift();
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId,
+      userId: managerId,
+      closingCash: 40,
+    );
     final shift = await CashShiftRepository(database).openShift(
       userId: cashier.id,
       openingCash: 100,
