@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:homi_grocery/data/customer_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/dashboard_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/product_repository.dart';
@@ -30,7 +31,20 @@ void main() {
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
   });
+
+  Future<int> ensureManagerShift() async {
+    final shifts = CashShiftRepository(database);
+    final current = await shifts.getOpenShift();
+    if (current != null) {
+      if (current.userId != managerId) {
+        throw StateError('وردية الاختبار المفتوحة لا تخص المدير.');
+      }
+      return current.id;
+    }
+    return (await shifts.openShift(userId: managerId, openingCash: 0)).id;
+  }
 
   tearDown(() async => database.close());
 
@@ -74,9 +88,9 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'زبون اللوحة',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final customer = (await customers.balances(userId: managerId)).single;
-    await customers.recordPayment(customerId: customer.id, amount: 100, userId: managerId);
+    await customers.recordPayment(customerId: customer.id, amount: 100, userId: managerId, shiftId: await ensureManagerShift());
 
     await products.add(const GroceryProduct(
       name: 'حليب منخفض', sellingPrice: 100, stockQuantity: 1, minimumQuantity: 2,
