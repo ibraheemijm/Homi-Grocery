@@ -7,6 +7,7 @@ import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/data/sale_repository.dart';
+import 'package:homi_grocery/data/manager_approval_repository.dart';
 
 void main() {
   late Database database;
@@ -14,6 +15,8 @@ void main() {
   late SaleRepository sales;
   late int managerId;
   late AuthUser managerAccount;
+
+  const managerPassword = 'StrongPass!2026';
 
   setUp(() async {
     sqfliteFfiInit();
@@ -26,18 +29,15 @@ void main() {
     await GroceryDatabase.createSalesReturnsSchema(database);
     await GroceryDatabase.createCashTransactionsSchema(database);
     await GroceryDatabase.createCashShiftsSchema(database);
+    await GroceryDatabase.createManagerApprovalsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
-    managerId = await database.insert('users', {
-      'username': 'sale_test_manager', 'display_name': 'مدير الاختبار',
-      'password_hash': 'test-hash', 'password_salt': 'test-salt',
-      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    });
-    managerAccount = AuthUser(
-      id: managerId, username: 'sale_test_manager',
-      displayName: 'مدير الاختبار', role: 'manager',
+    managerAccount = await AuthRepository(database).createInitialManager(
+      username: 'sale_test_manager',
+      displayName: 'مدير الاختبار',
+      password: managerPassword,
     );
+    managerId = managerAccount.id;
     products = ProductRepository(database);
     sales = SaleRepository(database);
   });
@@ -845,6 +845,205 @@ void main() {
       shiftId: shift.id,
     );
     expect(sale.total, 70);
+  });
+
+  test('يقبل الخصم الذي تجاوز حد الكاشير بموافقة مدير مطابقة ويستهلكها مع الفاتورة', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'cashier_approved_discount',
+      displayName: 'كاشير الخصم',
+      password: 'CashierPass!2026',
+    );
+    final settings = await auth.getCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'discounts'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 30,
+            )
+          : setting
+      ).toList(),
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة خصم بموافقة', sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final grant = await ManagerApprovalRepository(database, auth).issueApproval(
+      manager: managerAccount,
+      managerPassword: managerPassword,
+      scope: ManagerApprovalScope(
+        cashierUserId: cashier.id,
+        shiftId: shift.id,
+        permissionKey: 'discounts',
+        operationType: 'sale.create',
+        amount: 31,
+      ),
+    );
+
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 31,
+      paidAmount: 69,
+      paymentMethod: 'نقدي',
+      userId: cashier.id,
+      shiftId: shift.id,
+      managerApprovalToken: grant.token,
+    );
+
+    expect(sale.total, 69);
+    expect(await database.query('sales'), hasLength(1));
+    expect(await database.query('cash_transactions'), hasLength(1));
+    expect((await products.getById(productId))!.stockQuantity, 4);
+    final approval = (await database.query('manager_approvals')).single;
+    expect(approval['status'], 'consumed');
+    expect(approval['consumed_at'], isNotNull);
+  });
+
+  test('يرفض الخصم إذا اختلف مبلغه عن نطاق الموافقة ولا ينشئ أي أثر مالي أو مخزني', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'cashier_mismatched_discount',
+      displayName: 'كاشير الخصم',
+      password: 'CashierPass!2026',
+    );
+    final settings = await auth.getCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'discounts'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 30,
+            )
+          : setting
+      ).toList(),
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة خصم مختلف', sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final grant = await ManagerApprovalRepository(database, auth).issueApproval(
+      manager: managerAccount,
+      managerPassword: managerPassword,
+      scope: ManagerApprovalScope(
+        cashierUserId: cashier.id,
+        shiftId: shift.id,
+        permissionKey: 'discounts',
+        operationType: 'sale.create',
+        amount: 31,
+      ),
+    );
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 32,
+        paidAmount: 68,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+        managerApprovalToken: grant.token,
+      ),
+      throwsStateError,
+    );
+
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+    expect((await products.getById(productId))!.stockQuantity, 5);
+    expect((await database.query('manager_approvals')).single['status'], 'rejected');
+  });
+
+  test('يرفض موافقة الخصم المنتهية قبل حفظ الفاتورة أو حركة النقد', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'cashier_expired_discount',
+      displayName: 'كاشير الخصم',
+      password: 'CashierPass!2026',
+    );
+    final settings = await auth.getCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+    );
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) =>
+        setting.key == 'discounts'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+              maxAmount: 30,
+            )
+          : setting
+      ).toList(),
+    );
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id,
+      openingCash: 100,
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'سلعة موافقة منتهية', sellingPrice: 100, stockQuantity: 5,
+    ));
+    final product = (await products.getById(productId))!;
+    final grant = await ManagerApprovalRepository(database, auth).issueApproval(
+      manager: managerAccount,
+      managerPassword: managerPassword,
+      scope: ManagerApprovalScope(
+        cashierUserId: cashier.id,
+        shiftId: shift.id,
+        permissionKey: 'discounts',
+        operationType: 'sale.create',
+        amount: 31,
+      ),
+    );
+    await database.update(
+      'manager_approvals',
+      {'expires_at': DateTime.now().toUtc().subtract(const Duration(minutes: 1)).toIso8601String()},
+    );
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 31,
+        paidAmount: 69,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shift.id,
+        managerApprovalToken: grant.token,
+      ),
+      throwsStateError,
+    );
+
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+    expect((await products.getById(productId))!.stockQuantity, 5);
+    expect((await database.query('manager_approvals')).single['status'], 'expired');
   });
 
   test('يرفض بيع الكاشير بالدين دون صلاحية أو عند تجاوز سقف الدين', () async {
