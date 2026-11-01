@@ -3,6 +3,12 @@ import 'package:sqflite/sqflite.dart';
 
 import 'cash_shift_repository.dart';
 
+class SupplierLookup {
+  const SupplierLookup({required this.id, required this.name});
+  final int id;
+  final String name;
+}
+
 class SupplierBalance {
   const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid});
   final int id;
@@ -151,6 +157,27 @@ class SupplierRepository {
       throw StateError('لا يملك الكاشير صلاحية عرض بيانات الموردين.');
     }
   }
+
+  // يسمح بالبحث عن أسماء الموردين فقط عند وجود صلاحية تشغيلية ذات صلة.
+  Future<void> _requirePermissionReadAccess(int userId, Set<String> allowedPermissions) async {
+    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
+    if (users.isEmpty || users.single['is_active'] != 1) throw StateError('الحساب غير نشط أو غير موجود.');
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier' || allowedPermissions.isEmpty) throw StateError('لا يملك المستخدم صلاحية الوصول إلى الموردين.');
+    final placeholders = List.filled(allowedPermissions.length, '?').join(', ');
+    final rows = await _database.query('cashier_permissions', columns: ['permission_key'], where: 'user_id = ? AND is_allowed = 1 AND permission_key IN ($placeholders)', whereArgs: [userId, ...allowedPermissions], limit: 1);
+    if (rows.isEmpty) throw StateError('لا يملك الكاشير صلاحية البحث عن الموردين لهذه العملية.');
+  }
+
+  // يعيد أسماء الموردين ومعرّفاتهم فقط؛ لا يكشف الأرصدة أو إجمالي الديون.
+  Future<List<SupplierLookup>> supplierLookup({required int userId, String query = ''}) async {
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_purchases', 'supplier_payments', 'supplier_returns', 'supplier_return_refunds'});
+    final rows = await _database.query('suppliers', columns: ['id', 'name'], where: 'name LIKE ?', whereArgs: ['%${query.trim()}%'], orderBy: 'name COLLATE NOCASE ASC');
+    return rows.map((row) => SupplierLookup(id: row['id'] as int, name: row['name'] as String)).toList(growable: false);
+  }
+
+  // سجل الشراء وتفاصيله متاحان لمن يحتاجهما لتنفيذ المرتجعات، أو لمدير/مطلع الموردين.
+  Future<void> _requirePurchaseHistoryAccess(int userId) => _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_returns', 'supplier_return_refunds'});
 
   // يفرض صلاحية مستقلة للعمليات المالية الخاصة بالكاشير داخل المعاملة.
   Future<int?> _requireCashierPermission(
@@ -331,7 +358,7 @@ class SupplierRepository {
     int? supplierId,
     int limit = 100,
   }) async {
-    await _requireReadAccess(userId);
+    await _requirePurchaseHistoryAccess(userId);
     if (limit < 1 || limit > 1000) {
       throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
     }
@@ -361,7 +388,7 @@ class SupplierRepository {
 
   /// يعرض البنود المحفوظة كما كانت وقت الشراء، لا حسب بيانات الصنف الحالية.
   Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId, {required int userId}) async {
-    await _requireReadAccess(userId);
+    await _requirePurchaseHistoryAccess(userId);
     final rows = await _database.query(
       'purchase_items',
       columns: ['product_name', 'unit', 'quantity', 'unit_cost', 'line_total'],
@@ -500,7 +527,7 @@ class SupplierRepository {
 
   /// بنود فاتورة الشراء مع الكميات المتبقية القابلة للإرجاع.
   Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId, {required int userId}) async {
-    await _requireReadAccess(userId);
+    await _requirePurchaseHistoryAccess(userId);
     return _database.rawQuery('''
       SELECT pi.id, pi.product_id, pi.product_name, pi.unit, pi.quantity,
         pi.unit_cost, pi.line_total, pr.stock_quantity,
@@ -515,7 +542,7 @@ class SupplierRepository {
 
   /// أقصى مبلغ لم يُسترد نقديًا بعد من مرتجع مورد.
   Future<int> maximumRefundableSupplierReturnAmount(int returnId, {required int userId}) async {
-    await _requireReadAccess(userId);
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_return_refunds'});
     final rows = await _database.rawQuery('''
       SELECT MAX(0, sr.amount - COALESCE((
         SELECT SUM(srr.amount) FROM supplier_return_refunds srr
