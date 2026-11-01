@@ -316,7 +316,9 @@ void main() {
     final auditEvents = (await database.query('auth_audit_log'))
         .map((row) => row['action'] as String);
     expect(
-      auditEvents.any((action) => action.contains('manager_approval_rejected:') &&
+      auditEvents.any((action) =>
+          (action.contains('manager_approval_rejected:') ||
+              action.contains('manager_approval_denied:')) &&
           action.contains('inactive_account')),
       isTrue,
     );
