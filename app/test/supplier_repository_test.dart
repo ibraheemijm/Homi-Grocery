@@ -115,6 +115,58 @@ void main() {
     await expectLater(suppliers.maximumRefundableSupplierReturnAmount(returnId, userId: cashier.id), throwsStateError);
   });
 
+  test('يعرض للكاشير استردادات المورد المعلقة دون كشف دفتر الموردين', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(
+      manager: managerAccount,
+      username: 'supplier_refund_only',
+      displayName: 'كاشير استلام الاسترداد',
+      password: 'CashierPass!2026',
+    );
+    final productId = await products.add(const GroceryProduct(
+      name: 'أرز', purchasePrice: 100, sellingPrice: 140, stockQuantity: 3,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد الاستردادات');
+    final purchase = await suppliers.createPurchase(
+      userId: managerId,
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلو', quantity: 3, unitCost: 100)],
+      paidAmount: 0,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(purchase.id, userId: managerId)).single['id'] as int;
+    final returnId = await suppliers.createSupplierReturn(
+      userId: managerId,
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+    final settings = await auth.getCashierPermissions(manager: managerAccount, cashierId: cashier.id);
+    await auth.saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) => setting.key == 'supplier_return_refunds'
+          ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true)
+          : setting).toList(),
+    );
+
+    final pending = await suppliers.pendingSupplierReturnRefunds(userId: cashier.id);
+    expect(pending, hasLength(1));
+    expect(pending.single.returnId, returnId);
+    expect(pending.single.invoiceNumber, purchase.invoiceNumber);
+    expect(pending.single.supplierName, 'مورد الاستردادات');
+    expect(pending.single.refundableAmount, 100);
+    await expectLater(suppliers.balances(userId: cashier.id), throwsStateError);
+    await expectLater(suppliers.purchaseHistory(userId: cashier.id), throwsStateError);
+
+    await suppliers.recordSupplierReturnRefund(
+      userId: cashier.id,
+      returnId: returnId,
+      amount: 40,
+      paymentMethod: 'تحويل بنكي',
+    );
+    final remaining = await suppliers.pendingSupplierReturnRefunds(userId: cashier.id);
+    expect(remaining.single.refundableAmount, 60);
+  });
+
   test('يفرض صلاحيات قراءة المشتريات ومرتجعات المورد وحدود الاسترداد', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(
