@@ -153,7 +153,14 @@ void main() {
         ),
       ),
     );
+    // تحميل الصلاحيات يفتح قاعدة البيانات بصورة غير متزامنة.
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
+
+    expect(find.text('Homi Grocery'), findsOneWidget);
+    expect(find.byTooltip('الأقسام المسموح بها'), findsOneWidget);
+    await tester.tap(find.byTooltip('الأقسام المسموح بها'));
+    await tester.pumpAndSettle();
 
     expect(find.text('أقسام الكاشير'), findsOneWidget);
     expect(find.text('المبيعات'), findsOneWidget);
