@@ -222,6 +222,9 @@ void main() {
           : setting
       ).toList(),
     );
+    await expectLater(cashbox.summary(userId: cashier.id), throwsStateError);
+    await expectLater(cashbox.recent(userId: cashier.id), throwsStateError);
+
     await expectLater(
       cashbox.recordManualMovement(
         direction: 'out',
