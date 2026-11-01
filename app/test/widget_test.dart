@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/customer_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 
@@ -223,7 +224,14 @@ void main() {
   });
   testWidgets('يخفي تفاصيل دفتر الزبون عن الكاشير المصرح له بالتحصيل فقط',
       (tester) async {
-    final database = await GroceryDatabase.open();
+    final database =
+        await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    addTearDown(database.close);
+    await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    await GroceryDatabase.createSalesSchema(database);
+    await GroceryDatabase.createCustomersSchema(database);
+    await GroceryDatabase.createSalesReturnsSchema(database);
     final now = DateTime.now().toUtc().toIso8601String();
     final suffix = DateTime.now().microsecondsSinceEpoch;
     final userId = await database.insert('users', {
@@ -262,9 +270,12 @@ void main() {
       home: CustomersScreen(
         userId: userId,
         cashierPermissions: const {'customer_collections'},
+        repository: CustomerRepository(database),
       ),
     ));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('عميل اختبار التحصيل'), findsOneWidget);
     expect(find.text('400 ج.س'), findsOneWidget);
