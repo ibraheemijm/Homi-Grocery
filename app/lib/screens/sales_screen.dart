@@ -1040,12 +1040,45 @@ class _SalesScreenState extends State<SalesScreen> {
       noteController.dispose();
       if (quantities == null || !mounted) return;
 
-      final returned = await _salesRepository!.returnItems(
-        saleId: sale.id,
-        quantitiesBySaleItemId: quantities,
-        note: note,
-        userId: widget.userId,
-      );
+      SaleReturnRecord returned;
+      try {
+        returned = await _salesRepository!.returnItems(
+          saleId: sale.id,
+          quantitiesBySaleItemId: quantities,
+          note: note,
+          userId: widget.userId,
+          shiftId: widget.shiftId,
+        );
+      } on ManagerApprovalRequiredException catch (approvalRequest) {
+        if (!widget.cashierMode || widget.shiftId == null) rethrow;
+        if (!mounted) return;
+        final credentials = await showDialog<ManagerApprovalCredentials>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ManagerApprovalDialog(
+            discountAmount: approvalRequest.amount,
+            operationName: 'المرتجع',
+          ),
+        );
+        if (!mounted) return;
+        if (credentials == null) return;
+        final token = await _salesRepository!.requestCashierReturnApproval(
+          managerUsername: credentials.username,
+          managerPassword: credentials.password,
+          cashierUserId: widget.userId,
+          shiftId: widget.shiftId!,
+          saleId: sale.id,
+          returnAmount: approvalRequest.amount,
+        );
+        returned = await _salesRepository!.returnItems(
+          saleId: sale.id,
+          quantitiesBySaleItemId: quantities,
+          note: note,
+          userId: widget.userId,
+          shiftId: widget.shiftId,
+          managerApprovalToken: token,
+        );
+      }
       if (_canViewInvoices) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
       }
