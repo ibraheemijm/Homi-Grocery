@@ -9,6 +9,14 @@ class SupplierLookup {
   final String name;
 }
 
+class SupplierPurchaseLookup {
+  const SupplierPurchaseLookup({required this.id, required this.invoiceNumber, required this.supplierName, required this.createdAt});
+  final int id;
+  final String invoiceNumber;
+  final String supplierName;
+  final String createdAt;
+}
+
 class SupplierBalance {
   const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid});
   final int id;
@@ -176,8 +184,8 @@ class SupplierRepository {
     return rows.map((row) => SupplierLookup(id: row['id'] as int, name: row['name'] as String)).toList(growable: false);
   }
 
-  // سجل الشراء وتفاصيله متاحان لمن يحتاجهما لتنفيذ المرتجعات، أو لمدير/مطلع الموردين.
-  Future<void> _requirePurchaseHistoryAccess(int userId) => _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_returns', 'supplier_return_refunds'});
+  // يسمح بقراءة الحد الأدنى من بيانات الفاتورة اللازمة لتنفيذ مرتجع المورد.
+  Future<void> _requireReturnAccess(int userId) => _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_returns'});
 
   // يفرض صلاحية مستقلة للعمليات المالية الخاصة بالكاشير داخل المعاملة.
   Future<int?> _requireCashierPermission(
@@ -352,13 +360,31 @@ class SupplierRepository {
     });
   }
 
-  /// يعرض سجل فواتير الشراء الأحدث أولًا، مع اسم المورد والمبالغ المحاسبية.
+  /// يعرض بيانات الفواتير الأساسية فقط للكاشير الذي يملك صلاحية المرتجعات.
+  /// لا يعيد إجمالي الفاتورة أو المدفوع أو المتبقي.
+  Future<List<SupplierPurchaseLookup>> purchaseHistoryForReturns({required int userId, int limit = 100}) async {
+    await _requireReturnAccess(userId);
+    if (limit < 1 || limit > 1000) throw ArgumentError('حد نتائج سجل المرتجعات غير صالح.');
+    final rows = await _database.rawQuery('''
+      SELECT p.id, p.invoice_number, s.name AS supplier_name, p.created_at
+      FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
+      ORDER BY p.created_at DESC, p.id DESC LIMIT ?
+    ''', [limit]);
+    return rows.map((row) => SupplierPurchaseLookup(
+      id: row['id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      createdAt: row['created_at'] as String,
+    )).toList(growable: false);
+  }
+
+  /// يعرض سجل فواتير الشراء والمبالغ المحاسبية لمن يملك صلاحية عرض بيانات الموردين.
   Future<List<PurchaseHistoryRecord>> purchaseHistory({
     required int userId,
     int? supplierId,
     int limit = 100,
   }) async {
-    await _requirePurchaseHistoryAccess(userId);
+    await _requireReadAccess(userId);
     if (limit < 1 || limit > 1000) {
       throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
     }
@@ -388,7 +414,7 @@ class SupplierRepository {
 
   /// يعرض البنود المحفوظة كما كانت وقت الشراء، لا حسب بيانات الصنف الحالية.
   Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId, {required int userId}) async {
-    await _requirePurchaseHistoryAccess(userId);
+    await _requireReadAccess(userId);
     final rows = await _database.query(
       'purchase_items',
       columns: ['product_name', 'unit', 'quantity', 'unit_cost', 'line_total'],
@@ -527,7 +553,7 @@ class SupplierRepository {
 
   /// بنود فاتورة الشراء مع الكميات المتبقية القابلة للإرجاع.
   Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId, {required int userId}) async {
-    await _requirePurchaseHistoryAccess(userId);
+    await _requireReturnAccess(userId);
     return _database.rawQuery('''
       SELECT pi.id, pi.product_id, pi.product_name, pi.unit, pi.quantity,
         pi.unit_cost, pi.line_total, pr.stock_quantity,
