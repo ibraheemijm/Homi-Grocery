@@ -70,10 +70,11 @@ class ManagerApprovalRequiredException implements Exception {
 }
 
 class SaleRepository {
-  SaleRepository(this._database)
+  SaleRepository(this._database, {DateTime Function()? clock})
       : _managerApprovals = ManagerApprovalRepository(
           _database,
           AuthRepository(_database),
+          clock: clock,
         );
 
   final Database _database;
