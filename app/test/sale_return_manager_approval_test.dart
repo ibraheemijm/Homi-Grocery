@@ -20,6 +20,21 @@ void main() {
 
   const managerPassword = 'StrongPass!2026';
 
+  Future<void> setReturnPermission({required bool allowed, int limit = 50}) async {
+    await auth.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: [
+        CashierPermissionSetting(
+          key: 'returns',
+          label: 'تسجيل مرتجعات البيع',
+          isAllowed: allowed,
+          maxAmount: limit,
+        ),
+      ],
+    );
+  }
+
   setUp(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -65,21 +80,6 @@ void main() {
   });
 
   tearDown(() async => database.close());
-
-  Future<void> setReturnPermission({required bool allowed, int limit = 50}) async {
-    await auth.saveCashierPermissions(
-      manager: manager,
-      cashierId: cashier.id,
-      permissions: [
-        CashierPermissionSetting(
-          key: 'returns',
-          label: 'تسجيل مرتجعات البيع',
-          isAllowed: allowed,
-          maxAmount: limit,
-        ),
-      ],
-    );
-  }
 
   Future<({SaleRecord sale, int itemId, int productId})> createSale() async {
     final productId = await products.add(const GroceryProduct(
