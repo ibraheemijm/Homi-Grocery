@@ -5,12 +5,20 @@ import '../data/customer_repository.dart';
 import '../data/grocery_database.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({required this.userId, this.shiftId, this.cashierPermissions, super.key});
+  const CustomersScreen({
+    required this.userId,
+    this.shiftId,
+    this.cashierPermissions,
+    this.repository,
+    super.key,
+  });
 
   final int userId;
   final int? shiftId;
   // null تعني دخول المدير، أما الكاشير فيمرر الصلاحيات الممنوحة له.
   final Set<String>? cashierPermissions;
+  // حقن المستودع يعزل اختبارات الشاشة عن قاعدة بيانات التطبيق الدائمة.
+  final CustomerRepository? repository;
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -36,8 +44,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _initialize() async {
     try {
-      final database = await GroceryDatabase.open();
-      _repository = CustomerRepository(database);
+      _repository = widget.repository;
+      if (_repository == null) {
+        final database = await GroceryDatabase.open();
+        _repository = CustomerRepository(database);
+      }
       await _load();
       if (mounted) setState(() { _loading = false; _error = null; });
     } catch (error) {
