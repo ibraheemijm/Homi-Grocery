@@ -138,7 +138,7 @@ void main() {
     expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
   });
 
-  testWidgets('يفتح الكاشير نقطة بيع مبسطة دون أدوات المدير', (tester) async {
+  testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CashierWorkspaceScreen(
@@ -155,7 +155,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.textContaining('نقطة البيع'), findsOneWidget);
+    expect(find.text('أقسام الكاشير'), findsOneWidget);
+    expect(find.text('المبيعات'), findsOneWidget);
     expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
     expect(find.text('مبيعات اليوم'), findsNothing);
     expect(find.text('إدارة الكاشيرين'), findsNothing);
