@@ -748,6 +748,92 @@ class _SalesScreenState extends State<SalesScreen> {
     ]),
   );
 
+  // طلب بيانات المدير دون تغيير جلسة الكاشير الحالية.
+  Future<Map<String, String>?> _requestManagerApprovalCredentials() async {
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    final credentials = await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('موافقة المدير مطلوبة'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('الخصم الحالي: $_discount ج.س'),
+              const SizedBox(height: 8),
+              const Text(
+                'هذا الخصم يتجاوز صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه الفاتورة فقط، صالحة لمدة دقيقتين.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: usernameController,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'اسم مستخدم المدير',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                onSubmitted: (_) {
+                  final username = usernameController.text.trim();
+                  final password = passwordController.text;
+                  if (username.isEmpty || password.isEmpty) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(content: Text('أدخل اسم المستخدم وكلمة المرور.')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, {
+                    'username': username,
+                    'password': password,
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: 'كلمة مرور المدير',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إلغاء البيع'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final username = usernameController.text.trim();
+              final password = passwordController.text;
+              if (username.isEmpty || password.isEmpty) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('أدخل اسم المستخدم وكلمة المرور.')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'username': username,
+                'password': password,
+              });
+            },
+            child: const Text('التحقق والموافقة'),
+          ),
+        ],
+      ),
+    );
+    usernameController.dispose();
+    passwordController.dispose();
+    return credentials;
+  }
+
   // اختيار طريقة الدفع والمبلغ المستلم، مع السماح بالبيع الآجل والجزئي.
   // الكاشير لا يختار طريقة سداد؛ مساره نقدي كامل فقط.
   Future<void> _checkout() async {
@@ -836,6 +922,28 @@ class _SalesScreenState extends State<SalesScreen> {
           }
         }
       }
+      String? managerApprovalToken;
+      if (widget.cashierMode &&
+          _discount > 0 &&
+          await _salesRepository!.requiresCashierApproval(
+            userId: widget.userId,
+            amount: _discount,
+          )) {
+        final credentials = await _requestManagerApprovalCredentials();
+        if (!mounted) return;
+        if (credentials == null) {
+          setState(() => _saving = false);
+          return;
+        }
+        managerApprovalToken =
+            await _salesRepository!.requestCashierDiscountApproval(
+          managerUsername: credentials['username']!,
+          managerPassword: credentials['password']!,
+          cashierUserId: widget.userId,
+          shiftId: widget.shiftId!,
+          discountAmount: _discount,
+        );
+      }
       final sale = await _salesRepository!.createSale(
         lines: List<SaleLine>.from(_cart),
         discount: _discount,
@@ -846,6 +954,7 @@ class _SalesScreenState extends State<SalesScreen> {
         customerId: hasDebt ? _selectedCustomerId : null,
         userId: widget.userId,
         shiftId: widget.shiftId,
+        managerApprovalToken: managerApprovalToken,
       );
       _cart = [];
       _customer.clear();
