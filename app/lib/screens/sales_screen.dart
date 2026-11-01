@@ -929,6 +929,10 @@ class _SalesScreenState extends State<SalesScreen> {
             userId: widget.userId,
             amount: _discount,
           )) {
+        final activeShiftId = widget.shiftId;
+        if (activeShiftId == null) {
+          throw StateError('لا توجد وردية نشطة لهذا الكاشير.');
+        }
         final credentials = await _requestManagerApprovalCredentials();
         if (!mounted) return;
         if (credentials == null) {
@@ -940,7 +944,7 @@ class _SalesScreenState extends State<SalesScreen> {
           managerUsername: credentials['username']!,
           managerPassword: credentials['password']!,
           cashierUserId: widget.userId,
-          shiftId: widget.shiftId!,
+          shiftId: activeShiftId,
           discountAmount: _discount,
         );
       }
