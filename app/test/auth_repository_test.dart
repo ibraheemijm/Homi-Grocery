@@ -373,6 +373,58 @@ void main() {
     );
   });
 
+  test('يعيد مساحة الكاشير مفاتيح الصلاحيات الممنوحة فقط', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
+    await repository.saveCashierPermissions(
+      manager: manager,
+      cashierId: cashier.id,
+      permissions: [
+        const CashierPermissionSetting(
+          key: 'credit_sales',
+          label: 'البيع بالدين أو الدفع الجزئي',
+          isAllowed: true,
+          maxAmount: 12000,
+        ),
+        const CashierPermissionSetting(
+          key: 'view_invoice_history',
+          label: 'عرض سجل الفواتير',
+          isAllowed: true,
+        ),
+        const CashierPermissionSetting(
+          key: 'view_reports',
+          label: 'عرض التقارير',
+          isAllowed: false,
+        ),
+      ],
+    );
+
+    expect(
+      await repository.getActiveCashierPermissionKeys(cashierId: cashier.id),
+      {'credit_sales', 'view_invoice_history'},
+    );
+
+    await repository.setCashierActive(
+      manager: manager,
+      cashierId: cashier.id,
+      isActive: false,
+    );
+    await expectLater(
+      repository.getActiveCashierPermissionKeys(cashierId: cashier.id),
+      throwsA(isA<AuthException>()),
+    );
+  });
+
   test('يرفض حفظ صلاحية مجهولة أو حدًا ماليًا سالبًا أو تعديلًا من الكاشير', () async {
     final manager = await repository.createInitialManager(
       username: 'store_admin',
