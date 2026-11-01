@@ -586,64 +586,60 @@ class _SalesScreenState extends State<SalesScreen> {
               else
                 Expanded(child: _buildCartLines(theme)),
               const Divider(height: 20),
-              if (!widget.cashierMode) ...[
-              TextField(
-                controller: _customer,
-                onChanged: _searchCustomers,
-                decoration: const InputDecoration(
-                  labelText: 'اسم الزبون (اختياري)',
-                  hintText: 'للدين اختر حسابًا من الاقتراحات أو أدخل اسمًا جديدًا',
-                  prefixIcon: Icon(Icons.person_search_rounded),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  constraints: const BoxConstraints(maxHeight: 150),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    padding: EdgeInsets.zero,
-                    itemCount: _customerMatches.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final customer = _customerMatches[index];
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.person_outline_rounded),
-                        title: Text(customer.name),
-                        subtitle: Text('الرصيد الحالي: ${customer.balance} ج.س'),
-                        onTap: () => _selectCustomer(customer),
-                      );
-                    },
+              if (_canCreditSales) ...[
+                TextField(
+                  controller: _customer,
+                  onChanged: _customersRepository == null ? null : _searchCustomers,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الزبون (مطلوب عند البيع بالدين)', 
+                    hintText: 'اختر حسابًا من الاقتراحات أو أدخل اسم زبون جديد',
+                    prefixIcon: Icon(Icons.person_search_rounded),
+                    border: OutlineInputBorder(),
                   ),
                 ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _discountController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: false,
-                ),
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'الخصم بالجنيه',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-                _totalRow('الإجمالي قبل الخصم', _subtotal),
-                _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
-
-              ] else ...[
-                const Text('نوع العملية: بيع نقدي كامل دون خصم أو دين.'),
-                const SizedBox(height: 12),
-                _totalRow('الإجمالي', _total),
+                if (_showCustomerSuggestions && _customerMatches.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: _customerMatches.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final customer = _customerMatches[index];
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.person_outline_rounded),
+                          title: Text(customer.name),
+                          subtitle: Text('الرصيد الحالي: ${customer.balance} ج.س'),
+                          onTap: () => _selectCustomer(customer),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 10),
               ],
+              if (_canDiscount) ...[
+                TextField(
+                  controller: _discountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'الخصم بالجنيه',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              _totalRow('الإجمالي قبل الخصم', _subtotal),
+              if (_canDiscount)
+                _totalRow('الخصم', _discount.clamp(0, _subtotal).toInt()),
               const Divider(),
               _totalRow('المطلوب دفعه', _total, strong: true),
               const SizedBox(height: 12),
