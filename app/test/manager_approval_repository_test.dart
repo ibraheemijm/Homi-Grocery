@@ -107,6 +107,7 @@ void main() {
       (txn) => approvals.consumeWithinTransaction(
         txn,
         token: grant.token,
+        executingUserId: cashier.id,
         scope: scopeFor(),
       ),
     );
@@ -114,6 +115,7 @@ void main() {
       (txn) => approvals.consumeWithinTransaction(
         txn,
         token: grant.token,
+        executingUserId: cashier.id,
         scope: scopeFor(),
       ),
     );
@@ -141,6 +143,7 @@ void main() {
         (txn) => approvals.consumeWithinTransaction(
           txn,
           token: grant.token,
+          executingUserId: cashier.id,
           scope: scopeFor(),
         ),
       ),
@@ -148,6 +151,7 @@ void main() {
         (txn) => approvals.consumeWithinTransaction(
           txn,
           token: grant.token,
+          executingUserId: cashier.id,
           scope: scopeFor(),
         ),
       ),
@@ -175,6 +179,7 @@ void main() {
       (txn) => approvals.consumeWithinTransaction(
         txn,
         token: grant.token,
+        executingUserId: cashier.id,
         scope: scopeFor(),
       ),
     );
@@ -201,6 +206,7 @@ void main() {
       (txn) => approvals.consumeWithinTransaction(
         txn,
         token: grant.token,
+        executingUserId: cashier.id,
         scope: scopeFor(amount: 251),
       ),
     );
@@ -238,6 +244,27 @@ void main() {
       throwsA(isA<AuthException>()),
     );
     expect(await database.query('manager_approvals'), isEmpty);
+  });
+
+  test('يرفض استهلاك الموافقة بهوية مستخدم غير صاحبها', () async {
+    final grant = await approvals.issueApproval(
+      manager: manager,
+      managerPassword: managerPassword,
+      scope: scopeFor(),
+    );
+
+    final result = await database.transaction(
+      (txn) => approvals.consumeWithinTransaction(
+        txn,
+        token: grant.token,
+        executingUserId: manager.id,
+        scope: scopeFor(),
+      ),
+    );
+
+    expect(result, ManagerApprovalConsumeResult.scopeMismatch);
+    final row = (await database.query('manager_approvals')).single;
+    expect(row['status'], 'rejected');
   });
 
   test('يرفض إصدار موافقة لوردية لا تخص الكاشير أو ليست مفتوحة', () async {
