@@ -61,6 +61,18 @@ void main() {
     );
   });
 
+  test('يسمح بالبحث عن اسم المورد بصلاحية الشراء دون كشف رصيده', () async {
+    final auth = AuthRepository(database);
+    final cashier = await auth.createCashier(manager: managerAccount, username: 'supplier_lookup_cashier', displayName: 'كاشير شراء', password: 'CashierPass!2026');
+    final supplierId = await suppliers.addSupplier(name: 'مورد بحث محدود');
+    final settings = await auth.getCashierPermissions(manager: managerAccount, cashierId: cashier.id);
+    await auth.saveCashierPermissions(manager: managerAccount, cashierId: cashier.id, permissions: settings.map((setting) => setting.key == 'supplier_purchases' ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true) : setting).toList());
+    final lookup = await suppliers.supplierLookup(userId: cashier.id);
+    expect(lookup.single.id, supplierId);
+    expect(lookup.single.name, 'مورد بحث محدود');
+    await expectLater(suppliers.balances(userId: cashier.id), throwsStateError);
+  });
+
   test('يفرض صلاحيات قراءة المشتريات ومرتجعات المورد وحدود الاسترداد', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(
