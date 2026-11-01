@@ -653,12 +653,18 @@ class CashierWorkspaceScreen extends StatefulWidget {
     required this.cashier,
     required this.shiftId,
     required this.onLogout,
+    this.permissionLoader,
+    this.salesScreenBuilder,
     super.key,
   });
 
   final AuthUser cashier;
   final int shiftId;
   final VoidCallback onLogout;
+
+  // تسمح بحقن مصدر الصلاحيات ومحتوى البيع لعزل اختبارات الواجهة عن التخزين.
+  final Future<Set<String>> Function()? permissionLoader;
+  final Widget Function(Set<String> permissions)? salesScreenBuilder;
 
   @override
   State<CashierWorkspaceScreen> createState() => _CashierWorkspaceScreenState();
@@ -670,11 +676,17 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
   String? _error;
   int _selectedIndex = 0;
 
+  Future<Set<String>> _loadPermissionsFromDatabase() async {
+    final database = await GroceryDatabase.open();
+    return AuthRepository(database)
+        .getActiveCashierPermissionKeys(cashierId: widget.cashier.id);
+  }
+
   Future<void> _loadPermissions() async {
     try {
-      final database = await GroceryDatabase.open();
-      final permissions = await AuthRepository(database)
-          .getActiveCashierPermissionKeys(cashierId: widget.cashier.id);
+      final permissions = widget.permissionLoader != null
+          ? await widget.permissionLoader!()
+          : await _loadPermissionsFromDatabase();
       if (!mounted) return;
       setState(() {
         _permissions = permissions;
@@ -716,12 +728,13 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
     final item = _items[_selectedIndex];
     switch (item.key) {
       case 'sales':
-        return SalesScreen(
-          userId: widget.cashier.id,
-          shiftId: widget.shiftId,
-          cashierMode: true,
-          cashierPermissions: _permissions,
-        );
+        return widget.salesScreenBuilder?.call(_permissions) ??
+            SalesScreen(
+              userId: widget.cashier.id,
+              shiftId: widget.shiftId,
+              cashierMode: true,
+              cashierPermissions: _permissions,
+            );
       case 'invoices':
         return InvoicesScreen(userId: widget.cashier.id);
       case 'customers':
