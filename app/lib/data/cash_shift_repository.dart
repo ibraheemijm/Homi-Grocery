@@ -57,14 +57,13 @@ class CashShiftRepository {
 
   final Database _database;
 
-  /// يتحقق من ملكية الوردية وحالتها قبل أي حركة نقدية مرتبطة بمستخدم.
-  /// يسمح بغياب المستخدم والوردية فقط للاستدعاءات القديمة غير المرتبطة بجلسة.
+  /// يتحقق من ملكية الوردية وحالتها قبل تسجيل أي حركة نقدية.
+  /// لا يسمح بإنشاء حركة نقدية يتيمة دون هوية مستخدم ووردية نشطة.
   static Future<void> validateActiveShift(
     DatabaseExecutor executor, {
     required int? shiftId,
     required int? userId,
   }) async {
-    if (shiftId == null && userId == null) return;
     if (shiftId == null || userId == null) {
       throw const CashShiftException('الحركة النقدية تتطلب مستخدمًا ووردية نشطة.');
     }
@@ -108,13 +107,16 @@ class CashShiftRepository {
     return _database.transaction((txn) async {
       final users = await txn.query(
         'users',
-        columns: ['id', 'username', 'display_name'],
+        columns: ['id', 'username', 'display_name', 'role'],
         where: 'id = ? AND is_active = 1',
         whereArgs: [userId],
         limit: 1,
       );
       if (users.isEmpty) {
         throw const CashShiftException('حساب المستخدم غير موجود أو موقوف.');
+      }
+      if (!const {'manager', 'cashier'}.contains(users.single['role'])) {
+        throw const CashShiftException('نوع الحساب غير مصرح له بفتح وردية.');
       }
 
       final existing = await txn.query(
