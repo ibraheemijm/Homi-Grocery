@@ -253,7 +253,7 @@ class SaleRepository {
             }
           }
       }
-      if (role == 'cashier' || (shiftId != null && paidAmount > 0 && paymentChannel == 'نقدي')) {
+      if (paidAmount > 0 && paymentChannel == 'نقدي') {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
@@ -587,7 +587,7 @@ class SaleRepository {
             throw StateError('مبلغ الرد يتجاوز الحد المسموح ($limit ج.س).');
           }
       }
-      if (paymentMethod.trim() == 'نقدي' && (role == 'cashier' || shiftId != null)) {
+      if (paymentMethod.trim() == 'نقدي') {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
