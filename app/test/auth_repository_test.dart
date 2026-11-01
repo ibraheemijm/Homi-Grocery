@@ -63,6 +63,24 @@ void main() {
         containsAll(['initial_manager_created', 'login_success']));
   });
 
+  test('يسجل حدث الخروج للحساب نفسه في سجل التدقيق', () async {
+    final user = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+
+    await repository.logout(user);
+
+    final events = await database.query(
+      'auth_audit_log',
+      where: 'user_id = ? AND action = ?',
+      whereArgs: [user.id, 'logout'],
+    );
+    expect(events, hasLength(1));
+    expect(events.single['username_snapshot'], user.username);
+  });
+
   test('يرفض إنشاء مدير أول ثانٍ ويحافظ على الحساب الموجود', () async {
     await repository.createInitialManager(
       username: 'store_admin',
