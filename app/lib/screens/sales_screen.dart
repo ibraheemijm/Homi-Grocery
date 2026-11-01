@@ -850,6 +850,7 @@ class _SalesScreenState extends State<SalesScreen> {
         if (activeShiftId == null) {
           throw StateError('لا توجد وردية نشطة لهذا الكاشير.');
         }
+        if (!context.mounted) return;
         final credentials = await showDialog<ManagerApprovalCredentials>(
           context: context,
           barrierDismissible: false,
