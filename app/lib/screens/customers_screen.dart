@@ -120,7 +120,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                     Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                                     const SizedBox(height: 4),
-                                    Text('الفواتير: ${customer.salesCount} • إجمالي المتبقي قبل التحصيلات: ${customer.totalDebt} ج.س'),
+                                    if (_canViewLedger)
+                                      Text('الفواتير: ${customer.salesCount} • إجمالي المتبقي قبل التحصيلات: ${customer.totalDebt} ج.س'),
                                   ])),
                                   const SizedBox(width: 8),
                                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
