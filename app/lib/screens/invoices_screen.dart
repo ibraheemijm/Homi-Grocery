@@ -6,9 +6,11 @@ import '../data/invoice_print_service.dart';
 import '../data/sale_repository.dart';
 
 class InvoicesScreen extends StatefulWidget {
-  const InvoicesScreen({required this.userId, super.key});
+  const InvoicesScreen({required this.userId, this.cashierPermissions, super.key});
 
   final int userId;
+  // null تعني المدير؛ الكاشير لا يطبع إلا عند امتلاك صلاحية عرض السجل.
+  final Set<String>? cashierPermissions;
 
   @override
   State<InvoicesScreen> createState() => _InvoicesScreenState();
@@ -20,6 +22,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   bool _loading = true;
   bool _printing = false;
   String? _error;
+
+  bool get _canPrint => widget.cashierPermissions == null || widget.cashierPermissions!.contains('view_invoice_history');
 
   @override
   void initState() {
@@ -57,7 +61,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   Future<void> _print(Map<String, Object?> invoice, {required bool thermal}) async {
-    if (_printing) return;
+    if (_printing || !_canPrint) return;
     setState(() => _printing = true);
     try {
       final db = await GroceryDatabase.open();
@@ -74,7 +78,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   Future<void> _savePdf(Map<String, Object?> invoice, {required bool thermal}) async {
-    if (_printing) return;
+    if (_printing || !_canPrint) return;
     setState(() => _printing = true);
     try {
       final db = await GroceryDatabase.open();
@@ -186,6 +190,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                             spacing: 8,
                                             runSpacing: 4,
                                             children: [
+                                              if (_canPrint) ...[
                                               OutlinedButton.icon(
                                                 onPressed: _printing ? null : () => _print(invoice, thermal: false),
                                                 icon: const Icon(Icons.picture_as_pdf_rounded),
@@ -206,6 +211,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                                 icon: const Icon(Icons.save_alt_rounded),
                                                 label: const Text('حفظ إيصال'),
                                               ),
+                                              ],
                                             ],
                                           ),
                                         ],
