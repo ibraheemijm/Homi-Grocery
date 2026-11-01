@@ -51,6 +51,25 @@ class _TestDashboardAppState extends State<_TestDashboardApp> {
 
 Widget _dashboardApp() => const _TestDashboardApp();
 
+class _CollectionOnlyCustomerSource implements CustomerDataSource {
+  @override
+  Future<List<CustomerBalance>> balances({
+    required int userId,
+    String query = '',
+  }) async => const [
+    CustomerBalance(
+      id: 12,
+      name: 'عميل اختبار التحصيل',
+      salesCount: 1,
+      totalDebt: 400,
+      totalPaid: 0,
+    ),
+  ];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   setUpAll(() async {
     sqfliteFfiInit();
@@ -224,60 +243,15 @@ void main() {
   });
   testWidgets('يخفي تفاصيل دفتر الزبون عن الكاشير المصرح له بالتحصيل فقط',
       (tester) async {
-    final database =
-        await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    addTearDown(database.close);
-    await GroceryDatabase.createSchema(database);
-    await GroceryDatabase.createAuthSchema(database);
-    await GroceryDatabase.createSalesSchema(database);
-    await GroceryDatabase.createCustomersSchema(database);
-    await GroceryDatabase.createSalesReturnsSchema(database);
-    final now = DateTime.now().toUtc().toIso8601String();
-    final suffix = DateTime.now().microsecondsSinceEpoch;
-    final userId = await database.insert('users', {
-      'username': 'collection_only_$suffix',
-      'display_name': 'كاشير التحصيل',
-      'password_hash': 'test-hash',
-      'password_salt': 'test-salt',
-      'password_iterations': 600000,
-      'role': 'cashier',
-      'is_active': 1,
-      'created_at': now,
-    });
-    await database.insert('cashier_permissions', {
-      'user_id': userId,
-      'permission_key': 'customer_collections',
-      'is_allowed': 1,
-      'updated_at': now,
-    });
-    final customerId = await database.insert('customers', {
-      'name': 'عميل اختبار التحصيل',
-      'created_at': now,
-    });
-    await database.insert('sales', {
-      'invoice_number': 'TEST-$suffix',
-      'customer_id': customerId,
-      'customer_name': 'عميل اختبار التحصيل',
-      'subtotal': 500,
-      'discount': 0,
-      'total': 500,
-      'paid_amount': 100,
-      'payment_method': 'جزئي',
-      'created_at': now,
-    });
-
+    final repository = _CollectionOnlyCustomerSource();
     await tester.pumpWidget(MaterialApp(
       home: CustomersScreen(
-        userId: userId,
+        userId: 7,
         cashierPermissions: const {'customer_collections'},
-        repository: CustomerRepository(database),
+        repository: repository,
       ),
     ));
     await tester.pump();
-    // عمليات SQLite عبر FFI تحتاج حلقة أحداث حقيقية لإكمال التحميل داخل اختبار الواجهة.
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
     await tester.pump();
 
     expect(find.text('عميل اختبار التحصيل'), findsOneWidget);
