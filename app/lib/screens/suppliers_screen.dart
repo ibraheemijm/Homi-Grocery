@@ -102,6 +102,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 OutlinedButton.icon(onPressed: _addSupplier, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة مورد')),
                               if (_canViewPurchaseHistory)
                                 OutlinedButton.icon(onPressed: _showPurchaseHistory, icon: const Icon(Icons.receipt_long_rounded), label: const Text('سجل المشتريات')),
+                              if (_canReceiveSupplierRefund)
+                                OutlinedButton.icon(onPressed: _showPendingSupplierRefunds, icon: const Icon(Icons.price_check_rounded), label: const Text('استردادات الموردين')),
                               if (_canCreatePurchase)
                                 FilledButton.icon(onPressed: _createPurchase, icon: const Icon(Icons.add_shopping_cart_rounded), label: const Text('فاتورة شراء')),
                             ]),
@@ -960,6 +962,47 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       }
     } catch (error) {
       _message('تعذر تسجيل مرتجع المورد: $error');
+    }
+  }
+
+  // يعرض فقط المرتجعات التي لها مبالغ لم يستلمها المتجر بعد.
+  Future<void> _showPendingSupplierRefunds() async {
+    if (!_canReceiveSupplierRefund) return;
+    try {
+      final pending = await _repository!.pendingSupplierReturnRefunds(userId: widget.userId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('استردادات الموردين المستحقة'),
+          content: SizedBox(
+            width: 560,
+            child: pending.isEmpty
+                ? const Padding(padding: EdgeInsets.all(20), child: Text('لا توجد مبالغ مرتجعات معلّقة للاستلام.', textAlign: TextAlign.center))
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: pending.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = pending[index];
+                      return ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.payments_outlined)),
+                        title: Text(item.supplierName),
+                        subtitle: Text('فاتورة ${item.invoiceNumber} • ${item.createdAt}'),
+                        trailing: Text('${item.refundableAmount} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          _askSupplierRefund(item.returnId, item.refundableAmount);
+                        },
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل الاستردادات المعلقة: $error');
     }
   }
 
