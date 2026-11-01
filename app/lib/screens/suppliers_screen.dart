@@ -7,10 +7,11 @@ import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({required this.userId, this.shiftId, super.key});
+  const SuppliersScreen({required this.userId, this.shiftId, this.cashierPermissions, super.key});
 
   final int userId;
   final int? shiftId;
+  final Set<String>? cashierPermissions;
 
   @override
   State<SuppliersScreen> createState() => _SuppliersScreenState();
@@ -24,6 +25,14 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   bool _loading = true;
   String? _error;
   final _search = TextEditingController();
+
+  bool get _isManager => widget.cashierPermissions == null;
+  bool get _canViewSupplierData => _isManager || widget.cashierPermissions!.contains('view_supplier_data');
+  bool get _canCreatePurchase => _isManager || widget.cashierPermissions!.contains('supplier_purchases');
+  bool get _canPaySupplier => _isManager || widget.cashierPermissions!.contains('supplier_payments');
+  bool get _canReturnSupplierItems => _isManager || widget.cashierPermissions!.contains('supplier_returns');
+  bool get _canReceiveSupplierRefund => _isManager || widget.cashierPermissions!.contains('supplier_return_refunds');
+  bool get _canViewPurchaseHistory => _canViewSupplierData || _canReturnSupplierItems || _canReceiveSupplierRefund;
 
   @override
   void initState() {
@@ -46,7 +55,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Future<void> _load() async {
     if (_repository == null) return;
-    final rows = await _repository!.balances(userId: widget.userId, query: _search.text);
+    final rows = _canViewSupplierData
+        ? await _repository!.balances(userId: widget.userId, query: _search.text)
+        : (await _repository!.supplierLookup(userId: widget.userId, query: _search.text))
+            .map((supplier) => SupplierBalance(id: supplier.id, name: supplier.name, purchaseCount: 0, totalDebt: 0, totalPaid: 0))
+            .toList(growable: false);
     if (mounted) setState(() => _suppliers = rows);
   }
 
@@ -85,14 +98,17 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                           children: [
                             Text('الموردون والمشتريات', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                             Wrap(spacing: 8, children: [
-                              OutlinedButton.icon(onPressed: _addSupplier, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة مورد')),
-                              OutlinedButton.icon(onPressed: _showPurchaseHistory, icon: const Icon(Icons.receipt_long_rounded), label: const Text('سجل المشتريات')),
-                              FilledButton.icon(onPressed: _createPurchase, icon: const Icon(Icons.add_shopping_cart_rounded), label: const Text('فاتورة شراء')),
+                              if (_isManager)
+                                OutlinedButton.icon(onPressed: _addSupplier, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة مورد')),
+                              if (_canViewPurchaseHistory)
+                                OutlinedButton.icon(onPressed: _showPurchaseHistory, icon: const Icon(Icons.receipt_long_rounded), label: const Text('سجل المشتريات')),
+                              if (_canCreatePurchase)
+                                FilledButton.icon(onPressed: _createPurchase, icon: const Icon(Icons.add_shopping_cart_rounded), label: const Text('فاتورة شراء')),
                             ]),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text('متابعة فواتير الشراء، زيادة المخزون، والمبالغ المستحقة للموردين.', style: theme.textTheme.bodyMedium),
+                        Text(_canViewSupplierData ? 'متابعة فواتير الشراء، زيادة المخزون، والمبالغ المستحقة للموردين.' : 'اختر المورد لتنفيذ العملية المصرح بها. الأرصدة المالية محجوبة عن هذا الحساب.', style: theme.textTheme.bodyMedium),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _search,
@@ -122,20 +138,20 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text(supplier.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                                   const SizedBox(height: 4),
-                                  Text('فواتير الشراء: ${supplier.purchaseCount} • قبل الدفعات العامة: ${supplier.totalDebt} ج.س'),
+                                  if (_canViewSupplierData)
+                                    Text('فواتير الشراء: ${supplier.purchaseCount} • قبل الدفعات العامة: ${supplier.totalDebt} ج.س')
+                                  else
+                                    const Text('بيانات المورد الأساسية'),
                                 ])),
-                                const SizedBox(width: 8),
-                                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  Text(
-                                    supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س',
-                                    style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary),
-                                  ),
-                                  Text(
-                                    supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن',
-                                    style: theme.textTheme.labelSmall,
-                                  ),
-                                ]),
-                                IconButton(tooltip: 'تسجيل دفعة', onPressed: supplier.balance > 0 ? () => _recordPayment(supplier) : null, icon: const Icon(Icons.payments_outlined)),
+                                if (_canViewSupplierData) ...[
+                                  const SizedBox(width: 8),
+                                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                    Text(supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س', style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary)),
+                                    Text(supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن', style: theme.textTheme.labelSmall),
+                                  ]),
+                                ],
+                                if (_canPaySupplier)
+                                  IconButton(tooltip: 'تسجيل دفعة', onPressed: _canViewSupplierData && supplier.balance <= 0 ? null : () => _recordPayment(supplier), icon: const Icon(Icons.payments_outlined)),
                               ]),
                             ),
                           )),
@@ -147,6 +163,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _addSupplier() async {
+    if (!_isManager) return;
+
     final name = TextEditingController();
     final phone = TextEditingController();
     final note = TextEditingController();
@@ -358,6 +376,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _createPurchase() async {
+    if (!_canCreatePurchase) return;
+
     if (_suppliers.isEmpty) {
       _message('أضف موردًا أولًا قبل تسجيل فاتورة شراء.');
       return;
@@ -711,6 +731,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _showPurchaseHistory() async {
+    if (!_canViewPurchaseHistory) return;
+
     try {
       final purchases = await _repository!.purchaseHistory(userId: widget.userId);
       if (!mounted) return;
@@ -794,14 +816,15 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _createSupplierReturn(purchase);
-              },
-              icon: const Icon(Icons.assignment_return_outlined),
-              label: const Text('إرجاع أصناف'),
-            ),
+            if (_canReturnSupplierItems)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  _createSupplierReturn(purchase);
+                },
+                icon: const Icon(Icons.assignment_return_outlined),
+                label: const Text('إرجاع أصناف'),
+              ),
           ],
         ),
       );
@@ -811,6 +834,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async {
+    if (!_canReturnSupplierItems) return;
+
     try {
       final rows = await _repository!.returnablePurchaseItems(purchase.id, userId: widget.userId);
       if (!mounted) return;
@@ -893,7 +918,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       _products = await _productsRepository!.search('');
       _message('تم تسجيل المرتجع. إذا لم يُعد المورد المبلغ نقدًا، سيبقى رصيدًا دائنًا لنا.');
       final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId, userId: widget.userId);
-      if (availableRefund > 0 && mounted) {
+      if (_canReceiveSupplierRefund && availableRefund > 0 && mounted) {
         await _askSupplierRefund(returnId, availableRefund);
       }
     } catch (error) {
@@ -902,6 +927,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _askSupplierRefund(int returnId, int available) async {
+    if (!_canReceiveSupplierRefund) return;
+
     final amount = TextEditingController(text: '0');
     String method = 'نقدي';
     final result = await showDialog<Map<String, Object?>>(
@@ -971,6 +998,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _recordPayment(SupplierBalance supplier) async {
+    if (!_canPaySupplier) return;
+
     final amount = TextEditingController();
     final note = TextEditingController();
     String paymentMethod = 'نقدي';
