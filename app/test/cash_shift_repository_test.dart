@@ -41,7 +41,7 @@ void main() {
     expect(opened.openingCash, 25000);
     expect(opened.isOpen, isTrue);
 
-    final recovered = await shifts.getOpenShift();
+    final recovered = await shifts.getOpenShift(userId: manager.id);
     expect(recovered?.id, opened.id);
     expect(recovered?.openingCash, 25000);
 
@@ -49,7 +49,46 @@ void main() {
       shifts.openShift(userId: manager.id, openingCash: 90000),
       throwsA(isA<CashShiftException>()),
     );
-    expect((await shifts.getOpenShift())?.openingCash, 25000);
+    expect((await shifts.getOpenShift(userId: manager.id))?.openingCash, 25000);
+  });
+
+  test('يعزل استعادة الوردية ويكشف وجود وردية أخرى دون كشف تفاصيلها', () async {
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+    final shift = await shifts.openShift(userId: manager.id, openingCash: 25000);
+
+    final managerShift = await shifts.getOpenShift(userId: manager.id);
+    expect(managerShift?.id, shift.id);
+    expect(managerShift?.openingCash, 25000);
+
+    expect(await shifts.getOpenShift(userId: cashier.id), isNull);
+    expect(
+      await shifts.hasOpenShiftForAnotherUser(userId: cashier.id),
+      isTrue,
+    );
+    expect(
+      await shifts.hasOpenShiftForAnotherUser(userId: manager.id),
+      isFalse,
+    );
+
+    await shifts.closeShift(
+      shiftId: shift.id,
+      userId: manager.id,
+      closingCash: 25000,
+    );
+    expect(
+      await shifts.hasOpenShiftForAnotherUser(userId: cashier.id),
+      isFalse,
+    );
   });
 
   test('يمنع فتح ورديتين متزامنتين حتى عند اختلاف المستخدم', () async {
@@ -188,7 +227,7 @@ void main() {
     expect(closed.closingCash, 16000);
     expect(closed.difference, 1000);
     expect(closed.isOpen, isFalse);
-    expect(await shifts.getOpenShift(), isNull);
+    expect(await shifts.getOpenShift(userId: manager.id), isNull);
 
     await expectLater(
       shifts.closeShift(shiftId: shift.id, userId: manager.id, closingCash: 15000),
