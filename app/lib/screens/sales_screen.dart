@@ -25,8 +25,7 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   bool get _canCreditSales => !widget.cashierMode || widget.cashierPermissions.contains('credit_sales');
   bool get _canDiscount => !widget.cashierMode || widget.cashierPermissions.contains('discounts');
-  bool get _canViewCustomerData => !widget.cashierMode || widget.cashierPermissions.contains('view_customer_data');
-  bool get _canViewInvoices => !widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history');
+  bool get _canViewInvoices => !widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history') || widget.cashierPermissions.contains('returns') || widget.cashierPermissions.contains('return_refunds');
   bool get _canReturn => !widget.cashierMode || widget.cashierPermissions.contains('returns');
   bool get _canRefund => !widget.cashierMode || widget.cashierPermissions.contains('return_refunds');
   final _search = TextEditingController();
