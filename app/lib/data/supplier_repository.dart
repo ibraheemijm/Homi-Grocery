@@ -17,6 +17,15 @@ class SupplierPurchaseLookup {
   final String createdAt;
 }
 
+class PendingSupplierRefund {
+  const PendingSupplierRefund({required this.returnId, required this.invoiceNumber, required this.supplierName, required this.createdAt, required this.refundableAmount});
+  final int returnId;
+  final String invoiceNumber;
+  final String supplierName;
+  final String createdAt;
+  final int refundableAmount;
+}
+
 class SupplierBalance {
   const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid});
   final int id;
@@ -564,6 +573,36 @@ class SupplierRepository {
       WHERE pi.purchase_id = ?
       ORDER BY pi.id ASC
     ''', [purchaseId]);
+  }
+
+  /// يعرض المرتجعات التي بقي منها مبلغ قابل للاسترداد، دون كشف أرصدة المورد كاملة.
+  Future<List<PendingSupplierRefund>> pendingSupplierReturnRefunds({required int userId, int limit = 100}) async {
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_return_refunds'});
+    if (limit < 1 || limit > 1000) throw ArgumentError('حد نتائج الاستردادات غير صالح.');
+    final rows = await _database.rawQuery('''
+      SELECT sr.id AS return_id, p.invoice_number, s.name AS supplier_name,
+        sr.created_at,
+        MAX(0, sr.amount - COALESCE((
+          SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+          WHERE srr.supplier_return_id = sr.id
+        ), 0)) AS refundable_amount
+      FROM supplier_returns sr
+      JOIN purchases p ON p.id = sr.purchase_id
+      JOIN suppliers s ON s.id = p.supplier_id
+      WHERE sr.amount > COALESCE((
+        SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+        WHERE srr.supplier_return_id = sr.id
+      ), 0)
+      ORDER BY sr.created_at DESC, sr.id DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows.map((row) => PendingSupplierRefund(
+      returnId: row['return_id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      createdAt: row['created_at'] as String,
+      refundableAmount: (row['refundable_amount'] as num).toInt(),
+    )).toList(growable: false);
   }
 
   /// أقصى مبلغ لم يُسترد نقديًا بعد من مرتجع مورد.
