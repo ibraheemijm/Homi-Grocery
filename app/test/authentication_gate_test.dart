@@ -18,8 +18,7 @@ Future<void> _pumpGate(WidgetTester tester) async {
 
 // يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
 class _GateTestAuthRepository extends AuthRepository {
-  _GateTestAuthRepository(Database database, {required this.users})
-      : super(database);
+  _GateTestAuthRepository(super._database, {required this.users});
 
   final Map<String, AuthUser> users;
 
