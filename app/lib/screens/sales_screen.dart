@@ -176,7 +176,7 @@ class _SalesScreenState extends State<SalesScreen> {
       if (!widget.cashierMode || widget.cashierPermissions.contains('view_customer_data')) {
         _customersRepository = CustomerRepository(database);
       }
-      if (!widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history')) {
+      if (_canViewInvoices) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
       }
       _matches = await _productsRepository!.search('');
