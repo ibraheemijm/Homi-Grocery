@@ -7,6 +7,15 @@ import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 
+// ينتظر اكتمال العمليات غير المتزامنة دون انتظار توقف مؤشر التحميل الدوار.
+Future<void> _pumpGate(WidgetTester tester) async {
+  await tester.pump();
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+  });
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
 void main() {
   late Database database;
   late AuthRepository auth;
@@ -65,20 +74,20 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     // تسجيل دخول الكاشير وفتح ورديته.
     await tester.enterText(find.byType(TextField).first, cashier.username);
     await tester.enterText(find.byType(TextField).last, 'CashierPass!2026');
     await tester.tap(find.text('دخول'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     expect(find.text('الحساب الحالي: cashier_one'), findsOneWidget);
     expect(find.text('الاسم الظاهر: الكاشير الأول'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('فتح الوردية'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     expect(find.text('الحساب الحالي: cashier_one'), findsOneWidget);
     final cashierShiftText = tester.widget<Text>(find.textContaining('رقم الوردية:'));
@@ -86,10 +95,10 @@ void main() {
 
     // إغلاق وردية الكاشير؛ يجب أن تعود البوابة إلى نموذج دخول جديد.
     await tester.tap(find.text('تسجيل الخروج'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('إغلاق الوردية والخروج'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     expect(find.text('تسجيل الدخول'), findsOneWidget);
     expect(find.text('الحساب الحالي: cashier_one'), findsNothing);
@@ -98,11 +107,11 @@ void main() {
     await tester.enterText(find.byType(TextField).first, manager.username);
     await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
     await tester.tap(find.text('دخول'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('فتح الوردية'));
-    await tester.pumpAndSettle();
+    await _pumpGate(tester);
 
     expect(find.text('الحساب الحالي: store_admin'), findsOneWidget);
     expect(find.text('الاسم الظاهر: مدير المتجر'), findsOneWidget);
