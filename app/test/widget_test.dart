@@ -196,7 +196,8 @@ void main() {
 
     expect(find.text('Homi Grocery'), findsOneWidget);
     expect(find.byTooltip('الأقسام المسموح بها'), findsOneWidget);
-    expect(find.text('المبيعات'), findsOneWidget);
+    // اسم القسم يظهر ضمن العنوان الفرعي مع اسم الكاشير.
+    expect(find.textContaining('المبيعات • الكاشير الأول'), findsOneWidget);
     expect(find.text('محتوى البيع التجريبي'), findsOneWidget);
     await tester.tap(find.byTooltip('الأقسام المسموح بها'));
     await tester.pump(const Duration(milliseconds: 350));
