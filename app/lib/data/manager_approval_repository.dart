@@ -190,6 +190,7 @@ class ManagerApprovalRepository {
   Future<ManagerApprovalConsumeResult> consumeWithinTransaction(
     Transaction txn, {
     required String token,
+    required int executingUserId,
     required ManagerApprovalScope scope,
   }) async {
     _validateScope(scope);
@@ -259,7 +260,7 @@ class ManagerApprovalRepository {
       return ManagerApprovalConsumeResult.expired;
     }
 
-    if (!scope.matches(approval)) {
+    if (executingUserId != cashierId || !scope.matches(approval)) {
       await _rejectApproval(
         txn,
         approvalId: approvalId,
