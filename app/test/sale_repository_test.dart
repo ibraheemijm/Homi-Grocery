@@ -42,6 +42,18 @@ void main() {
     sales = SaleRepository(database);
   });
 
+  Future<int> ensureManagerShift() async {
+    final shifts = CashShiftRepository(database);
+    final current = await shifts.getOpenShift();
+    if (current != null) {
+      if (current.userId != managerId) {
+        throw StateError('وردية الاختبار المفتوحة لا تخص المدير.');
+      }
+      return current.id;
+    }
+    return (await shifts.openShift(userId: managerId, openingCash: 0)).id;
+  }
+
   tearDown(() async {
     await database.close();
   });
@@ -62,7 +74,7 @@ void main() {
       lines: [SaleLine(product: product, quantity: 1)],
       discount: 0, paidAmount: 100, paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     expect(await sales.invoiceHistory(userId: managerId), hasLength(1));
     await expectLater(
       sales.invoiceHistory(userId: cashier.id),
@@ -136,7 +148,7 @@ void main() {
       paidAmount: 1500,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     expect(sale.total, 1500);
     expect((await products.getById(productId))!.stockQuantity, 1.25);
@@ -164,7 +176,7 @@ void main() {
       paymentMethod: 'نقدي',
       customerName: 'محمد أحمد',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     expect(sale.customerName, isNull);
     final savedSale = (await database.query(
@@ -226,7 +238,7 @@ void main() {
       paidAmount: 200,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final item = (await database.query(
       'sale_items', where: 'sale_id = ?', whereArgs: [sale.id],
     )).single;
@@ -272,7 +284,7 @@ void main() {
       paidAmount: 750,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final item = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -310,7 +322,7 @@ void main() {
       paidAmount: 200,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -349,7 +361,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'زبون مرتجع',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
@@ -363,15 +375,15 @@ void main() {
     expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 100);
 
     await expectLater(
-      sales.recordReturnRefund(saleId: sale.id, amount: 101 , userId: managerId),
+      sales.recordReturnRefund(saleId: sale.id, amount: 101 , userId: managerId, shiftId: await ensureManagerShift()),
       throwsArgumentError,
     );
     await sales.recordReturnRefund(
       saleId: sale.id, amount: 80, paymentMethod: 'نقدي', note: 'رد فعلي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 20);
-    await sales.recordReturnRefund(saleId: sale.id, amount: 20 , userId: managerId);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 20 , userId: managerId, shiftId: await ensureManagerShift());
     expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 0);
     expect(await database.query('sale_return_refunds'), hasLength(2));
     final cashEntries = await database.query(
@@ -394,7 +406,7 @@ void main() {
       paidAmount: 150,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
@@ -405,10 +417,10 @@ void main() {
       userId: managerId);
 
     expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 75);
-    await sales.recordReturnRefund(saleId: sale.id, amount: 75 , userId: managerId);
+    await sales.recordReturnRefund(saleId: sale.id, amount: 75 , userId: managerId, shiftId: await ensureManagerShift());
     expect(await sales.maximumRefundableAmount(sale.id , userId: managerId), 0);
     await expectLater(
-      sales.recordReturnRefund(saleId: sale.id, amount: 1 , userId: managerId),
+      sales.recordReturnRefund(saleId: sale.id, amount: 1 , userId: managerId, shiftId: await ensureManagerShift()),
       throwsArgumentError,
     );
   });
@@ -424,7 +436,7 @@ void main() {
       paidAmount: 160,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
@@ -467,7 +479,7 @@ void main() {
       paidAmount: 600,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     expect((await products.getById(productId))!.stockQuantity, -1);
   });
@@ -904,7 +916,7 @@ void main() {
       paidAmount: 40,
       paymentMethod: 'نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
