@@ -29,7 +29,21 @@ class CustomerLedgerEntry {
   final String? note;
 }
 
-class CustomerRepository {
+abstract interface class CustomerDataSource {
+  Future<List<CustomerBalance>> balances({required int userId, String query = ''});
+  Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
+  Future<int> addCustomer({required String name, String? phone, String? notes});
+  Future<void> recordPayment({
+    required int customerId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    required int userId,
+    int? shiftId,
+  });
+}
+
+class CustomerRepository implements CustomerDataSource {
   CustomerRepository(this._database);
   final Database _database;
 
