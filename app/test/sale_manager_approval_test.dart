@@ -211,4 +211,71 @@ void main() {
       isTrue,
     );
   });
+
+  test('يرفض كلمة مرور المدير الخاطئة دون إصدار موافقة أو تغيير حساب الكاشير', () async {
+    await expectLater(
+      sales.requestCashierDiscountApproval(
+        managerUsername: manager.username,
+        managerPassword: 'WrongPassword!2026',
+        cashierUserId: cashier.id,
+        shiftId: shiftId,
+        discountAmount: 100,
+      ),
+      throwsA(isA<ManagerApprovalException>()),
+    );
+
+    final managerRows = await database.query(
+      'users',
+      columns: ['id', 'is_active', 'role'],
+      where: 'id = ?',
+      whereArgs: [manager.id],
+    );
+    final cashierRows = await database.query(
+      'users',
+      columns: ['id', 'is_active', 'role'],
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    );
+    expect(managerRows.single['is_active'], 1);
+    expect(managerRows.single['role'], 'manager');
+    expect(cashierRows.single['is_active'], 1);
+    expect(cashierRows.single['role'], 'cashier');
+    expect(await database.query('manager_approvals'), isEmpty);
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+  });
+
+  test('يرفض المدير الموقوف قبل إصدار الموافقة ولا يبدل هوية الكاشير', () async {
+    await database.update(
+      'users',
+      {'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [manager.id],
+    );
+
+    await expectLater(
+      sales.requestCashierDiscountApproval(
+        managerUsername: manager.username,
+        managerPassword: managerPassword,
+        cashierUserId: cashier.id,
+        shiftId: shiftId,
+        discountAmount: 100,
+      ),
+      throwsA(isA<ManagerApprovalException>()),
+    );
+
+    final cashierRows = await database.query(
+      'users',
+      columns: ['id', 'username', 'role', 'is_active'],
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    );
+    expect(cashierRows.single['username'], cashier.username);
+    expect(cashierRows.single['role'], 'cashier');
+    expect(cashierRows.single['is_active'], 1);
+    expect(await database.query('manager_approvals'), isEmpty);
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+  });
+
 }
