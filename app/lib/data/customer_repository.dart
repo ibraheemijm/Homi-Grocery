@@ -33,7 +33,6 @@ abstract interface class CustomerDataSource {
   Future<List<CustomerBalance>> balances({required int userId, String query = ''});
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
   Future<int> addCustomer({required String name, String? phone, String? notes});
-  @override
   Future<void> recordPayment({
     required int customerId,
     required int amount,
@@ -169,6 +168,7 @@ class CustomerRepository implements CustomerDataSource {
   }
 
   // تسجيل تحصيل مع التحقق من الرصيد داخل معاملة لمنع تجاوز المبلغ المستحق.
+  @override
   Future<void> recordPayment({
     required int customerId,
     required int amount,
