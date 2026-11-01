@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 import '../data/auth_repository.dart';
 import '../data/grocery_database.dart';
 import 'sales_screen.dart';
+import 'invoices_screen.dart';
+import 'customers_screen.dart';
+import 'suppliers_screen.dart';
+import 'cashbox_screen.dart';
+import 'reports_screen.dart';
+import 'stock_movements_screen.dart';
 
 class CashierManagementScreen extends StatefulWidget {
   const CashierManagementScreen({
@@ -641,8 +647,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
 }
 
 
-// مساحة عمل الكاشير: نقطة بيع نقدية فقط دون مؤشرات أو أدوات الإدارة.
-class CashierWorkspaceScreen extends StatelessWidget {
+// مساحة عمل الكاشير: تعرض الأقسام التي منحها المدير لهذا الحساب فقط.
+class CashierWorkspaceScreen extends StatefulWidget {
   const CashierWorkspaceScreen({
     required this.cashier,
     required this.shiftId,
@@ -655,34 +661,195 @@ class CashierWorkspaceScreen extends StatelessWidget {
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  State<CashierWorkspaceScreen> createState() => _CashierWorkspaceScreenState();
+}
+
+class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
+  Set<String> _permissions = const {};
+  bool _loading = true;
+  String? _error;
+  int _selectedIndex = 0;
+
+  Future<void> _loadPermissions() async {
+    try {
+      final database = await GroceryDatabase.open();
+      final permissions = await AuthRepository(database)
+          .getActiveCashierPermissionKeys(cashierId: widget.cashier.id);
+      if (!mounted) return;
+      setState(() {
+        _permissions = permissions;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPermissions();
+  }
+
+  List<_CashierWorkspaceItem> get _items => [
+        const _CashierWorkspaceItem('المبيعات', Icons.point_of_sale_rounded, 'sales'),
+        if (_permissions.contains('view_invoice_history'))
+          const _CashierWorkspaceItem('الفواتير', Icons.receipt_long_rounded, 'invoices'),
+        if (_permissions.contains('view_customer_data'))
+          const _CashierWorkspaceItem('الزبائن والديون', Icons.people_alt_rounded, 'customers'),
+        if (_permissions.contains('view_supplier_data'))
+          const _CashierWorkspaceItem('الموردون والمشتريات', Icons.local_shipping_rounded, 'suppliers'),
+        if (_permissions.contains('view_cashbox'))
+          const _CashierWorkspaceItem('الخزينة', Icons.account_balance_wallet_rounded, 'cashbox'),
+        if (_permissions.contains('view_reports'))
+          const _CashierWorkspaceItem('التقارير', Icons.analytics_rounded, 'reports'),
+        if (_permissions.contains('stock_adjustments'))
+          const _CashierWorkspaceItem('حركات المخزون', Icons.history_rounded, 'stock'),
+      ];
+
+  Widget _selectedScreen() {
+    final item = _items[_selectedIndex];
+    switch (item.key) {
+      case 'sales':
+        return SalesScreen(
+          userId: widget.cashier.id,
+          shiftId: widget.shiftId,
+          cashierMode: true,
+          cashierPermissions: _permissions,
+        );
+      case 'invoices':
+        return InvoicesScreen(userId: widget.cashier.id);
+      case 'customers':
+        return CustomersScreen(userId: widget.cashier.id, shiftId: widget.shiftId);
+      case 'suppliers':
+        return SuppliersScreen(userId: widget.cashier.id, shiftId: widget.shiftId);
+      case 'cashbox':
+        return CashboxScreen(userId: widget.cashier.id, shiftId: widget.shiftId);
+      case 'reports':
+        return ReportsScreen(userId: widget.cashier.id);
+      case 'stock':
+        return StockMovementsScreen(userId: widget.cashier.id);
+      default:
+        return const Center(child: Text('القسم غير متاح لهذا الحساب.'));
+    }
+  }
+
+  Widget _navigationList({required bool closeDrawer}) => ListView(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 18),
+            child: Text('أقسام الكاشير', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          for (var index = 0; index < _items.length; index++)
+            ListTile(
+              selected: index == _selectedIndex,
+              leading: Icon(_items[index].icon),
+              title: Text(_items[index].label),
+              onTap: () {
+                setState(() => _selectedIndex = index);
+                if (closeDrawer && Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              },
+            ),
+        ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('مساحة الكاشير')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Homi Grocery'),
-                Text(
-                  'نقطة البيع • ${cashier.displayName}',
-                  style: Theme.of(context).textTheme.labelMedium,
+                Text(_error!, textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _loadPermissions();
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('إعادة تحميل الصلاحيات'),
                 ),
               ],
             ),
-            actions: [
-              IconButton(
-                tooltip: 'تسجيل الخروج وتسليم الوردية',
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout_rounded),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-          body: SalesScreen(
-            userId: cashier.id,
-            shiftId: shiftId,
-            cashierMode: true,
           ),
         ),
       );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= 900;
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Homi Grocery'),
+                  Text(
+                    '${_items[_selectedIndex].label} • ${widget.cashier.displayName}',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
+              actions: [
+                if (!desktop)
+                  Builder(
+                    builder: (context) => IconButton(
+                      tooltip: 'الأقسام المسموح بها',
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                      icon: const Icon(Icons.menu_rounded),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: 'تسجيل الخروج وتسليم الوردية',
+                  onPressed: widget.onLogout,
+                  icon: const Icon(Icons.logout_rounded),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+            drawer: desktop ? null : Drawer(child: _navigationList(closeDrawer: true)),
+            body: Row(
+              children: [
+                if (desktop)
+                  SizedBox(
+                    width: 250,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: _navigationList(closeDrawer: false),
+                    ),
+                  ),
+                Expanded(child: _selectedScreen()),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CashierWorkspaceItem {
+  const _CashierWorkspaceItem(this.label, this.icon, this.key);
+  final String label;
+  final IconData icon;
+  final String key;
 }
