@@ -868,7 +868,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     }
   }
 
-  Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async => _createSupplierReturnForPurchase(purchaseId: purchaseId, invoiceNumber: invoiceNumber);
+  Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async => _createSupplierReturnForPurchase(purchaseId: purchase.id, invoiceNumber: purchase.invoiceNumber);
 
   Future<void> _createSupplierReturnForPurchase({required int purchaseId, required String invoiceNumber}) async {
     if (!_canReturnSupplierItems) return;
@@ -883,7 +883,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       final quantities = await showDialog<Map<int, double>>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('مرتجع ${invoiceNumber}'),
+          title: Text('مرتجع $invoiceNumber'),
           content: SizedBox(
             width: 540,
             child: SingleChildScrollView(
