@@ -221,7 +221,7 @@ void main() {
         shiftId: shiftId,
         discountAmount: 100,
       ),
-      throwsA(isA<ManagerApprovalException>()),
+      throwsA(isA<AuthException>()),
     );
 
     final managerRows = await database.query(
