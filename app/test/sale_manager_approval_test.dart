@@ -278,4 +278,48 @@ void main() {
     expect(await database.query('cash_transactions'), isEmpty);
   });
 
+
+  test('يبطل موافقة البيع إذا أُوقف حساب المدير بعد إصدارها', () async {
+    final product = await addProduct();
+    final token = await sales.requestCashierDiscountApproval(
+      managerUsername: manager.username,
+      managerPassword: managerPassword,
+      cashierUserId: cashier.id,
+      shiftId: shiftId,
+      discountAmount: 100,
+    );
+
+    await database.update(
+      'users',
+      {'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [manager.id],
+    );
+
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 100,
+        paidAmount: 900,
+        paymentMethod: 'نقدي',
+        userId: cashier.id,
+        shiftId: shiftId,
+        managerApprovalToken: token,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+    expect((await products.getById(product.id!))!.stockQuantity, 5);
+    expect((await database.query('manager_approvals')).single['status'], 'rejected');
+    final auditEvents = (await database.query('auth_audit_log'))
+        .map((row) => row['action'] as String);
+    expect(
+      auditEvents.any((action) => action.contains('manager_approval_rejected:') &&
+          action.contains('inactive_account')),
+      isTrue,
+    );
+  });
+
 }
