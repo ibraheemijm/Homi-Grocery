@@ -47,6 +47,18 @@ void main() {
     sales = SaleRepository(database);
   });
 
+  Future<int> ensureManagerShift() async {
+    final shifts = CashShiftRepository(database);
+    final current = await shifts.getOpenShift();
+    if (current != null) {
+      if (current.userId != managerId) {
+        throw StateError('وردية الاختبار المفتوحة لا تخص المدير.');
+      }
+      return current.id;
+    }
+    return (await shifts.openShift(userId: managerId, openingCash: 0)).id;
+  }
+
   tearDown(() async => database.close());
 
 
@@ -79,7 +91,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'أحمد',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     final before = (await customers.balances(userId: managerId)).single;
     expect(before.name, 'أحمد');
@@ -189,10 +201,10 @@ void main() {
       userId: managerId);
 
     expect((await customers.balances(userId: managerId)).single.balance, 1000);
-    await customers.recordPayment(customerId: customer.id, amount: 1000 , userId: managerId);
+    await customers.recordPayment(customerId: customer.id, amount: 1000 , userId: managerId, shiftId: await ensureManagerShift());
     expect((await customers.balances(userId: managerId)).single.balance, 0);
     await expectLater(
-      customers.recordPayment(customerId: customer.id, amount: 1 , userId: managerId),
+      customers.recordPayment(customerId: customer.id, amount: 1 , userId: managerId, shiftId: await ensureManagerShift()),
       throwsArgumentError,
     );
   });
@@ -209,7 +221,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'عميل الرد النقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final customer = (await customers.balances(userId: managerId)).single;
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
@@ -223,7 +235,7 @@ void main() {
     await sales.recordReturnRefund(
       saleId: sale.id, amount: 90, note: 'تم تسليم النقد',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     final ledger = await customers.ledger(customer.id, userId: managerId);
     final refund = ledger.singleWhere((entry) => entry.title == 'رد نقدي للزبون');
@@ -265,7 +277,7 @@ void main() {
       amount: 100,
       note: 'تحصيل نقدي',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
 
     final ledger = await customers.ledger(customer.id, userId: managerId);
     expect(ledger.length, 3);
@@ -297,7 +309,7 @@ void main() {
       paymentMethod: 'نقدي',
       customerName: customerName,
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     await sales.createSale(
       lines: [SaleLine(product: debtProduct, quantity: 1)],
       discount: 0,
@@ -324,7 +336,7 @@ void main() {
     final afterReturn = (await customers.balances(userId: managerId)).single;
     expect(afterReturn.totalDebt, 500);
     expect(afterReturn.balance, 500);
-    await customers.recordPayment(customerId: customer.id, amount: 500 , userId: managerId);
+    await customers.recordPayment(customerId: customer.id, amount: 500 , userId: managerId, shiftId: await ensureManagerShift());
     expect((await customers.balances(userId: managerId)).single.balance, 0);
   });
 
@@ -344,7 +356,7 @@ void main() {
     final customer = (await customers.balances(userId: managerId)).single;
 
     await expectLater(
-      customers.recordPayment(customerId: customer.id, amount: 201 , userId: managerId),
+      customers.recordPayment(customerId: customer.id, amount: 201 , userId: managerId, shiftId: await ensureManagerShift()),
       throwsArgumentError,
     );
     expect((await customers.balances(userId: managerId)).single.balance, 200);
@@ -378,7 +390,7 @@ void main() {
       paymentMethod: 'جزئي',
       customerName: 'عميل التحصيل',
     
-      userId: managerId);
+      userId: managerId, shiftId: await ensureManagerShift());
     final customer = (await customers.balances(userId: managerId)).single;
 
     await expectLater(
