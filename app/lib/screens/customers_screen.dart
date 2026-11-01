@@ -25,7 +25,7 @@ class CustomersScreen extends StatefulWidget {
 }
 
 class _CustomersScreenState extends State<CustomersScreen> {
-  CustomerRepository? _repository;
+  CustomerDataSource? _repository;
   List<CustomerBalance> _customers = [];
   final _search = TextEditingController();
   bool _loading = true;
