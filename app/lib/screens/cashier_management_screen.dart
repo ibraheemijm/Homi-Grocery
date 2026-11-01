@@ -736,9 +736,9 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
               cashierPermissions: _permissions,
             );
       case 'invoices':
-        return InvoicesScreen(userId: widget.cashier.id);
+        return InvoicesScreen(userId: widget.cashier.id, cashierPermissions: _permissions);
       case 'customers':
-        return CustomersScreen(userId: widget.cashier.id, shiftId: widget.shiftId);
+        return CustomersScreen(userId: widget.cashier.id, shiftId: widget.shiftId, cashierPermissions: _permissions);
       case 'suppliers':
         return SuppliersScreen(userId: widget.cashier.id, shiftId: widget.shiftId);
       case 'cashbox':
