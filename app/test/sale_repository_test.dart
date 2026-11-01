@@ -708,13 +708,6 @@ void main() {
       whereArgs: [sale.id],
     )).single['id'] as int;
 
-    // أغلق وردية المدير بعد تسجيل فاتورته وقبل نقل الدرج إلى الكاشير.
-    await CashShiftRepository(database).closeShift(
-      shiftId: managerShiftId,
-      userId: managerId,
-      closingCash: 40,
-    );
-
     await expectLater(
       sales.returnItems(
         saleId: sale.id,
@@ -1158,6 +1151,13 @@ void main() {
       where: 'sale_id = ?',
       whereArgs: [sale.id],
     )).single['id'] as int;
+
+    // أغلق وردية المدير بعد إتمام فاتورته وقبل فتح وردية الكاشير.
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId,
+      userId: managerId,
+      closingCash: 40,
+    );
 
     await expectLater(
       sales.returnItems(
