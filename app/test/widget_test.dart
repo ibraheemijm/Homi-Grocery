@@ -1,9 +1,17 @@
 // اختبارات الواجهة تتحقق من ظهور العناصر الأساسية بعد تشغيل التطبيق.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
+
+const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+late Directory _testSupportDirectory;
 
 class _TestDashboardApp extends StatefulWidget {
   const _TestDashboardApp();
@@ -42,6 +50,29 @@ class _TestDashboardAppState extends State<_TestDashboardApp> {
 Widget _dashboardApp() => const _TestDashboardApp();
 
 void main() {
+  setUpAll(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    _testSupportDirectory =
+        await Directory.systemTemp.createTemp('homi-widget-tests-');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, (call) async {
+      if (call.method == 'getApplicationSupportPath') {
+        return _testSupportDirectory.path;
+      }
+      return null;
+    });
+  });
+
+  tearDownAll(() async {
+    await GroceryDatabase.closeForMaintenance();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, null);
+    if (await _testSupportDirectory.exists()) {
+      await _testSupportDirectory.delete(recursive: true);
+    }
+  });
+
   testWidgets('تظهر اللوحة الرئيسية باللغة العربية على شاشة الهاتف',
       (tester) async {
     await tester.pumpWidget(_dashboardApp());
@@ -138,23 +169,39 @@ void main() {
     expect(find.text('اختيار نسخة واستعادتها'), findsOneWidget);
   });
 
-  testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير', (tester) async {
+  testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير',
+      (tester) async {
+    // لا يعتمد الاختبار على قاعدة بيانات جهاز المطور أو وجود حسابات سابقة.
+    await GroceryDatabase.closeForMaintenance();
+    await _testSupportDirectory
+        .delete(recursive: true);
+    await _testSupportDirectory.create(recursive: true);
+
+    final database = await GroceryDatabase.open();
+    final repository = AuthRepository(database);
+    final manager = await repository.createInitialManager(
+      username: 'test_manager',
+      displayName: 'مدير الاختبار',
+      password: 'ManagerPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_one',
+      displayName: 'الكاشير الأول',
+      password: 'CashierPass!2026',
+    );
+
     await tester.pumpWidget(
       MaterialApp(
         home: CashierWorkspaceScreen(
-          cashier: const AuthUser(
-            id: 2,
-            username: 'cashier_one',
-            displayName: 'الكاشير الأول',
-            role: 'cashier',
-          ),
+          cashier: cashier,
           shiftId: 8,
           onLogout: () {},
         ),
       ),
     );
-    // تحميل الصلاحيات يفتح قاعدة البيانات بصورة غير متزامنة.
-    await tester.pump(const Duration(milliseconds: 500));
+    // ينتظر الاختبار تحميل الصلاحيات من قاعدة بيانات الاختبار المهيأة أعلاه.
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pump();
 
     expect(find.text('Homi Grocery'), findsOneWidget);
@@ -169,5 +216,4 @@ void main() {
     expect(find.text('إدارة الكاشيرين'), findsNothing);
     expect(find.text('التقارير'), findsNothing);
   });
-
 }
