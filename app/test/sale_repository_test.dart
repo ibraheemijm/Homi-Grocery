@@ -814,6 +814,11 @@ void main() {
       userId: managerId,
       closingCash: 40,
     );
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId,
+      userId: managerId,
+      closingCash: 140,
+    );
     final shift = await CashShiftRepository(database).openShift(
       userId: cashier.id,
       openingCash: 100,
@@ -937,13 +942,15 @@ void main() {
       stockQuantity: 5,
     ));
     final product = (await products.getById(productId))!;
+    final managerShiftId = await ensureManagerShift();
     final sale = await sales.createSale(
       lines: [SaleLine(product: product, quantity: 1)],
       discount: 0,
       paidAmount: 40,
       paymentMethod: 'نقدي',
-    
-      userId: managerId, shiftId: await ensureManagerShift());
+      userId: managerId,
+      shiftId: managerShiftId,
+    );
     final itemId = (await database.query(
       'sale_items',
       columns: ['id'],
