@@ -5,10 +5,13 @@ import '../data/grocery_database.dart';
 
 /// شاشة الخزينة والتقرير اليومي للمبالغ المسجلة فعليًا.
 class CashboxScreen extends StatefulWidget {
-  const CashboxScreen({required this.userId, this.shiftId, super.key});
+  const CashboxScreen({required this.userId, this.shiftId, this.canViewCashbox = true, this.canRecordExpenses = false, this.canRecordManualMovements = true, super.key});
 
   final int userId;
   final int? shiftId;
+  final bool canViewCashbox;
+  final bool canRecordExpenses;
+  final bool canRecordManualMovements;
 
   @override
   State<CashboxScreen> createState() => _CashboxScreenState();
@@ -21,7 +24,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    if (widget.canViewCashbox) _reload();
   }
 
   void _reload() {
@@ -38,7 +41,9 @@ class _CashboxScreenState extends State<CashboxScreen> {
   }
 
   Future<void> _addMovement() async {
-    final direction = await showModalBottomSheet<String>(
+    if (!widget.canRecordManualMovements && !widget.canRecordExpenses) return;
+    final direction = widget.canRecordManualMovements
+        ? await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -49,13 +54,15 @@ class _CashboxScreenState extends State<CashboxScreen> {
             children: [
               const Text('نوع الحركة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              ListTile(
+              if (widget.canRecordManualMovements)
+                ListTile(
                 leading: const Icon(Icons.add_circle_outline, color: Colors.green),
                 title: const Text('مقبوض يدوي'),
                 subtitle: const Text('مثل دخل متنوع أو رصيد افتتاحي'),
                 onTap: () => Navigator.pop(context, 'in'),
               ),
-              ListTile(
+              if (widget.canRecordManualMovements || widget.canRecordExpenses)
+                ListTile(
                 leading: const Icon(Icons.remove_circle_outline, color: Colors.red),
                 title: const Text('مصروف'),
                 subtitle: const Text('مثل إيجار أو كهرباء أو نقل'),
@@ -65,7 +72,8 @@ class _CashboxScreenState extends State<CashboxScreen> {
           ),
         ),
       ),
-    );
+    )
+        : 'out';
     if (direction == null || !mounted) return;
     final categoryController = TextEditingController();
     final amountController = TextEditingController();
@@ -146,7 +154,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
           shiftId: widget.shiftId,
         );
         if (mounted) {
-          setState(_reload);
+          if (widget.canViewCashbox) setState(_reload);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الحركة')));
         }
       } catch (error) {
@@ -163,6 +171,18 @@ class _CashboxScreenState extends State<CashboxScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (!widget.canViewCashbox) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('تسجيل مصروف')),
+        body: Center(child: Padding(padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.receipt_long_outlined, size: 48),
+          const SizedBox(height: 12),
+          Text('يمكنك تسجيل المصروفات المصرح بها فقط. لا تعرض هذه الشاشة أرصدة الخزينة أو حركاتها.', textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
+          const SizedBox(height: 16),
+          FilledButton.icon(onPressed: widget.canRecordExpenses ? _addMovement : null, icon: const Icon(Icons.add_rounded), label: const Text('تسجيل مصروف')),
+        ])))),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('الخزينة والتقرير اليومي'),
@@ -174,11 +194,9 @@ class _CashboxScreenState extends State<CashboxScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addMovement,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('حركة يدوية'),
-      ),
+      floatingActionButton: widget.canRecordManualMovements || widget.canRecordExpenses
+          ? FloatingActionButton.extended(onPressed: _addMovement, icon: const Icon(Icons.add_rounded), label: Text(widget.canRecordManualMovements ? 'حركة يدوية' : 'تسجيل مصروف'))
+          : null,
       body: FutureBuilder<_CashboxData>(
         future: _data,
         builder: (context, snapshot) {
