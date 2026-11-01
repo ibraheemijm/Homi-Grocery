@@ -171,7 +171,7 @@ void main() {
 
   testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير',
       (tester) async {
-    final cashier = AuthUser(
+    const cashier = AuthUser(
       id: 42,
       username: 'cashier_one',
       displayName: 'الكاشير الأول',
