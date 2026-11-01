@@ -5,10 +5,12 @@ import '../data/customer_repository.dart';
 import '../data/grocery_database.dart';
 
 class CustomersScreen extends StatefulWidget {
-  const CustomersScreen({required this.userId, this.shiftId, super.key});
+  const CustomersScreen({required this.userId, this.shiftId, this.cashierPermissions, super.key});
 
   final int userId;
   final int? shiftId;
+  // null تعني دخول المدير، أما الكاشير فيمرر الصلاحيات الممنوحة له.
+  final Set<String>? cashierPermissions;
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -20,6 +22,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
   final _search = TextEditingController();
   bool _loading = true;
   String? _error;
+
+  bool get _isManager => widget.cashierPermissions == null;
+  bool get _canAddCustomer => _isManager;
+  bool get _canCollect => _isManager || widget.cashierPermissions!.contains('customer_collections');
+  bool get _canViewLedger => _isManager || widget.cashierPermissions!.contains('view_customer_data');
 
   @override
   void initState() {
@@ -75,7 +82,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           Row(children: [
                             Expanded(child: Text('الزبائن والديون', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800))),
-                            FilledButton.icon(onPressed: _addCustomer, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة زبون')),
+                            if (_canAddCustomer)
+                              FilledButton.icon(onPressed: _addCustomer, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة زبون')),
                           ]),
                           const SizedBox(height: 6),
                           Text('الأرصدة محسوبة من الفواتير والتحصيلات المسجلة، وليست أرقامًا ثابتة.', style: theme.textTheme.bodyMedium),
@@ -124,16 +132,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       style: theme.textTheme.labelSmall),
                                   ]),
                                   const SizedBox(width: 8),
-                                  IconButton(
-                                    tooltip: 'كشف الحساب',
-                                    onPressed: () => _showLedger(customer),
-                                    icon: const Icon(Icons.receipt_long_outlined),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'تسجيل تحصيل',
-                                    onPressed: customer.balance > 0 ? () => _collect(customer) : null,
-                                    icon: const Icon(Icons.payments_outlined),
-                                  ),
+                                  if (_canViewLedger)
+                                    IconButton(
+                                      tooltip: 'كشف الحساب',
+                                      onPressed: () => _showLedger(customer),
+                                      icon: const Icon(Icons.receipt_long_outlined),
+                                    ),
+                                  if (_canCollect)
+                                    IconButton(
+                                      tooltip: 'تسجيل تحصيل',
+                                      onPressed: customer.balance > 0 ? () => _collect(customer) : null,
+                                      icon: const Icon(Icons.payments_outlined),
+                                    ),
                                 ]),
                               ),
                             )),
@@ -146,6 +156,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _showLedger(CustomerBalance customer) async {
+    if (!_canViewLedger) return;
     try {
       final entries = await _repository!.ledger(customer.id, userId: widget.userId);
       if (!mounted) return;
@@ -218,6 +229,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _addCustomer() async {
+    if (!_canAddCustomer) return;
     final name = TextEditingController();
     final phone = TextEditingController();
     final result = await showDialog<bool>(
@@ -248,6 +260,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _collect(CustomerBalance customer) async {
+    if (!_canCollect || customer.balance <= 0) return;
     final amountController = TextEditingController();
     final noteController = TextEditingController();
     String paymentMethod = 'نقدي';
