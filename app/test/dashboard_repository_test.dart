@@ -115,8 +115,8 @@ void main() {
       discount: 0,
       paidAmount: 500,
       paymentMethod: 'نقدي',
-    
-      userId: managerId);
+      userId: managerId,
+      shiftId: await ensureManagerShift());
     final itemId = (await database.query(
       'sale_items', columns: ['id'], where: 'sale_id = ?', whereArgs: [sale.id],
     )).single['id'] as int;
@@ -126,7 +126,12 @@ void main() {
       quantitiesBySaleItemId: {itemId: 1},
     
       userId: managerId);
-    await sales.recordReturnRefund(saleId: sale.id, amount: 250, userId: managerId);
+    await sales.recordReturnRefund(
+      saleId: sale.id,
+      amount: 250,
+      userId: managerId,
+      shiftId: await ensureManagerShift(),
+    );
 
     final stats = await DashboardRepository(database).load(userId: managerId, now: DateTime.now());
     expect(stats.todaySales, 250);
