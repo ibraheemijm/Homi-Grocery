@@ -85,13 +85,25 @@ class CashShiftRepository {
     JOIN users u ON u.id = s.user_id
   ''';
 
-  /// إرجاع الوردية المفتوحة على هذا الجهاز لاستئنافها بعد إعادة تشغيل التطبيق.
-  Future<CashShift?> getOpenShift() async {
+  /// استعادة وردية المستخدم الحالي فقط دون كشف تفاصيل وردية حساب آخر.
+  Future<CashShift?> getOpenShift({required int userId}) async {
     final rows = await _database.rawQuery(
-      '$_selectShift WHERE s.status = ? LIMIT 1',
-      ['open'],
+      '$_selectShift WHERE s.status = ? AND s.user_id = ? LIMIT 1',
+      ['open', userId],
     );
     return rows.isEmpty ? null : CashShift.fromMap(rows.single);
+  }
+
+  /// يتحقق من وجود وردية لمستخدم آخر دون إرجاع بيانات صاحبها أو رصيدها.
+  Future<bool> hasOpenShiftForAnotherUser({required int userId}) async {
+    final rows = await _database.query(
+      'cash_shifts',
+      columns: ['id'],
+      where: "status = 'open' AND user_id != ?",
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   /// فتح درج جديد بعد إدخال النقدية الفعلية الموجودة فيه عند بداية العمل.
