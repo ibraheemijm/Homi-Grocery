@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/main.dart';
-import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
+import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
@@ -178,17 +178,22 @@ void main() {
     await _testSupportDirectory.create(recursive: true);
 
     final database = await GroceryDatabase.open();
-    final repository = AuthRepository(database);
-    final manager = await repository.createInitialManager(
-      username: 'test_manager',
-      displayName: 'مدير الاختبار',
-      password: 'ManagerPass!2026',
-    );
-    final cashier = await repository.createCashier(
-      manager: manager,
+    // نزرع حسابًا صالحًا للاختبار مباشرة؛ لا نحتاج اختبار اشتقاق كلمات المرور هنا.
+    final cashierId = await database.insert('users', {
+      'username': 'cashier_one',
+      'display_name': 'الكاشير الأول',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 600000,
+      'role': 'cashier',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final cashier = AuthUser(
+      id: cashierId,
       username: 'cashier_one',
       displayName: 'الكاشير الأول',
-      password: 'CashierPass!2026',
+      role: 'cashier',
     );
 
     await tester.pumpWidget(
