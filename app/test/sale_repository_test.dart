@@ -814,11 +814,6 @@ void main() {
       userId: managerId,
       closingCash: 40,
     );
-    await CashShiftRepository(database).closeShift(
-      shiftId: managerShiftId,
-      userId: managerId,
-      closingCash: 140,
-    );
     final shift = await CashShiftRepository(database).openShift(
       userId: cashier.id,
       openingCash: 100,
@@ -1001,6 +996,12 @@ void main() {
     );
     expect(returned.amount, 40);
 
+    // أغلق وردية المدير قبل فتح وردية الكاشير لاختبار رد المبلغ.
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId,
+      userId: managerId,
+      closingCash: 40,
+    );
     final shift = await CashShiftRepository(database).openShift(
       userId: cashier.id,
       openingCash: 100,
