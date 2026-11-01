@@ -422,6 +422,22 @@ class AuthRepository {
       final currentState = cashier['is_active'] == 1;
       if (currentState == isActive) return;
 
+      // لا توقف حسابًا ما زال مسؤولًا عن وردية مفتوحة؛ يجب إغلاقها أولًا.
+      if (!isActive) {
+        final openShifts = await txn.query(
+          'cash_shifts',
+          columns: ['id'],
+          where: "user_id = ? AND status = 'open'",
+          whereArgs: [cashierId],
+          limit: 1,
+        );
+        if (openShifts.isNotEmpty) {
+          throw const AuthException(
+            'لا يمكن إيقاف حساب الكاشير قبل إغلاق ورديته المفتوحة.',
+          );
+        }
+      }
+
       await txn.update(
         'users',
         {'is_active': isActive ? 1 : 0},
