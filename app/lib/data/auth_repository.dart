@@ -74,6 +74,7 @@ const Map<String, String> cashierPermissionLabels = {
   'discounts': 'تقديم خصم على الفاتورة',
   'returns': 'تسجيل مرتجعات البيع',
   'return_refunds': 'رد مبالغ المرتجعات',
+  'customer_overpayments': 'رد مبالغ الزيادة المستحقة للزبائن',
   'customer_collections': 'تحصيل ديون الزبائن',
   'cash_expenses': 'تسجيل المصروفات النقدية',
   'supplier_purchases': 'تسجيل فواتير الشراء',

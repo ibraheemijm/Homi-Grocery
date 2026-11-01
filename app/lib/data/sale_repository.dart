@@ -24,6 +24,7 @@ class SaleRecord {
     required this.paymentMethod,
     required this.createdAt,
     this.customerName,
+    this.overpaymentAmount = 0,
   });
 
   final int id;
@@ -33,6 +34,7 @@ class SaleRecord {
   final String paymentMethod;
   final String createdAt;
   final String? customerName;
+  final int overpaymentAmount;
 
   int get remainingAmount => total - paidAmount;
 
@@ -44,6 +46,7 @@ class SaleRecord {
         paymentMethod: map['payment_method'] as String,
         createdAt: map['created_at'] as String,
         customerName: map['customer_name'] as String?,
+        overpaymentAmount: (map['overpayment_amount'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -271,6 +274,50 @@ class SaleRepository {
     }
   }
 
+
+  /// يسجل ردًا كليًا أو جزئيًا لزيادة دفع مرتبطة بفاتورة، دون إنشاء دين زبون.
+  Future<int> refundCustomerOverpayment({
+    required int saleId, required int amount, required String paymentMethod,
+    required int userId, int? shiftId,
+  }) async {
+    if (amount <= 0 || !const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
+      throw ArgumentError('مبلغ الرد أو وسيلة الدفع غير صالحة.');
+    }
+    final now = DateTime.now().toUtc().toIso8601String();
+    return _database.transaction((txn) async {
+      final users = await txn.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
+      if (users.isEmpty || users.single['is_active'] != 1) throw StateError('الحساب غير نشط أو غير موجود.');
+      if (users.single['role'] == 'cashier') {
+        await _requireCashierPermission(txn, userId: userId, permissionKey: 'customer_overpayments', permissionLabel: 'رد مبالغ الزيادة المستحقة للزبائن');
+      } else if (users.single['role'] != 'manager') {
+        throw StateError('نوع الحساب غير مصرح له برد المبالغ.');
+      }
+      if (paymentMethod == 'نقدي') await CashShiftRepository.validateActiveShift(txn, shiftId: shiftId, userId: userId);
+      final rows = await txn.query('customer_overpayments', where: 'sale_id = ?', whereArgs: [saleId], limit: 1);
+      if (rows.isEmpty) throw StateError('لا توجد زيادة دفع مستحقة لهذه الفاتورة.');
+      final row = rows.single;
+      final outstanding = (row['received_amount'] as int) - (row['refunded_amount'] as int);
+      if (amount > outstanding) throw StateError('مبلغ الرد يتجاوز الزيادة المستحقة ($outstanding ج.س).');
+      await txn.update('customer_overpayments', {'refunded_amount': (row['refunded_amount'] as int) + amount}, where: 'id = ?', whereArgs: [row['id']]);
+      await txn.insert('cash_transactions', {
+        'direction': 'out', 'category': 'رد زيادة دفع للزبون', 'amount': amount,
+        'payment_method': paymentMethod, 'reference_type': 'customer_overpayment',
+        'reference_id': saleId, 'user_id': userId,
+        'shift_id': paymentMethod == 'نقدي' ? shiftId : null,
+        'note': 'رد زيادة دفع عن الفاتورة رقم $saleId', 'created_at': now,
+      });
+      return outstanding - amount;
+    });
+  }
+
+  /// يعيد سجل الزيادات التي لم تُرد بالكامل، مرتبطًا برقم الفاتورة فقط.
+  Future<List<Map<String, Object?>>> pendingCustomerOverpayments() async => _database.rawQuery('''
+    SELECT o.sale_id, s.invoice_number, o.received_amount, o.refunded_amount,
+      (o.received_amount - o.refunded_amount) AS outstanding_amount, o.created_at
+    FROM customer_overpayments o JOIN sales s ON s.id = o.sale_id
+    WHERE o.received_amount > o.refunded_amount ORDER BY o.id DESC
+  ''');
+
   // حفظ الفاتورة وبنودها وتحديث المخزون في معاملة واحدة.
   Future<SaleRecord> createSale({
     required List<SaleLine> lines,
@@ -300,9 +347,10 @@ class SaleRepository {
     final subtotal = lines.fold<int>(0, (sum, line) => sum + line.lineTotal);
     if (discount > subtotal) throw ArgumentError('الخصم أكبر من إجمالي الفاتورة.');
     final total = subtotal - discount;
-    if (paidAmount > total) {
-      throw ArgumentError('المبلغ المدفوع أكبر من إجمالي الفاتورة.');
-    }
+    // المبلغ المستلم قد يتجاوز الإجمالي؛ الزيادة التزام مستقل وليست إيرادًا.
+    final receivedAmount = paidAmount;
+    final overpaymentAmount = (receivedAmount - total).clamp(0, 1 << 62).toInt();
+    paidAmount = receivedAmount > total ? total : receivedAmount;
     if (!const ['نقدي', 'جزئي', 'آجل'].contains(paymentMethod)) {
       throw ArgumentError('طريقة السداد غير معروفة.');
     }
@@ -452,17 +500,26 @@ class SaleRepository {
         'payment_method': paymentMethod,
         'created_at': createdAt,
       });
-      if (paidAmount > 0) {
+      if (receivedAmount > 0) {
         await txn.insert('cash_transactions', {
           'direction': 'in',
           'category': 'مبيعات',
-          'amount': paidAmount,
+          'amount': receivedAmount,
           'payment_method': paymentChannel,
           'reference_type': 'sale',
           'reference_id': saleId,
           'user_id': userId,
           'shift_id': paymentChannel == 'نقدي' ? shiftId : null,
           'note': 'فاتورة $invoice',
+          'created_at': createdAt,
+        });
+      }
+
+      if (overpaymentAmount > 0) {
+        await txn.insert('customer_overpayments', {
+          'sale_id': saleId,
+          'received_amount': overpaymentAmount,
+          'refunded_amount': 0,
           'created_at': createdAt,
         });
       }
@@ -520,6 +577,7 @@ class SaleRepository {
         paymentMethod: paymentMethod,
         createdAt: createdAt,
         customerName: linkedCustomerId == null ? null : normalizedCustomer,
+        overpaymentAmount: overpaymentAmount,
       );
     });
 

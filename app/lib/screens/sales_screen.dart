@@ -806,14 +806,15 @@ class _SalesScreenState extends State<SalesScreen> {
                 },
               ),
             const SizedBox(height: 8),
-            const Text('المتبقي سيظهر في الفاتورة. متابعة ديون الزبائن ستضاف ضمن وحدة الحسابات.', style: TextStyle(fontSize: 12)),
+            const Text('إذا زاد المبلغ المستلم عن الإجمالي، تُسجل الزيادة كمبلغ مستحق للزبون ولا تُضاف إلى إيراد البيع.', style: TextStyle(fontSize: 12)),
           ])),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
             FilledButton(onPressed: () {
               final paid = int.tryParse(paidController.text.trim());
-              if (paid == null || paid < 0 || paid > _total ||
-                  (method == 'نقدي' && paid != _total) ||
+              if (paid == null || paid < 0 ||
+                  (method == 'نقدي' && paid < _total) ||
+                  (paid > _total && method != 'نقدي') ||
                   (method == 'آجل' && paid != 0) ||
                   (method == 'جزئي' && (paid == 0 || paid == _total))) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
@@ -916,7 +917,9 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(height: 8),
             _totalRow('الإجمالي', sale.total),
             _totalRow('المستلم', sale.paidAmount),
-            _totalRow('المتبقي', sale.remainingAmount),
+            _totalRow('المتبقي من قيمة الفاتورة', sale.remainingAmount),
+            if (sale.overpaymentAmount > 0)
+              _totalRow('زيادة مستحقة للزبون', sale.overpaymentAmount),
           ]),
           actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('حسنًا'))],
         ),

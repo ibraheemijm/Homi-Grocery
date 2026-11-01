@@ -31,6 +31,7 @@ void main() {
     await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createManagerApprovalsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
+    await GroceryDatabase.createCustomerOverpaymentsSchema(database);
     await GroceryDatabase.createCostOfGoodsSchema(database);
     managerAccount = await AuthRepository(database).createInitialManager(
       username: 'sale_test_manager',
@@ -56,6 +57,29 @@ void main() {
 
   tearDown(() async {
     await database.close();
+  });
+
+  test('يسجل المبلغ الزائد كالتزام مستقل ولا يربطه بدفتر الزبائن', () async {
+    final productId = await products.add(const GroceryProduct(name: 'ماء', sellingPrice: 700, stockQuantity: 5));
+    final product = (await products.getById(productId))!;
+    final shiftId = await ensureManagerShift();
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)], discount: 0,
+      paidAmount: 1000, paymentMethod: 'نقدي', paymentChannel: 'نقدي',
+      userId: managerId, shiftId: shiftId,
+    );
+    expect(sale.total, 700); expect(sale.paidAmount, 700);
+    expect(sale.remainingAmount, 0); expect(sale.overpaymentAmount, 300);
+    expect(sale.customerName, isNull); expect(await database.query('customers'), isEmpty);
+    expect((await database.query('cash_transactions')).single['amount'], 1000);
+    expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 300);
+    final remaining = await sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
+      paymentMethod: 'نقدي', userId: managerId, shiftId: shiftId);
+    expect(remaining, 200);
+    final movements = await database.query('cash_transactions', orderBy: 'id');
+    expect(movements.last['direction'], 'out'); expect(movements.last['amount'], 100);
+    expect(movements.last['category'], 'رد زيادة دفع للزبون');
+    expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 200);
   });
 
   test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {

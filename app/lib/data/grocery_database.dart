@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 17;
+  static const int _version = 18;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -50,6 +50,7 @@ class GroceryDatabase {
         await createAuthSchema(db);
         await createCashShiftsSchema(db);
         await createManagerApprovalsSchema(db);
+        await createCustomerOverpaymentsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -103,6 +104,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 17) {
           await createManagerApprovalsSchema(db);
+        }
+        if (oldVersion < 18) {
+          await createCustomerOverpaymentsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -359,6 +363,19 @@ class GroceryDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sale_return_refunds_sale ON sale_return_refunds(sale_id, created_at)',
     );
+  }
+
+
+  // سجل مستقل لزيادة ما استلمه المتجر فوق قيمة الفاتورة، دون إنشاء حساب زبون.
+  static Future<void> createCustomerOverpaymentsSchema(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS customer_overpayments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sale_id INTEGER NOT NULL UNIQUE REFERENCES sales(id),
+      received_amount INTEGER NOT NULL CHECK (received_amount > 0),
+      refunded_amount INTEGER NOT NULL DEFAULT 0 CHECK (refunded_amount >= 0 AND refunded_amount <= received_amount),
+      created_at TEXT NOT NULL
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_customer_overpayments_sale ON customer_overpayments(sale_id)');
   }
 
   // سجل موحد للمقبوضات والمدفوعات الفعلية، مرتبط بمصدر الحركة لمنع الخلط مع الديون.
