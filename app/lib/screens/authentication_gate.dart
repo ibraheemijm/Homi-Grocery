@@ -162,6 +162,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     final current = _user;
     final shift = _shift;
     if (current == null || shift == null) return;
+    var shiftClosed = false;
     try {
       final closingCash = await _askCashAmount(
         title: 'إغلاق الوردية وتسليم العهدة',
@@ -176,6 +177,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         userId: current.id,
         closingCash: closingCash,
       );
+      shiftClosed = true;
       if (current.isManager && mounted) {
         await showDialog<void>(
           context: context,
@@ -207,17 +209,34 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
           ),
         );
       }
-      await _repository?.logout(current);
-      if (mounted) {
-        setState(() {
-          _user = null;
-          _shift = null;
-        });
+
+      // لا نُبقي جلسة المستخدم نشطة بعد إغلاق ورديته، حتى إن تعذر حفظ سجل الخروج.
+      try {
+        await _repository?.logout(current);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _user = null;
+            _shift = null;
+          });
+        }
       }
     } catch (error) {
       if (mounted) {
+        if (shiftClosed) {
+          setState(() {
+            _user = null;
+            _shift = null;
+          });
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر إغلاق الوردية: $error')),
+          SnackBar(
+            content: Text(
+              shiftClosed
+                  ? 'أُغلقت الوردية، لكن تعذر إكمال تسجيل الخروج: $error'
+                  : 'تعذر إغلاق الوردية: $error',
+            ),
+          ),
         );
       }
     }
