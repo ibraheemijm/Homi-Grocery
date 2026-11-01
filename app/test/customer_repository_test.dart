@@ -109,6 +109,33 @@ void main() {
     expect(after.balance, 500);
   });
 
+  test('يرفض تحصيل الدين النقدي دون وردية حتى لحساب المدير', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0,
+      paidAmount: 0,
+      paymentMethod: 'آجل',
+      customerName: 'عميل دون وردية',
+      userId: managerId,
+    );
+    final customer = (await customers.balances(userId: managerId)).single;
+    await expectLater(
+      customers.recordPayment(
+        customerId: customer.id,
+        amount: 50,
+        paymentMethod: 'نقدي',
+        userId: managerId,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    expect(await database.query('customer_payments'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+  });
+
   test('يشترط وردية المستخدم النشطة للتحصيل النقدي فقط', () async {
     final auth = AuthRepository(database);
     final manager = managerAccount;
