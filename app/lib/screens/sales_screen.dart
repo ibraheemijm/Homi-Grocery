@@ -18,18 +18,17 @@ class SalesScreen extends StatefulWidget {
   final bool cashierMode;
   final Set<String> cashierPermissions;
 
-  bool get _canCreditSales => !cashierMode || cashierPermissions.contains('credit_sales');
-  bool get _canDiscount => !cashierMode || cashierPermissions.contains('discounts');
-  bool get _canViewCustomerData => !cashierMode || cashierPermissions.contains('view_customer_data');
-  bool get _canViewInvoices => !cashierMode || cashierPermissions.contains('view_invoice_history');
-  bool get _canReturn => !cashierMode || cashierPermissions.contains('returns');
-  bool get _canRefund => !cashierMode || cashierPermissions.contains('return_refunds');
-
   @override
   State<SalesScreen> createState() => _SalesScreenState();
 }
 
 class _SalesScreenState extends State<SalesScreen> {
+  bool get _canCreditSales => !widget.cashierMode || widget.cashierPermissions.contains('credit_sales');
+  bool get _canDiscount => !widget.cashierMode || widget.cashierPermissions.contains('discounts');
+  bool get _canViewCustomerData => !widget.cashierMode || widget.cashierPermissions.contains('view_customer_data');
+  bool get _canViewInvoices => !widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history');
+  bool get _canReturn => !widget.cashierMode || widget.cashierPermissions.contains('returns');
+  bool get _canRefund => !widget.cashierMode || widget.cashierPermissions.contains('return_refunds');
   final _search = TextEditingController();
   final _customer = TextEditingController();
   final _customerNickname = TextEditingController();
