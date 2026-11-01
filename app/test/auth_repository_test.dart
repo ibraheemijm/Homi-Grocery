@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:homi_grocery/data/auth_repository.dart';
+import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 
 void main() {
@@ -16,6 +17,8 @@ void main() {
       version: 1,
       onCreate: (db, version) => GroceryDatabase.createAuthSchema(db),
     );
+    await GroceryDatabase.createCashTransactionsSchema(database);
+    await GroceryDatabase.createCashShiftsSchema(database);
     repository = AuthRepository(database);
   });
 
@@ -185,6 +188,56 @@ void main() {
         'cashier_activated:${cashier.id}',
       ]),
     );
+  });
+
+  test('يرفض إيقاف الكاشير صاحب الوردية المفتوحة ويسمح بعد إغلاقها', () async {
+    final manager = await repository.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final cashier = await repository.createCashier(
+      manager: manager,
+      username: 'cashier_shift',
+      displayName: 'كاشير الوردية',
+      password: 'CashierPass!2026',
+    );
+    final shifts = CashShiftRepository(database);
+    final shift = await shifts.openShift(userId: cashier.id, openingCash: 50);
+
+    await expectLater(
+      repository.setCashierActive(
+        manager: manager,
+        cashierId: cashier.id,
+        isActive: false,
+      ),
+      throwsA(isA<AuthException>()),
+    );
+    final active = (await database.query(
+      'users',
+      columns: ['is_active'],
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    )).single;
+    expect(active['is_active'], 1);
+
+    await shifts.closeShift(
+      shiftId: shift.id,
+      userId: cashier.id,
+      closingCash: 50,
+    );
+    await repository.setCashierActive(
+      manager: manager,
+      cashierId: cashier.id,
+      isActive: false,
+    );
+    final inactive = (await database.query(
+      'users',
+      columns: ['is_active'],
+      where: 'id = ?',
+      whereArgs: [cashier.id],
+    )).single;
+    expect(inactive['is_active'], 0);
   });
 
   test('يعيد المدير تعيين كلمة مرور الكاشير ويمسح القفل والمحاولات', () async {
