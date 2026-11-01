@@ -48,7 +48,7 @@ class CustomerRepository {
     }
     final permissions = await _database.query(
       'cashier_permissions', columns: ['is_allowed'],
-      where: "user_id = ? AND permission_key = 'view_customer_data'",
+      where: "user_id = ? AND permission_key IN ('view_customer_data', 'customer_collections') AND is_allowed = 1",
       whereArgs: [userId], limit: 1,
     );
     if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
