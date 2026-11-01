@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/cash_shift_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
+import 'package:homi_grocery/data/manager_approval_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/data/sale_repository.dart';
 
