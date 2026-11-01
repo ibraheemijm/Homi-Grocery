@@ -90,6 +90,40 @@ class SaleRepository {
     return limit != null && amount > limit;
   }
 
+  /// يصدر موافقة مؤقتة على خصم فاتورة الكاشير بعد التحقق من بيانات المدير.
+  Future<String> requestCashierDiscountApproval({
+    required String managerUsername,
+    required String managerPassword,
+    required int cashierUserId,
+    required int shiftId,
+    required int discountAmount,
+  }) async {
+    if (managerUsername.trim().isEmpty || managerPassword.isEmpty) {
+      throw const ManagerApprovalException('أدخل اسم مستخدم المدير وكلمة المرور.');
+    }
+    final managers = await _database.query(
+      'users',
+      where: "username = ? COLLATE NOCASE AND role = 'manager' AND is_active = 1",
+      whereArgs: [managerUsername.trim()],
+      limit: 1,
+    );
+    if (managers.isEmpty) {
+      throw const ManagerApprovalException('بيانات المدير غير صحيحة أو أن الحساب غير نشط.');
+    }
+    final grant = await _managerApprovals.issueApproval(
+      manager: AuthUser.fromMap(managers.single),
+      managerPassword: managerPassword,
+      scope: ManagerApprovalScope(
+        cashierUserId: cashierUserId,
+        shiftId: shiftId,
+        permissionKey: 'discounts',
+        operationType: 'sale.create',
+        amount: discountAmount,
+      ),
+    );
+    return grant.token;
+  }
+
   /// يتحقق من صلاحية الكاشير ويعيد سقف العملية المالي إن وُجد.
   /// الصلاحية غير المسجلة أو غير المفعلة مرفوضة افتراضيًا.
   static Future<int?> _requireCashierPermission(
