@@ -33,6 +33,7 @@ abstract interface class CustomerDataSource {
   Future<List<CustomerBalance>> balances({required int userId, String query = ''});
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
   Future<int> addCustomer({required String name, String? phone, String? notes});
+  @override
   Future<void> recordPayment({
     required int customerId,
     required int amount,
@@ -71,6 +72,7 @@ class CustomerRepository implements CustomerDataSource {
   }
 
   // يعرض الأرصدة المحسوبة من الفواتير والتحصيلات الفعلية بعد التحقق من الهوية.
+  @override
   Future<List<CustomerBalance>> balances({required int userId, String query = ''}) async {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
@@ -108,6 +110,7 @@ class CustomerRepository implements CustomerDataSource {
   }
 
   /// كشف حساب موحد مرتب زمنيًا من الفواتير والمرتجعات والتحصيلات.
+  @override
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId}) async {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
@@ -148,6 +151,7 @@ class CustomerRepository implements CustomerDataSource {
   }
 
   // إضافة زبون يدويًا مع منع تكرار الاسم دون قصد.
+  @override
   Future<int> addCustomer({required String name, String? phone, String? notes}) async {
     final normalized = name.trim();
     if (normalized.isEmpty) throw ArgumentError('اسم الزبون مطلوب.');
