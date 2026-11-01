@@ -7,6 +7,7 @@ import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
 
 typedef GroceryDatabaseProvider = Future<Database> Function();
+typedef AuthRepositoryProvider = AuthRepository Function(Database database);
 
 typedef AuthenticatedBuilder = Widget Function(
   AuthUser user,
@@ -18,11 +19,13 @@ class AuthenticationGate extends StatefulWidget {
   const AuthenticationGate({
     required this.authenticatedBuilder,
     this.databaseProvider,
+    this.authRepositoryProvider,
     super.key,
   });
 
   final AuthenticatedBuilder authenticatedBuilder;
   final GroceryDatabaseProvider? databaseProvider;
+  final AuthRepositoryProvider? authRepositoryProvider;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -48,7 +51,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   Future<void> _initialize() async {
     try {
       final database = await widget._openDatabase();
-      final repository = AuthRepository(database);
+      final repository =
+          widget.authRepositoryProvider?.call(database) ?? AuthRepository(database);
       final needsSetup = !(await repository.hasAccounts());
       if (!mounted) return;
       setState(() {
