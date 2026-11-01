@@ -274,8 +274,11 @@ void main() {
       ),
     ));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump(const Duration(milliseconds: 100));
+    // عمليات SQLite عبر FFI تحتاج حلقة أحداث حقيقية لإكمال التحميل داخل اختبار الواجهة.
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
 
     expect(find.text('عميل اختبار التحصيل'), findsOneWidget);
     expect(find.text('400 ج.س'), findsOneWidget);
