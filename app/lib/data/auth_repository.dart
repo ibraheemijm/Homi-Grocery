@@ -247,6 +247,35 @@ class AuthRepository {
   }
 
 
+  /// يعيد مفاتيح الصلاحيات الفعالة للكاشير الحالي بعد التحقق من نشاط الحساب.
+  /// لا يعيد الصلاحيات غير المسجلة أو المعطلة؛ فهي مرفوضة افتراضيًا.
+  Future<Set<String>> getActiveCashierPermissionKeys({
+    required int cashierId,
+  }) async {
+    final accounts = await _database.query(
+      'users',
+      columns: ['role', 'is_active'],
+      where: 'id = ?',
+      whereArgs: [cashierId],
+      limit: 1,
+    );
+    if (accounts.isEmpty ||
+        accounts.single['role'] != 'cashier' ||
+        accounts.single['is_active'] != 1) {
+      throw const AuthException('حساب الكاشير غير نشط أو غير موجود.');
+    }
+    final rows = await _database.query(
+      'cashier_permissions',
+      columns: ['permission_key'],
+      where: 'user_id = ? AND is_allowed = 1',
+      whereArgs: [cashierId],
+    );
+    return rows
+        .map((row) => row['permission_key'] as String)
+        .where(cashierPermissionLabels.containsKey)
+        .toSet();
+  }
+
   /// يعيد الصلاحيات المضبوطة، ويعامل الصلاحية غير المسجلة على أنها ممنوعة.
   Future<List<CashierPermissionSetting>> getCashierPermissions({
     required AuthUser manager,
