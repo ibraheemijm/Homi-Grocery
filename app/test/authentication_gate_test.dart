@@ -10,8 +10,9 @@ import 'package:homi_grocery/screens/authentication_gate.dart';
 // ينتظر اكتمال العمليات غير المتزامنة دون انتظار توقف مؤشر التحميل الدوار.
 Future<void> _pumpGate(WidgetTester tester) async {
   await tester.pump();
+  // اشتقاق PBKDF2 يعمل في isolate وقد يحتاج وقتًا أطول على CI البطيء.
   await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await Future<void>.delayed(const Duration(seconds: 4));
   });
   await tester.pump(const Duration(milliseconds: 400));
 }
@@ -83,7 +84,11 @@ void main() {
     await _pumpGate(tester);
 
     // لا تُفعّل الجلسة قبل إدخال الرصيد الافتتاحي وإتمام فتح الوردية.
-    expect(find.text('فتح الوردية'), findsOneWidget);
+    expect(
+      find.text('فتح الوردية'),
+      findsOneWidget,
+      reason: 'محتوى الشاشة: ${tester.widgetList<Text>(find.byType(Text)).map((widget) => widget.data).join(' | ')}',
+    );
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('فتح الوردية'));
     await _pumpGate(tester);
