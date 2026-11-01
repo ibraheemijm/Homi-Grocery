@@ -386,7 +386,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            widget.cashierMode
+            widget.cashierMode && !_canCreditSales
                 ? 'أضف الأصناف إلى الفاتورة ثم استلم كامل المبلغ نقدًا.'
                 : 'أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.',
             style: theme.textTheme.bodyMedium,
@@ -1213,9 +1213,11 @@ class _SalesScreenState extends State<SalesScreen> {
               if (value == 'return') _returnSale(sale);
               if (value == 'refund') _refundSale(sale);
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'return', child: Text('تسجيل مرتجع')),
-              PopupMenuItem(value: 'refund', child: Text('تسجيل رد نقدي')),
+            itemBuilder: (_) => [
+              if (_canReturn)
+                const PopupMenuItem(value: 'return', child: Text('تسجيل مرتجع')),
+              if (_canRefund)
+                const PopupMenuItem(value: 'refund', child: Text('تسجيل رد نقدي')),
             ],
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
