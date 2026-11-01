@@ -57,7 +57,7 @@ void main() {
         await Directory.systemTemp.createTemp('homi-widget-tests-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_pathProviderChannel, (call) async {
-      if (call.method == 'getApplicationSupportPath') {
+      if (call.method == 'getApplicationSupportDirectory') {
         return _testSupportDirectory.path;
       }
       return null;
@@ -207,7 +207,8 @@ void main() {
     expect(find.text('Homi Grocery'), findsOneWidget);
     expect(find.byTooltip('الأقسام المسموح بها'), findsOneWidget);
     await tester.tap(find.byTooltip('الأقسام المسموح بها'));
-    await tester.pumpAndSettle();
+    // لا نستخدم pumpAndSettle لأن شاشة المبيعات قد تحتوي مؤشر تحميل مستمرًا.
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('أقسام الكاشير'), findsOneWidget);
     expect(find.text('المبيعات'), findsOneWidget);
