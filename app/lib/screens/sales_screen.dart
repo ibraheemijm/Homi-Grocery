@@ -1058,6 +1058,7 @@ class _SalesScreenState extends State<SalesScreen> {
           builder: (_) => ManagerApprovalDialog(
             discountAmount: approvalRequest.amount,
             operationName: 'المرتجع',
+            cancelLabel: 'إلغاء المرتجع',
           ),
         );
         if (!mounted) return;
