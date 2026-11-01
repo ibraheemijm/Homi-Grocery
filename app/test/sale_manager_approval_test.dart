@@ -95,11 +95,12 @@ void main() {
 
   test('يسمح بالخصم فوق حد الكاشير بعد موافقة المدير المحددة', () async {
     final product = await addProduct();
-    final approvals = ManagerApprovalRepository(database, auth);
-    final grant = await approvals.issueApproval(
-      manager: manager,
+    final token = await sales.requestCashierDiscountApproval(
+      managerUsername: manager.username,
       managerPassword: managerPassword,
-      scope: discountScope(100),
+      cashierUserId: cashier.id,
+      shiftId: shiftId,
+      discountAmount: 100,
     );
 
     final sale = await sales.createSale(
@@ -109,7 +110,7 @@ void main() {
       paymentMethod: 'نقدي',
       userId: cashier.id,
       shiftId: shiftId,
-      managerApprovalToken: grant.token,
+      managerApprovalToken: token,
     );
 
     expect(sale.total, 900);
@@ -125,6 +126,20 @@ void main() {
     );
     expect(cashEntries, hasLength(1));
     expect(cashEntries.single['amount'], 900);
+  });
+
+  test('يرفض طلب موافقة باسم مستخدم ليس مديرًا نشطًا', () async {
+    await expectLater(
+      sales.requestCashierDiscountApproval(
+        managerUsername: cashier.username,
+        managerPassword: 'CashierPass!2026',
+        cashierUserId: cashier.id,
+        shiftId: shiftId,
+        discountAmount: 100,
+      ),
+      throwsA(isA<ManagerApprovalException>()),
+    );
+    expect(await database.query('manager_approvals'), isEmpty);
   });
 
   test('يرفض اختلاف مبلغ الخصم دون إنشاء فاتورة أو حركة نقد أو مخزون', () async {
