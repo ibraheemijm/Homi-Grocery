@@ -10,12 +10,20 @@ import '../data/sale_repository.dart';
 import '../widgets/manager_approval_dialog.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({this.onDataChanged, required this.userId, this.shiftId, this.cashierMode = false, super.key});
+  const SalesScreen({this.onDataChanged, required this.userId, this.shiftId, this.cashierMode = false, this.cashierPermissions = const {}, super.key});
 
   final VoidCallback? onDataChanged;
   final int userId;
   final int? shiftId;
   final bool cashierMode;
+  final Set<String> cashierPermissions;
+
+  bool get _canCreditSales => !cashierMode || cashierPermissions.contains('credit_sales');
+  bool get _canDiscount => !cashierMode || cashierPermissions.contains('discounts');
+  bool get _canViewCustomerData => !cashierMode || cashierPermissions.contains('view_customer_data');
+  bool get _canViewInvoices => !cashierMode || cashierPermissions.contains('view_invoice_history');
+  bool get _canReturn => !cashierMode || cashierPermissions.contains('returns');
+  bool get _canRefund => !cashierMode || cashierPermissions.contains('return_refunds');
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -167,8 +175,10 @@ class _SalesScreenState extends State<SalesScreen> {
       final viewMode = viewRows.isEmpty ? 'grid' : viewRows.single['value'] as String;
       _productsRepository = ProductRepository(database);
       _salesRepository = SaleRepository(database);
-      if (!widget.cashierMode) {
+      if (!widget.cashierMode || widget.cashierPermissions.contains('view_customer_data')) {
         _customersRepository = CustomerRepository(database);
+      }
+      if (!widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history')) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
       }
       _matches = await _productsRepository!.search('');
@@ -314,7 +324,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               const SizedBox(height: 12),
                               _buildCart(theme, compact: true),
                               const SizedBox(height: 12),
-                              if (!widget.cashierMode) _buildRecent(theme, compact: true),
+                              if (_canViewInvoices) _buildRecent(theme, compact: true),
                             ],
                           ),
                         );
@@ -343,7 +353,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                           flex: widget.cashierMode ? 5 : 3,
                                           child: _buildCart(theme, compact: false),
                                         ),
-                                        if (!widget.cashierMode) ...[
+                                        if (_canViewInvoices) ...[
                                           const SizedBox(height: 12),
                                           Expanded(
                                             flex: 2,
@@ -891,7 +901,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _customerSearchTimer?.cancel();
       _customerSearchRequest++;
       _discountController.text = '0';
-      if (!widget.cashierMode) {
+      if (_canViewInvoices) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
       }
       widget.onDataChanged?.call();
@@ -1049,7 +1059,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // إذا تجاوز المرتجع الدين الأصلي، اسأل عن الرد النقدي الفعلي
       // بدل خصم مبلغ من الخزينة لم يُسلَّم للزبون.
       final refundable = await _salesRepository!.maximumRefundableAmount(sale.id, userId: widget.userId);
-      if (refundable > 0 && mounted) await _refundSale(sale);
+      if (refundable > 0 && mounted && _canRefund) await _refundSale(sale);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
