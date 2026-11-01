@@ -9,6 +9,7 @@ import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
+import 'package:homi_grocery/screens/customers_screen.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 late Directory _testSupportDirectory;
@@ -220,4 +221,57 @@ void main() {
     expect(find.text('التقارير'), findsNothing);
     expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
   });
+  testWidgets('يخفي تفاصيل دفتر الزبون عن الكاشير المصرح له بالتحصيل فقط',
+      (tester) async {
+    final database = await GroceryDatabase.open();
+    final now = DateTime.now().toUtc().toIso8601String();
+    final suffix = DateTime.now().microsecondsSinceEpoch;
+    final userId = await database.insert('users', {
+      'username': 'collection_only_$suffix',
+      'display_name': 'كاشير التحصيل',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 600000,
+      'role': 'cashier',
+      'is_active': 1,
+      'created_at': now,
+    });
+    await database.insert('cashier_permissions', {
+      'user_id': userId,
+      'permission_key': 'customer_collections',
+      'is_allowed': 1,
+      'updated_at': now,
+    });
+    final customerId = await database.insert('customers', {
+      'name': 'عميل اختبار التحصيل',
+      'created_at': now,
+    });
+    await database.insert('sales', {
+      'invoice_number': 'TEST-$suffix',
+      'customer_id': customerId,
+      'customer_name': 'عميل اختبار التحصيل',
+      'subtotal': 500,
+      'discount': 0,
+      'total': 500,
+      'paid_amount': 100,
+      'payment_method': 'جزئي',
+      'created_at': now,
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: CustomersScreen(
+        userId: userId,
+        cashierPermissions: const {'customer_collections'},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('عميل اختبار التحصيل'), findsOneWidget);
+    expect(find.text('400 ج.س'), findsOneWidget);
+    expect(find.text('الرصيد المستحق'), findsOneWidget);
+    expect(find.textContaining('الفواتير:'), findsNothing);
+    expect(find.byTooltip('كشف الحساب'), findsNothing);
+    expect(find.byTooltip('تسجيل تحصيل'), findsOneWidget);
+  });
+
 }
