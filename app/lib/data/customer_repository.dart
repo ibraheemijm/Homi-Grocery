@@ -178,14 +178,14 @@ class CustomerRepository {
       if (role != 'manager' && role != 'cashier') {
         throw StateError('نوع الحساب غير مصرح له بتحصيل ديون الزبائن.');
       }
+      if (paymentMethod == 'نقدي') {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
       if (role == 'cashier') {
-        if (paymentMethod == 'نقدي') {
-          await CashShiftRepository.validateActiveShift(
-            txn,
-            shiftId: shiftId,
-            userId: userId,
-          );
-        }
         final permissions = await txn.query(
           'cashier_permissions',
           columns: ['is_allowed', 'max_amount'],
@@ -200,12 +200,6 @@ class CustomerRepository {
         if (limit != null && amount > limit) {
           throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
         }
-      } else if (paymentMethod == 'نقدي' && shiftId != null) {
-        await CashShiftRepository.validateActiveShift(
-          txn,
-          shiftId: shiftId,
-          userId: userId,
-        );
       }
       final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
       if (customers.isEmpty) throw StateError('الزبون غير موجود.');
