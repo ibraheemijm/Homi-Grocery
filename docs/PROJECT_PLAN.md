@@ -2361,3 +2361,5 @@ CI: https://github.com/ibraheemijm/Homi-Grocery/actions
 - اختبار `AuthRepository.getActiveCashierPermissionKeys` واختبارات الصلاحيات المستقلة باقية دون استبدال؛ لم تُحذف اختبارات المصادقة أو الأمان، ولم تُرفع مهلة الاختبار.
 - commits التغيير: `3cbc8c240d5136700d044aad64838254c35a5874` و`a95f16de467cd940c34c5dd1aed04b1819586e37` و`d3ad36bdb1a79967e2ebcdb78a006fb3d1c6ced2`.
 - يلزم التحقق من التحليل والاختبارات وبناء Linux على رأس الفرع الجديد قبل اعتبار الإصلاح ناجحًا. لم يُدمج PR #1.
+
+- متابعة CI بعد العزل: run `41310766567` وصل إلى التحليل وفشل بسبب ملاحظة lint واحدة فقط في `app/test/widget_test.dart:174` (`prefer_const_constructors`)، ولم يبدأ الاختبارات. أضيفت `const` إلى fixture في commit `a625681cac2f1f94d5d5c1eb845ed204e7c820a0`. ننتظر CI على هذا الرأس للتحقق من الاختبارات والبناء.
