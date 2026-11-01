@@ -1,9 +1,12 @@
 // بوابة الدخول: تمنع فتح بيانات المتجر قبل إنشاء المدير أو تسجيل الدخول.
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../data/auth_repository.dart';
 import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
+
+typedef GroceryDatabaseProvider = Future<Database> Function();
 
 typedef AuthenticatedBuilder = Widget Function(
   AuthUser user,
@@ -14,10 +17,15 @@ typedef AuthenticatedBuilder = Widget Function(
 class AuthenticationGate extends StatefulWidget {
   const AuthenticationGate({
     required this.authenticatedBuilder,
+    this.databaseProvider,
     super.key,
   });
 
   final AuthenticatedBuilder authenticatedBuilder;
+  final GroceryDatabaseProvider? databaseProvider;
+
+  Future<Database> _openDatabase() =>
+      databaseProvider?.call() ?? GroceryDatabase.open();
 
   @override
   State<AuthenticationGate> createState() => _AuthenticationGateState();
@@ -39,7 +47,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
 
   Future<void> _initialize() async {
     try {
-      final database = await GroceryDatabase.open();
+      final database = await widget._openDatabase();
       final repository = AuthRepository(database);
       final needsSetup = !(await repository.hasAccounts());
       if (!mounted) return;
@@ -59,7 +67,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   }
 
   Future<void> _activateUser(AuthUser user) async {
-    final database = await GroceryDatabase.open();
+    final database = await widget._openDatabase();
     final shifts = CashShiftRepository(database);
     final openShift = await shifts.getOpenShift(userId: user.id);
     if (openShift != null) {
@@ -171,7 +179,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       );
       if (closingCash == null || !mounted) return;
 
-      final database = await GroceryDatabase.open();
+      final database = await widget._openDatabase();
       final closed = await CashShiftRepository(database).closeShift(
         shiftId: shift.id,
         userId: current.id,
