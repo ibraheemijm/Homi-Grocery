@@ -114,7 +114,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     required String message,
     required String actionLabel,
   }) async {
-    final controller = TextEditingController(text: '0');
+    var amountText = '0';
     String? error;
     final result = await showDialog<int>(
       context: context,
@@ -130,8 +130,9 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
               children: [
                 Text(message),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
+                TextFormField(
+                  initialValue: '0',
+                  onChanged: (value) => amountText = value,
                   autofocus: true,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
@@ -153,7 +154,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
             ),
             FilledButton(
               onPressed: () {
-                final amount = int.tryParse(controller.text.trim());
+                final amount = int.tryParse(amountText.trim());
                 if (amount == null || amount < 0) {
                   refresh(() => error = 'أدخل مبلغًا صحيحًا لا يقل عن صفر.');
                   return;
@@ -166,7 +167,6 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         ),
       ),
     );
-    controller.dispose();
     return result;
   }
 
