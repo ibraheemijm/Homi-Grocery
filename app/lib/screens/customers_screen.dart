@@ -18,7 +18,7 @@ class CustomersScreen extends StatefulWidget {
   // null تعني دخول المدير، أما الكاشير فيمرر الصلاحيات الممنوحة له.
   final Set<String>? cashierPermissions;
   // حقن المستودع يعزل اختبارات الشاشة عن قاعدة بيانات التطبيق الدائمة.
-  final CustomerRepository? repository;
+  final CustomerDataSource? repository;
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
