@@ -61,6 +61,14 @@ class SaleReturnRecord {
   final String createdAt;
 }
 
+class ManagerApprovalRequiredException implements Exception {
+  const ManagerApprovalRequiredException(this.amount);
+  final int amount;
+
+  @override
+  String toString() => 'يتطلب المرتجع البالغ $amount ج.س موافقة المدير.';
+}
+
 class SaleRepository {
   SaleRepository(this._database)
       : _managerApprovals = ManagerApprovalRepository(
@@ -119,6 +127,60 @@ class SaleRepository {
         permissionKey: 'discounts',
         operationType: 'sale.create',
         amount: discountAmount,
+      ),
+    );
+    return grant.token;
+  }
+
+  /// يصدر موافقة مدير لمرتجع محدد بعد التأكد من صلاحية المرتجعات للكاشير.
+  Future<String> requestCashierReturnApproval({
+    required String managerUsername,
+    required String managerPassword,
+    required int cashierUserId,
+    required int shiftId,
+    required int saleId,
+    required int returnAmount,
+  }) async {
+    if (managerUsername.trim().isEmpty || managerPassword.isEmpty) {
+      throw const ManagerApprovalException('أدخل اسم مستخدم المدير وكلمة المرور.');
+    }
+    if (saleId <= 0 || returnAmount <= 0) {
+      throw const ManagerApprovalException('بيانات المرتجع غير صالحة للموافقة.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions',
+      columns: ['is_allowed', 'max_amount'],
+      where: "user_id = ? AND permission_key = 'returns'",
+      whereArgs: [cashierUserId],
+      limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw const ManagerApprovalException('لا يملك الكاشير صلاحية تسجيل المرتجعات.');
+    }
+    final limit = (permissions.single['max_amount'] as num?)?.toInt();
+    if (limit == null || returnAmount <= limit) {
+      throw const ManagerApprovalException('لا يحتاج هذا المرتجع إلى موافقة استثنائية.');
+    }
+    final managers = await _database.query(
+      'users',
+      where: "username = ? COLLATE NOCASE AND role = 'manager' AND is_active = 1",
+      whereArgs: [managerUsername.trim()],
+      limit: 1,
+    );
+    if (managers.isEmpty) {
+      throw const ManagerApprovalException('بيانات المدير غير صحيحة أو أن الحساب غير نشط.');
+    }
+    final grant = await _managerApprovals.issueApproval(
+      manager: AuthUser.fromMap(managers.single),
+      managerPassword: managerPassword,
+      scope: ManagerApprovalScope(
+        cashierUserId: cashierUserId,
+        shiftId: shiftId,
+        permissionKey: 'returns',
+        operationType: 'sale.return',
+        amount: returnAmount,
+        referenceType: 'sale',
+        referenceId: saleId,
       ),
     );
     return grant.token;
@@ -482,6 +544,8 @@ class SaleRepository {
     required Map<int, double> quantitiesBySaleItemId,
     String? note,
     required int userId,
+    int? shiftId,
+    String? managerApprovalToken,
   }) async {
     if (quantitiesBySaleItemId.isEmpty) {
       throw ArgumentError('حدد كمية واحدة على الأقل لإرجاعها.');
@@ -492,7 +556,8 @@ class SaleRepository {
       }
     }
 
-    return _database.transaction((txn) async {
+    ManagerApprovalConsumeResult? approvalFailure;
+    final returned = await _database.transaction<SaleReturnRecord?>((txn) async {
       final accounts = await txn.query(
         'users',
         columns: ['role', 'is_active'],
@@ -573,16 +638,48 @@ class SaleRepository {
         });
       }
 
+      int? returnLimit;
       if (role == 'cashier') {
-          final limit = await _requireCashierPermission(
-            txn,
-            userId: userId,
-            permissionKey: 'returns',
-            permissionLabel: 'تسجيل مرتجعات البيع',
-          );
-          if (limit != null && totalAmount > limit) {
-            throw StateError('قيمة المرتجع تتجاوز الحد المسموح ($limit ج.س).');
+        // لا يمكن للموافقة تجاوز غياب صلاحية المرتجعات نفسها.
+        returnLimit = await _requireCashierPermission(
+          txn,
+          userId: userId,
+          permissionKey: 'returns',
+          permissionLabel: 'تسجيل مرتجعات البيع',
+        );
+        if (shiftId == null) {
+          throw StateError('يلزم وجود وردية نشطة لتسجيل مرتجع الكاشير.');
+        }
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+        if (returnLimit != null && totalAmount > returnLimit) {
+          if (managerApprovalToken == null || managerApprovalToken.isEmpty) {
+            throw ManagerApprovalRequiredException(totalAmount);
           }
+          approvalFailure = await _managerApprovals.consumeWithinTransaction(
+            txn,
+            token: managerApprovalToken,
+            executingUserId: userId,
+            scope: ManagerApprovalScope(
+              cashierUserId: userId,
+              shiftId: shiftId,
+              permissionKey: 'returns',
+              operationType: 'sale.return',
+              amount: totalAmount,
+              referenceType: 'sale',
+              referenceId: saleId,
+            ),
+          );
+          if (approvalFailure != ManagerApprovalConsumeResult.consumed) {
+            return null;
+          }
+        } else if (managerApprovalToken != null) {
+          approvalFailure = ManagerApprovalConsumeResult.scopeMismatch;
+          return null;
+        }
       }
 
       final now = DateTime.now().toUtc().toIso8601String();
@@ -629,6 +726,19 @@ class SaleRepository {
         createdAt: now,
       );
     });
+
+    if (returned == null) {
+      final message = switch (approvalFailure) {
+        ManagerApprovalConsumeResult.expired => 'انتهت موافقة المدير. اطلب موافقة جديدة.',
+        ManagerApprovalConsumeResult.scopeMismatch => 'الموافقة لا تطابق الكاشير أو الوردية أو الفاتورة أو مبلغ المرتجع.',
+        ManagerApprovalConsumeResult.alreadyUsed => 'استُخدمت موافقة المدير مسبقًا.',
+        ManagerApprovalConsumeResult.inactiveAccount => 'حساب المدير أو الكاشير لم يعد نشطًا.',
+        ManagerApprovalConsumeResult.invalidShift => 'الوردية غير نشطة أو لا تخص الكاشير.',
+        _ => 'يتطلب هذا المرتجع موافقة مدير صالحة قبل حفظه.',
+      };
+      throw StateError(message);
+    }
+    return returned;
   }
 
   /// الحد المتبقي من النقد الذي يمكن رده فعليًا بعد أن غطت المرتجعات دين الفاتورة الأصلي.
