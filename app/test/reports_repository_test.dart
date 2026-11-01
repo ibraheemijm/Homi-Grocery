@@ -37,7 +37,7 @@ void main() {
 
   Future<int> ensureManagerShift() async {
     final shifts = CashShiftRepository(database);
-    final current = await shifts.getOpenShift();
+    final current = await shifts.getOpenShift(userId: managerId);
     if (current != null) {
       if (current.userId != managerId) {
         throw StateError('وردية الاختبار المفتوحة لا تخص المدير.');
