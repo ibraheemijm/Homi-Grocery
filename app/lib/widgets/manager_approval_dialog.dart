@@ -16,11 +16,13 @@ class ManagerApprovalDialog extends StatefulWidget {
   const ManagerApprovalDialog({
     required this.discountAmount,
     this.operationName = 'الخصم',
+    this.cancelLabel = 'إلغاء البيع',
     super.key,
   });
 
   final int discountAmount;
   final String operationName;
+  final String cancelLabel;
 
   @override
   State<ManagerApprovalDialog> createState() => _ManagerApprovalDialogState();
@@ -62,10 +64,14 @@ class _ManagerApprovalDialogState extends State<ManagerApprovalDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('قيمة ${widget.operationName} الحالية: ${widget.discountAmount} ج.س'),
+            Text(widget.operationName == 'الخصم'
+                ? 'الخصم الحالي: ${widget.discountAmount} ج.س'
+                : 'قيمة ${widget.operationName} الحالية: ${widget.discountAmount} ج.س'),
             const SizedBox(height: 8),
             const Text(
-              'هذه القيمة تتجاوز سقف صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه العملية المحددة، صالحة لمدة دقيقتين.',
+              widget.operationName == 'الخصم'
+                  ? 'هذا الخصم يتجاوز صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه الفاتورة فقط، صالحة لمدة دقيقتين.'
+                  : 'هذه القيمة تتجاوز سقف صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه العملية المحددة، صالحة لمدة دقيقتين.',
             ),
             const SizedBox(height: 14),
             TextField(
@@ -103,7 +109,7 @@ class _ManagerApprovalDialogState extends State<ManagerApprovalDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء العملية'),
+          child: Text(widget.cancelLabel),
         ),
         FilledButton(
           onPressed: _submit,
