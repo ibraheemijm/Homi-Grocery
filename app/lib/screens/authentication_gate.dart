@@ -61,13 +61,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   Future<void> _activateUser(AuthUser user) async {
     final database = await GroceryDatabase.open();
     final shifts = CashShiftRepository(database);
-    final openShift = await shifts.getOpenShift();
+    final openShift = await shifts.getOpenShift(userId: user.id);
     if (openShift != null) {
-      if (openShift.userId != user.id) {
-        throw const CashShiftException(
-          'توجد وردية مفتوحة لمستخدم آخر. سجّل الدخول بالحساب صاحب الوردية وأغلقها أولًا.',
-        );
-      }
       if (mounted) {
         setState(() {
           _shift = openShift;
@@ -75,6 +70,11 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         });
       }
       return;
+    }
+    if (await shifts.hasOpenShiftForAnotherUser(userId: user.id)) {
+      throw const CashShiftException(
+        'توجد وردية مفتوحة لحساب آخر. يجب على صاحب الوردية تسجيل الدخول وإغلاقها أولًا.',
+      );
     }
 
     final openingCash = await _askCashAmount(
