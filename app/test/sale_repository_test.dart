@@ -484,6 +484,26 @@ void main() {
     expect((await products.getById(productId))!.stockQuantity, -1);
   });
 
+  test('يرفض البيع النقدي للمدير دون وردية نشطة ولا يسجل حركة يتيمة', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'ماء', sellingPrice: 100, stockQuantity: 2,
+    ));
+    final product = (await products.getById(productId))!;
+    await expectLater(
+      sales.createSale(
+        lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0,
+        paidAmount: 100,
+        paymentMethod: 'نقدي',
+        userId: managerId,
+      ),
+      throwsA(isA<CashShiftException>()),
+    );
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+    expect((await products.getById(productId))!.stockQuantity, 2);
+  });
+
   test('يربط البيع النقدي بالوردية النشطة ويستثني التحويل البنكي', () async {
     final manager = managerAccount;
     final shift = await CashShiftRepository(database).openShift(
