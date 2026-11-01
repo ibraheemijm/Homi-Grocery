@@ -698,9 +698,9 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
 
   List<_CashierWorkspaceItem> get _items => [
         const _CashierWorkspaceItem('المبيعات', Icons.point_of_sale_rounded, 'sales'),
-        if (_permissions.contains('view_invoice_history'))
+        if (_permissions.contains('view_invoice_history') || _permissions.contains('returns') || _permissions.contains('return_refunds'))
           const _CashierWorkspaceItem('الفواتير', Icons.receipt_long_rounded, 'invoices'),
-        if (_permissions.contains('view_customer_data'))
+        if (_permissions.contains('view_customer_data') || _permissions.contains('customer_collections'))
           const _CashierWorkspaceItem('الزبائن والديون', Icons.people_alt_rounded, 'customers'),
         if (_permissions.contains('view_supplier_data'))
           const _CashierWorkspaceItem('الموردون والمشتريات', Icons.local_shipping_rounded, 'suppliers'),
