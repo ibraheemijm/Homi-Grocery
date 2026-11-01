@@ -160,7 +160,7 @@ class SaleRepository {
     if (role != 'cashier') throw StateError('لا يملك المستخدم صلاحية عرض سجل الفواتير.');
     final permissions = await _database.query(
       'cashier_permissions', columns: ['is_allowed'],
-      where: "user_id = ? AND permission_key IN ('view_invoice_history', 'returns', 'return_refunds')",
+      where: "user_id = ? AND permission_key IN ('view_invoice_history', 'returns', 'return_refunds') AND is_allowed = 1",
       whereArgs: [userId], limit: 1,
     );
     if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
