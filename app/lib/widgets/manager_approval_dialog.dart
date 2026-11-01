@@ -68,7 +68,7 @@ class _ManagerApprovalDialogState extends State<ManagerApprovalDialog> {
                 ? 'الخصم الحالي: ${widget.discountAmount} ج.س'
                 : 'قيمة ${widget.operationName} الحالية: ${widget.discountAmount} ج.س'),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               widget.operationName == 'الخصم'
                   ? 'هذا الخصم يتجاوز صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه الفاتورة فقط، صالحة لمدة دقيقتين.'
                   : 'هذه القيمة تتجاوز سقف صلاحية الكاشير. أدخل بيانات حساب مدير نشط لإصدار موافقة لهذه العملية المحددة، صالحة لمدة دقيقتين.',
