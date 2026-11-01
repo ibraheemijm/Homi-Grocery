@@ -838,12 +838,14 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       }
       String? managerApprovalToken;
-      if (widget.cashierMode &&
+      final needsManagerApproval = widget.cashierMode &&
           _discount > 0 &&
           await _salesRepository!.requiresCashierApproval(
             userId: widget.userId,
             amount: _discount,
-          )) {
+          );
+      if (!mounted) return;
+      if (needsManagerApproval) {
         final activeShiftId = widget.shiftId;
         if (activeShiftId == null) {
           throw StateError('لا توجد وردية نشطة لهذا الكاشير.');
