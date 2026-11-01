@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 16;
+  static const int _version = 17;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -49,6 +49,7 @@ class GroceryDatabase {
         await createNotificationsSchema(db);
         await createAuthSchema(db);
         await createCashShiftsSchema(db);
+        await createManagerApprovalsSchema(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // ترحيل قواعد البيانات القديمة بإضافة جداول المبيعات دون حذف بيانات الأصناف.
@@ -99,6 +100,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 16) {
           await createCashierPermissionsSchema(db);
+        }
+        if (oldVersion < 17) {
+          await createManagerApprovalsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -523,6 +527,39 @@ class GroceryDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_cashier_permissions_user ON cashier_permissions(user_id, permission_key)',
+    );
+  }
+
+  /// موافقات المدير المؤقتة؛ يُحفظ بصمة الرمز فقط ويرتبط كل إذن بعملية واحدة.
+  static Future<void> createManagerApprovalsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS manager_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_hash TEXT NOT NULL UNIQUE,
+        manager_user_id INTEGER NOT NULL REFERENCES users(id),
+        cashier_user_id INTEGER NOT NULL REFERENCES users(id),
+        shift_id INTEGER NOT NULL REFERENCES cash_shifts(id),
+        permission_key TEXT NOT NULL,
+        operation_type TEXT NOT NULL,
+        amount INTEGER CHECK (amount IS NULL OR amount >= 0),
+        reference_type TEXT,
+        reference_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'consumed', 'expired', 'rejected')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT,
+        expired_at TEXT,
+        rejected_at TEXT,
+        CHECK ((reference_type IS NULL AND reference_id IS NULL) OR
+          (reference_type IS NOT NULL AND reference_id IS NOT NULL))
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_manager_approvals_cashier_status ON manager_approvals(cashier_user_id, status, expires_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_manager_approvals_shift ON manager_approvals(shift_id, status)',
     );
   }
 
