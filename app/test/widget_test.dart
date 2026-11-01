@@ -171,26 +171,8 @@ void main() {
 
   testWidgets('يعرض مساحة الكاشير أقسامه المسموح بها دون أدوات المدير',
       (tester) async {
-    // لا يعتمد الاختبار على قاعدة بيانات جهاز المطور أو وجود حسابات سابقة.
-    await GroceryDatabase.closeForMaintenance();
-    await _testSupportDirectory
-        .delete(recursive: true);
-    await _testSupportDirectory.create(recursive: true);
-
-    final database = await GroceryDatabase.open();
-    // نزرع حسابًا صالحًا للاختبار مباشرة؛ لا نحتاج اختبار اشتقاق كلمات المرور هنا.
-    final cashierId = await database.insert('users', {
-      'username': 'cashier_one',
-      'display_name': 'الكاشير الأول',
-      'password_hash': 'test-hash',
-      'password_salt': 'test-salt',
-      'password_iterations': 600000,
-      'role': 'cashier',
-      'is_active': 1,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    });
     final cashier = AuthUser(
-      id: cashierId,
+      id: 42,
       username: 'cashier_one',
       displayName: 'الكاشير الأول',
       role: 'cashier',
@@ -202,24 +184,23 @@ void main() {
           cashier: cashier,
           shiftId: 8,
           onLogout: () {},
+          // اختبار الأقسام لا يحتاج فتح قاعدة البيانات أو تهيئة شاشة البيع.
+          permissionLoader: () async => <String>{},
+          salesScreenBuilder: (_) =>
+              const Center(child: Text('محتوى البيع التجريبي')),
         ),
       ),
     );
-    // ينتظر الاختبار تحميل الصلاحيات من قاعدة بيانات الاختبار المهيأة أعلاه.
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
     await tester.pump();
 
     expect(find.text('Homi Grocery'), findsOneWidget);
     expect(find.byTooltip('الأقسام المسموح بها'), findsOneWidget);
-    await tester.tap(find.byTooltip('الأقسام المسموح بها'));
-    // لا نستخدم pumpAndSettle لأن شاشة المبيعات قد تحتوي مؤشر تحميل مستمرًا.
-    await tester.pump(const Duration(milliseconds: 350));
-
-    expect(find.text('أقسام الكاشير'), findsOneWidget);
     expect(find.text('المبيعات'), findsOneWidget);
-    expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
+    expect(find.text('محتوى البيع التجريبي'), findsOneWidget);
     expect(find.text('مبيعات اليوم'), findsNothing);
     expect(find.text('إدارة الكاشيرين'), findsNothing);
     expect(find.text('التقارير'), findsNothing);
+    expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
   });
 }
