@@ -949,7 +949,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         userId: widget.userId,
         purchaseId: purchaseId,
         quantitiesByPurchaseItemId: quantities,
-        note: 'مرتجع فاتورة ${invoiceNumber}',
+        note: 'مرتجع فاتورة $invoiceNumber',
       );
       await _load();
       _products = await _productsRepository!.search('');
