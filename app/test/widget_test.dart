@@ -245,10 +245,12 @@ void main() {
       (tester) async {
     final repository = _CollectionOnlyCustomerSource();
     await tester.pumpWidget(MaterialApp(
-      home: CustomersScreen(
-        userId: 7,
-        cashierPermissions: const {'customer_collections'},
-        repository: repository,
+      home: Scaffold(
+        body: CustomersScreen(
+          userId: 7,
+          cashierPermissions: const {'customer_collections'},
+          repository: repository,
+        ),
       ),
     ));
     await tester.pump();
