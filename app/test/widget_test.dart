@@ -198,6 +198,10 @@ void main() {
     expect(find.byTooltip('الأقسام المسموح بها'), findsOneWidget);
     expect(find.text('المبيعات'), findsOneWidget);
     expect(find.text('محتوى البيع التجريبي'), findsOneWidget);
+    await tester.tap(find.byTooltip('الأقسام المسموح بها'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('أقسام الكاشير'), findsOneWidget);
+    expect(find.text('المبيعات'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsNothing);
     expect(find.text('إدارة الكاشيرين'), findsNothing);
     expect(find.text('التقارير'), findsNothing);
