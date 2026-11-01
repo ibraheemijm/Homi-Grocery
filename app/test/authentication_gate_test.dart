@@ -7,14 +7,29 @@ import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 
-// ينتظر اكتمال العمليات غير المتزامنة دون انتظار توقف مؤشر التحميل الدوار.
+// ينتظر عمليات قاعدة البيانات والانتقالات دون انتظار مؤشر التحميل الدوار.
 Future<void> _pumpGate(WidgetTester tester) async {
   await tester.pump();
-  // اشتقاق PBKDF2 يعمل في isolate وقد يحتاج وقتًا أطول على CI البطيء.
   await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(seconds: 4));
+    await Future<void>.delayed(const Duration(milliseconds: 250));
   });
   await tester.pump(const Duration(milliseconds: 400));
+}
+
+// يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
+class _GateTestAuthRepository extends AuthRepository {
+  _GateTestAuthRepository(super.database, {required this.users});
+
+  final Map<String, AuthUser> users;
+
+  @override
+  Future<AuthUser> login({required String username, required String password}) async {
+    final user = users[username.trim()];
+    if (user == null) {
+      throw const AuthException('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    }
+    return user;
+  }
 }
 
 void main() {
@@ -59,6 +74,10 @@ void main() {
       MaterialApp(
         home: AuthenticationGate(
           databaseProvider: () async => database,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
           authenticatedBuilder: (user, shiftId, onLogout) => Scaffold(
             body: Column(
               children: [
