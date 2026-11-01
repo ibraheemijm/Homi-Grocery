@@ -82,14 +82,14 @@ void main() {
     await tester.tap(find.text('دخول'));
     await _pumpGate(tester);
 
-    expect(find.text('الحساب الحالي: cashier_one'), findsOneWidget);
-    expect(find.text('الاسم الظاهر: الكاشير الأول'), findsOneWidget);
-
+    // لا تُفعّل الجلسة قبل إدخال الرصيد الافتتاحي وإتمام فتح الوردية.
+    expect(find.text('فتح الوردية'), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('فتح الوردية'));
     await _pumpGate(tester);
 
     expect(find.text('الحساب الحالي: cashier_one'), findsOneWidget);
+    expect(find.text('الاسم الظاهر: الكاشير الأول'), findsOneWidget);
     final cashierShiftText = tester.widget<Text>(find.textContaining('رقم الوردية:'));
     final cashierShift = cashierShiftText.data;
 
