@@ -759,7 +759,7 @@ class _SalesScreenState extends State<SalesScreen> {
   // الكاشير لا يختار طريقة سداد؛ مساره نقدي كامل فقط.
   Future<void> _checkout() async {
     Map<String, Object?>? result;
-    if (widget.cashierMode) {
+    if (widget.cashierMode && !_canCreditSales) {
       result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي'};
     } else {
       final paidController = TextEditingController(text: '$_total');
@@ -775,10 +775,12 @@ class _SalesScreenState extends State<SalesScreen> {
             DropdownButtonFormField<String>(
               initialValue: method,
               decoration: const InputDecoration(labelText: 'طريقة السداد', border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-                DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
-                DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
+              items: [
+                const DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                if (_canCreditSales) ...[
+                  const DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
+                  const DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
+                ],
               ],
               onChanged: (value) {
                 if (value == null) return;
@@ -793,17 +795,18 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(height: 12),
             TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: paymentChannel,
-              decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-                DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
-              ],
-              onChanged: (value) {
-                if (value != null) refreshDialog(() => paymentChannel = value);
-              },
-            ),
+            if (!widget.cashierMode)
+              DropdownButtonFormField<String>(
+                initialValue: paymentChannel,
+                decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                  DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                ],
+                onChanged: (value) {
+                  if (value != null) refreshDialog(() => paymentChannel = value);
+                },
+              ),
             const SizedBox(height: 8),
             const Text('المتبقي سيظهر في الفاتورة. متابعة ديون الزبائن ستضاف ضمن وحدة الحسابات.', style: TextStyle(fontSize: 12)),
           ])),
@@ -833,7 +836,9 @@ class _SalesScreenState extends State<SalesScreen> {
       final typedName = _customer.text.trim();
       String? customerNameForDebt;
       if (hasDebt && typedName.isNotEmpty) {
-        if (_selectedCustomerId != null) {
+        if (_customersRepository == null) {
+          customerNameForDebt = typedName;
+        } else if (_selectedCustomerId != null) {
           customerNameForDebt = typedName;
         } else {
           customerNameForDebt = await _resolveNewDebtCustomerName(typedName);
@@ -1043,7 +1048,7 @@ class _SalesScreenState extends State<SalesScreen> {
         note: note,
         userId: widget.userId,
       );
-      if (!widget.cashierMode) {
+      if (_canViewInvoices) {
         _recent = await _salesRepository!.recentSales(userId: widget.userId, limit: 50);
       }
       widget.onDataChanged?.call();
