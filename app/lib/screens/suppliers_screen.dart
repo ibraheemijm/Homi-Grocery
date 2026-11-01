@@ -32,7 +32,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   bool get _canPaySupplier => _isManager || widget.cashierPermissions!.contains('supplier_payments');
   bool get _canReturnSupplierItems => _isManager || widget.cashierPermissions!.contains('supplier_returns');
   bool get _canReceiveSupplierRefund => _isManager || widget.cashierPermissions!.contains('supplier_return_refunds');
-  bool get _canViewPurchaseHistory => _canViewSupplierData || _canReturnSupplierItems || _canReceiveSupplierRefund;
+  bool get _canViewPurchaseHistory => _canViewSupplierData || _canReturnSupplierItems;
 
   @override
   void initState() {
@@ -734,6 +734,40 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     if (!_canViewPurchaseHistory) return;
 
     try {
+      if (!_canViewSupplierData) {
+        final purchases = await _repository!.purchaseHistoryForReturns(userId: widget.userId);
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('فواتير الشراء المتاحة للمرتجعات'),
+            content: SizedBox(
+              width: 560,
+              child: purchases.isEmpty
+                  ? const Padding(padding: EdgeInsets.all(20), child: Text('لا توجد فواتير شراء مسجلة بعد.', textAlign: TextAlign.center))
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: purchases.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final purchase = purchases[index];
+                        return ListTile(
+                          title: Text(purchase.invoiceNumber),
+                          subtitle: Text('${purchase.supplierName} • ${purchase.createdAt}'),
+                          trailing: const Icon(Icons.assignment_return_outlined),
+                          onTap: () {
+                            Navigator.pop(dialogContext);
+                            _createSupplierReturnForPurchase(purchaseId: purchase.id, invoiceNumber: purchase.invoiceNumber);
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+          ),
+        );
+        return;
+      }
       final purchases = await _repository!.purchaseHistory(userId: widget.userId);
       if (!mounted) return;
       await showDialog<void>(
@@ -780,6 +814,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _showPurchaseDetails(PurchaseHistoryRecord purchase) async {
+    if (!_canViewSupplierData) return;
     try {
       final items = await _repository!.purchaseItems(purchase.id, userId: widget.userId);
       if (!mounted) return;
@@ -833,11 +868,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     }
   }
 
-  Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async {
+  Future<void> _createSupplierReturn(PurchaseHistoryRecord purchase) async => _createSupplierReturnForPurchase(purchaseId: purchaseId, invoiceNumber: invoiceNumber);
+
+  Future<void> _createSupplierReturnForPurchase({required int purchaseId, required String invoiceNumber}) async {
     if (!_canReturnSupplierItems) return;
 
     try {
-      final rows = await _repository!.returnablePurchaseItems(purchase.id, userId: widget.userId);
+      final rows = await _repository!.returnablePurchaseItems(purchaseId, userId: widget.userId);
       if (!mounted) return;
       final controllers = <int, TextEditingController>{};
       for (final row in rows) {
@@ -846,7 +883,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       final quantities = await showDialog<Map<int, double>>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('مرتجع ${purchase.invoiceNumber}'),
+          title: Text('مرتجع ${invoiceNumber}'),
           content: SizedBox(
             width: 540,
             child: SingleChildScrollView(
@@ -910,16 +947,16 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       if (quantities == null || !mounted) return;
       final returnId = await _repository!.createSupplierReturn(
         userId: widget.userId,
-        purchaseId: purchase.id,
+        purchaseId: purchaseId,
         quantitiesByPurchaseItemId: quantities,
-        note: 'مرتجع فاتورة ${purchase.invoiceNumber}',
+        note: 'مرتجع فاتورة ${invoiceNumber}',
       );
       await _load();
       _products = await _productsRepository!.search('');
       _message('تم تسجيل المرتجع. إذا لم يُعد المورد المبلغ نقدًا، سيبقى رصيدًا دائنًا لنا.');
-      final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId, userId: widget.userId);
-      if (_canReceiveSupplierRefund && availableRefund > 0 && mounted) {
-        await _askSupplierRefund(returnId, availableRefund);
+      if (_canReceiveSupplierRefund) {
+        final availableRefund = await _repository!.maximumRefundableSupplierReturnAmount(returnId, userId: widget.userId);
+        if (availableRefund > 0 && mounted) await _askSupplierRefund(returnId, availableRefund);
       }
     } catch (error) {
       _message('تعذر تسجيل مرتجع المورد: $error');
