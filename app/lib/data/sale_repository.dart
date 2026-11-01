@@ -1,6 +1,8 @@
 // عمليات البيع والفواتير داخل معاملات SQLite لضمان حفظ الفاتورة والمخزون معًا.
 import 'package:sqflite/sqflite.dart';
 
+import 'auth_repository.dart';
+import 'manager_approval_repository.dart';
 import 'product_repository.dart';
 import 'cash_shift_repository.dart';
 
@@ -60,9 +62,33 @@ class SaleReturnRecord {
 }
 
 class SaleRepository {
-  SaleRepository(this._database);
+  SaleRepository(this._database)
+      : _managerApprovals = ManagerApprovalRepository(
+          _database,
+          AuthRepository(_database),
+        );
 
   final Database _database;
+  final ManagerApprovalRepository _managerApprovals;
+
+  /// يحدد من إعدادات الكاشير ما إذا كان الخصم يحتاج موافقة مدير.
+  /// يعاد فحص القرار داخل معاملة البيع لمنع الاعتماد على قراءة قديمة.
+  Future<bool> requiresCashierApproval({
+    required int userId,
+    required int amount,
+  }) async {
+    if (amount < 0) throw ArgumentError('قيمة الخصم غير صالحة.');
+    final rows = await _database.query(
+      'cashier_permissions',
+      columns: ['is_allowed', 'max_amount'],
+      where: "user_id = ? AND permission_key = 'discounts'",
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.single['is_allowed'] != 1) return true;
+    final limit = (rows.single['max_amount'] as num?)?.toInt();
+    return limit != null && amount > limit;
+  }
 
   /// يتحقق من صلاحية الكاشير ويعيد سقف العملية المالي إن وُجد.
   /// الصلاحية غير المسجلة أو غير المفعلة مرفوضة افتراضيًا.
@@ -159,6 +185,7 @@ class SaleRepository {
     int? customerId,
     required int userId,
     int? shiftId,
+    String? managerApprovalToken,
   }) async {
     if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
     if (discount < 0 || paidAmount < 0) {
@@ -208,7 +235,8 @@ class SaleRepository {
     final invoice = 'HG-${now.microsecondsSinceEpoch}';
     final createdAt = now.toIso8601String();
 
-    return _database.transaction((txn) async {
+    ManagerApprovalConsumeResult? approvalFailure;
+    final sale = await _database.transaction<SaleRecord?>((txn) async {
       final accounts = await txn.query(
         'users',
         columns: ['role', 'is_active'],
@@ -230,14 +258,42 @@ class SaleRepository {
             );
           }
           if (discount > 0) {
-            final limit = await _requireCashierPermission(
-              txn,
-              userId: userId,
-              permissionKey: 'discounts',
-              permissionLabel: 'تقديم الخصم',
+            final permissionRows = await txn.query(
+              'cashier_permissions',
+              columns: ['is_allowed', 'max_amount'],
+              where: "user_id = ? AND permission_key = 'discounts'",
+              whereArgs: [userId],
+              limit: 1,
             );
-            if (limit != null && discount > limit) {
-              throw StateError('قيمة الخصم تتجاوز الحد المسموح ($limit ج.س).');
+            final permission = permissionRows.isEmpty
+                ? null
+                : permissionRows.single;
+            final isAllowed = permission?['is_allowed'] == 1;
+            final limit = (permission?['max_amount'] as num?)?.toInt();
+            final needsApproval = !isAllowed || (limit != null && discount > limit);
+            if (needsApproval) {
+              if (managerApprovalToken == null || shiftId == null) {
+                approvalFailure = ManagerApprovalConsumeResult.notFound;
+                return null;
+              }
+              approvalFailure = await _managerApprovals.consumeWithinTransaction(
+                txn,
+                token: managerApprovalToken,
+                executingUserId: userId,
+                scope: ManagerApprovalScope(
+                  cashierUserId: userId,
+                  shiftId: shiftId,
+                  permissionKey: 'discounts',
+                  operationType: 'sale.create',
+                  amount: discount,
+                ),
+              );
+              if (approvalFailure != ManagerApprovalConsumeResult.consumed) {
+                return null;
+              }
+            } else if (managerApprovalToken != null) {
+              approvalFailure = ManagerApprovalConsumeResult.scopeMismatch;
+              return null;
             }
           }
           if (hasDebt) {
@@ -369,6 +425,19 @@ class SaleRepository {
         customerName: linkedCustomerId == null ? null : normalizedCustomer,
       );
     });
+
+    if (sale == null) {
+      final message = switch (approvalFailure) {
+        ManagerApprovalConsumeResult.expired => 'انتهت موافقة المدير. اطلب موافقة جديدة.',
+        ManagerApprovalConsumeResult.scopeMismatch => 'الموافقة لا تطابق مبلغ الخصم أو المستخدم أو الوردية.',
+        ManagerApprovalConsumeResult.alreadyUsed => 'استُخدمت موافقة المدير مسبقًا.',
+        ManagerApprovalConsumeResult.inactiveAccount => 'حساب المدير أو الكاشير لم يعد نشطًا.',
+        ManagerApprovalConsumeResult.invalidShift => 'الوردية غير نشطة أو لا تخص الكاشير.',
+        _ => 'يتطلب هذا الخصم موافقة مدير صالحة قبل حفظ الفاتورة.',
+      };
+      throw StateError(message);
+    }
+    return sale;
   }
 
 
