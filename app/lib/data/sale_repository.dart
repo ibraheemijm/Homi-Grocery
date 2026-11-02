@@ -245,6 +245,16 @@ class SaleRepository {
     return _database.rawQuery('''
       SELECT s.id, s.invoice_number, s.customer_name, s.total,
         s.paid_amount, s.overpayment_amount, s.payment_method, s.created_at,
+        COALESCE((SELECT o.received_amount FROM customer_overpayments o
+          WHERE o.sale_id = s.id LIMIT 1), s.overpayment_amount) AS overpayment_received,
+        COALESCE((SELECT o.refunded_amount FROM customer_overpayments o
+          WHERE o.sale_id = s.id LIMIT 1), 0) AS overpayment_refunded,
+        MAX(
+          COALESCE((SELECT o.received_amount FROM customer_overpayments o
+            WHERE o.sale_id = s.id LIMIT 1), s.overpayment_amount) -
+          COALESCE((SELECT o.refunded_amount FROM customer_overpayments o
+            WHERE o.sale_id = s.id LIMIT 1), 0), 0
+        ) AS overpayment_outstanding,
         (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
       FROM sales s
       WHERE (? = '' OR s.invoice_number LIKE ? OR COALESCE(s.customer_name, '') LIKE ?)
