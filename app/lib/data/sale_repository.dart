@@ -408,10 +408,8 @@ class SaleRepository {
         throw StateError('نوع الحساب غير مصرح له بتسجيل المبيعات.');
       }
       if (role == 'cashier') {
-          if (total <= 0 || bankReceived > 0) {
-            throw StateError(
-              'الكاشير لا يسجل بيعًا صفريًا أو يستلم عبر التحويل البنكي.',
-            );
+          if (total <= 0) {
+            throw StateError('لا يمكن تسجيل فاتورة بيع بإجمالي صفري أو سالب.');
           }
           if (discount > 0) {
             final permissionRows = await txn.query(
