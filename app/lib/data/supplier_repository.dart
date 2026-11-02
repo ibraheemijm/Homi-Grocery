@@ -269,7 +269,7 @@ class SupplierRepository {
     final rows = await _database.rawQuery('''
       SELECT 'رصيد افتتاحي' AS title, ABS(s.opening_balance) AS amount,
         CASE WHEN s.opening_balance > 0 THEN 1 ELSE 0 END AS is_payable,
-        s.created_at AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+        COALESCE((SELECT value || 'T00:00:00.000Z' FROM app_metadata WHERE key = 'system_start_date'), s.created_at) AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
       FROM suppliers s WHERE s.id = ? AND s.opening_balance <> 0
       UNION ALL
       SELECT 'فاتورة شراء ' || p.invoice_number AS title,

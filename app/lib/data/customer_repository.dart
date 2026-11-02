@@ -119,7 +119,7 @@ class CustomerRepository implements CustomerDataSource {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
       SELECT 'رصيد افتتاحي' AS title, c.opening_balance AS amount,
-        0 AS is_credit, c.created_at AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+        0 AS is_credit, COALESCE((SELECT value || 'T00:00:00.000Z' FROM app_metadata WHERE key = 'system_start_date'), c.created_at) AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
       FROM customers c WHERE c.id = ? AND c.opening_balance > 0
       UNION ALL
       SELECT 'فاتورة ' || s.invoice_number AS title,

@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 20;
+  static const int _version = 21;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -36,6 +36,7 @@ class GroceryDatabase {
       },
       onCreate: (db, version) async {
         await createSchema(db);
+        await createSystemSettingsSchema(db);
         await createSalesSchema(db);
         await createCustomersSchema(db);
         await createStockMovementsSchema(db);
@@ -114,6 +115,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 20) {
           await createOpeningBalancesSchema(db);
+        }
+        if (oldVersion < 21) {
+          await createSystemSettingsSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -195,6 +199,17 @@ class GroceryDatabase {
     await db.execute('CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id)');
   }
 
+
+  // يحدد تاريخ بدء النظام افتراضيًا بأول يناير من السنة الحالية.
+  // يمكن للمدير تغييره من الإعدادات دون تعديل تواريخ العمليات المالية.
+  static Future<void> createSystemSettingsSchema(DatabaseExecutor db) async {
+    final yearStart = '${DateTime.now().year.toString().padLeft(4, '0')}-01-01';
+    await db.insert(
+      'app_metadata',
+      {'key': 'system_start_date', 'value': yearStart},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
 
   // يضيف حقل الزيادة إلى الفواتير القديمة دون تعديل قيمها أو حذفها.
   static Future<void> createSalesOverpaymentSchema(DatabaseExecutor db) async {

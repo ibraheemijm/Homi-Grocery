@@ -24,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _pdfFilenameLanguage = 'both';
   bool _importingFont = false;
   bool _occasionEnabled = false;
+  DateTime _systemStartDate = DateTime(DateTime.now().year, 1, 1);
+  DateTime _savedSystemStartDate = DateTime(DateTime.now().year, 1, 1);
   bool _loading = true;
   bool _saving = false;
   String? _message;
@@ -50,7 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final rows = await db.query(
         'app_metadata',
         columns: ['key', 'value'],
-        where: 'key IN (?, ?, ?, ?, ?, ?, ?)',
+        where: 'key IN (?, ?, ?, ?, ?, ?, ?, ?)',
         whereArgs: [
           'store_name',
           'clock_24h',
@@ -59,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'occasion_start',
           'sales_view_mode',
           'pdf_filename_language',
+          'system_start_date',
         ],
       );
       final values = {
@@ -71,6 +74,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         whereArgs: ['occasion_end'],
         limit: 1,
       );
+      final defaultStart = DateTime(DateTime.now().year, 1, 1);
+      final parsedStart = DateTime.tryParse(values['system_start_date'] ?? '');
+      final systemStart = parsedStart == null
+          ? defaultStart
+          : DateTime(parsedStart.year, parsedStart.month, parsedStart.day);
       if (!mounted) {
         return;
       }
@@ -85,6 +93,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _occasionText.text = values['occasion_text'] ?? '';
         _occasionStart.text = values['occasion_start'] ?? '';
         _occasionEnd.text = endRows.isEmpty ? '' : endRows.first['value'] as String;
+        _systemStartDate = systemStart;
+        _savedSystemStartDate = systemStart;
         _loading = false;
       });
     } catch (error) {
@@ -118,10 +128,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  String _dateValue(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _chooseSystemStartDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _systemStartDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      helpText: 'اختر تاريخ بدء استخدام البرنامج',
+    );
+    if (selected != null && mounted) {
+      setState(() => _systemStartDate = DateTime(selected.year, selected.month, selected.day));
+    }
+  }
+
+  Future<bool> _confirmSystemStartDateChange(Database db) async {
+    if (_systemStartDate == _savedSystemStartDate) return true;
+    final rows = await db.rawQuery('''
+      SELECT
+        (SELECT COUNT(*) FROM sales) +
+        (SELECT COUNT(*) FROM purchases) +
+        (SELECT COUNT(*) FROM customer_payments) +
+        (SELECT COUNT(*) FROM supplier_payments) +
+        (SELECT COUNT(*) FROM cash_transactions) +
+        (SELECT COUNT(*) FROM sale_returns) +
+        (SELECT COUNT(*) FROM supplier_returns) AS activity_count
+    ''');
+    final hasActivity = (rows.first['activity_count'] as num).toInt() > 0;
+    if (!hasActivity || !mounted) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تأكيد تغيير تاريخ بدء النظام'),
+            content: const Text(
+              'توجد عمليات مالية مسجلة. سيغيّر هذا التعديل التاريخ الظاهر لبنود الأرصدة الافتتاحية فقط، ولن يغيّر تواريخ الفواتير أو الحركات أو قيم الأرصدة. هل تريد المتابعة؟',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('تأكيد التغيير')),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _save() async {
     final name = _storeName.text.trim();
     if (name.isEmpty) {
       setState(() => _message = 'أدخل اسم البقالة أولًا.');
+      return;
+    }
+    if (_systemStartDate.isAfter(DateTime.now())) {
+      setState(() => _message = 'تاريخ بدء استخدام البرنامج لا يمكن أن يكون في المستقبل.');
       return;
     }
     if (_occasionEnabled) {
@@ -143,11 +203,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final db = await GroceryDatabase.open();
+      if (!await _confirmSystemStartDateChange(db)) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
       final values = <String, String>{
         'store_name': name,
         'clock_24h': _clock24.toString(),
         'sales_view_mode': _salesViewMode,
         'pdf_filename_language': _pdfFilenameLanguage,
+        'system_start_date': _dateValue(_systemStartDate),
         'occasion_enabled': _occasionEnabled.toString(),
         'occasion_text': _occasionText.text.trim(),
         'occasion_start': _occasionStart.text.trim(),
@@ -163,6 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
       await FontPreferences.save(uiFamily: _uiFont, documentFamily: _documentFont);
+      _savedSystemStartDate = _systemStartDate;
       if (mounted) setState(() => _message = 'تم حفظ الإعدادات. طُبّق خط الواجهة، وسيُستخدم خط المستندات عند إنشاء الفواتير وملفات PDF.');
     } catch (error) {
       if (mounted) setState(() => _message = 'تعذر حفظ الإعدادات: $error');
@@ -199,6 +265,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               hintText: 'مثال: بقالة الحي',
                               border: OutlineInputBorder(),
                             ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text('التاريخ المحاسبي',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'تاريخ بدء استخدام البرنامج، ويُستخدم كتاريخ لبنود الأرصدة الافتتاحية في كشوف حساب الزبائن والموردين. الافتراضي أول يناير من السنة الحالية.',
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _chooseSystemStartDate,
+                            icon: const Icon(Icons.calendar_month_rounded),
+                            label: Text('تاريخ بدء الاستخدام: ${_dateValue(_systemStartDate)}'),
                           ),
                           const SizedBox(height: 18),
                           const Text('إعدادات العرض',
