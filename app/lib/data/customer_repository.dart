@@ -4,13 +4,14 @@ import 'package:sqflite/sqflite.dart';
 import 'cash_shift_repository.dart';
 
 class CustomerBalance {
-  const CustomerBalance({required this.id, required this.name, required this.salesCount, required this.totalDebt, required this.totalPaid});
+  const CustomerBalance({required this.id, required this.name, required this.salesCount, required this.totalDebt, required this.totalPaid, this.openingBalance = 0});
   final int id;
   final String name;
   final int salesCount;
   final int totalDebt;
   final int totalPaid;
-  int get balance => (totalDebt - totalPaid).clamp(0, 1 << 62).toInt();
+  final int openingBalance;
+  int get balance => (totalDebt - totalPaid + openingBalance).clamp(0, 1 << 62).toInt();
 }
 
 class CustomerLedgerEntry {
@@ -32,7 +33,7 @@ class CustomerLedgerEntry {
 abstract interface class CustomerDataSource {
   Future<List<CustomerBalance>> balances({required int userId, String query = ''});
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
-  Future<int> addCustomer({required String name, String? phone, String? notes});
+  Future<int> addCustomer({required String name, String? phone, String? notes, int openingBalance = 0});
   Future<void> recordPayment({
     required int customerId,
     required int amount,
@@ -85,7 +86,8 @@ class CustomerRepository implements CustomerDataSource {
             )
           )) FROM sales s WHERE s.customer_id = c.id
         ), 0) AS total_debt,
-        COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0) AS total_paid
+        COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0) AS total_paid,
+        c.opening_balance AS opening_balance
       FROM customers c
       WHERE c.name LIKE ?
       ORDER BY CASE WHEN c.name = ? COLLATE NOCASE THEN 0 ELSE 1 END,
@@ -105,6 +107,7 @@ class CustomerRepository implements CustomerDataSource {
       salesCount: (row['sales_count'] as num).toInt(),
       totalDebt: (row['total_debt'] as num).toInt(),
       totalPaid: (row['total_paid'] as num).toInt(),
+      openingBalance: (row['opening_balance'] as num).toInt(),
     )).toList(growable: false);
   }
 
@@ -113,6 +116,10 @@ class CustomerRepository implements CustomerDataSource {
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId}) async {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
+      SELECT 'رصيد افتتاحي' AS title, c.opening_balance AS amount,
+        0 AS is_credit, c.created_at AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+      FROM customers c WHERE c.id = ? AND c.opening_balance > 0
+      UNION ALL
       SELECT 'فاتورة ' || s.invoice_number AS title,
         MAX(0, s.total - s.paid_amount) AS amount,
         0 AS is_credit, s.created_at AS created_at,
@@ -139,7 +146,7 @@ class CustomerRepository implements CustomerDataSource {
       JOIN sales s ON s.id = srr.sale_id
       WHERE s.customer_id = ?
       ORDER BY created_at ASC
-    ''', [customerId, customerId, customerId, customerId]);
+    ''', [customerId, customerId, customerId, customerId, customerId]);
     return rows.map((row) => CustomerLedgerEntry(
       title: row['title'] as String,
       amount: (row['amount'] as num).toInt(),
@@ -151,13 +158,15 @@ class CustomerRepository implements CustomerDataSource {
 
   // إضافة زبون يدويًا مع منع تكرار الاسم دون قصد.
   @override
-  Future<int> addCustomer({required String name, String? phone, String? notes}) async {
+  Future<int> addCustomer({required String name, String? phone, String? notes, int openingBalance = 0}) async {
+    if (openingBalance < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
     final normalized = name.trim();
     if (normalized.isEmpty) throw ArgumentError('اسم الزبون مطلوب.');
     final id = await _database.insert('customers', {
       'name': normalized,
       'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
       'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+      'opening_balance': openingBalance,
       'created_at': DateTime.now().toUtc().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     if (id != 0) return id;
@@ -165,6 +174,17 @@ class CustomerRepository implements CustomerDataSource {
       where: 'name = ? COLLATE NOCASE', whereArgs: [normalized], limit: 1);
     if (rows.isEmpty) throw StateError('تعذر حفظ الزبون.');
     return rows.first['id'] as int;
+  }
+
+  // تعديل الرصيد الافتتاحي للمدير فقط، دون إنشاء حركة خزينة.
+  Future<void> setOpeningBalance({required int customerId, required int amount, required int userId}) async {
+    if (amount < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
+    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
+    if (users.isEmpty || users.single['is_active'] != 1 || users.single['role'] != 'manager') {
+      throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير فقط.');
+    }
+    final changed = await _database.update('customers', {'opening_balance': amount}, where: 'id = ?', whereArgs: [customerId]);
+    if (changed == 0) throw StateError('الزبون غير موجود.');
   }
 
   // تسجيل تحصيل مع التحقق من الرصيد داخل معاملة لمنع تجاوز المبلغ المستحق.
@@ -230,10 +250,11 @@ class CustomerRepository implements CustomerDataSource {
         )), 0) AS debt,
         COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected
         FROM sales s WHERE s.customer_id = ?
-      ''', [customerId, customerId]);
+      ''', [customerId, customerId, customerId]);
       final debt = (result.first['debt'] as num).toInt();
       final collected = (result.first['collected'] as num).toInt();
-      final outstanding = (debt - collected).clamp(0, 1 << 62).toInt();
+      final openingBalance = (result.first['opening_balance'] as num?)?.toInt() ?? 0;
+      final outstanding = (debt + openingBalance - collected).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) {
         throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق ($outstanding ج.س).');
       }
