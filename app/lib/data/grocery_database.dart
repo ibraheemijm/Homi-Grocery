@@ -494,13 +494,19 @@ class GroceryDatabase {
 
   // إضافة الأرصدة الافتتاحية دون إنشاء فواتير أو حركات خزينة وهمية.
   static Future<void> createOpeningBalancesSchema(DatabaseExecutor db) async {
-    final customerColumns = await db.rawQuery('PRAGMA table_info(customers)');
-    if (!customerColumns.any((column) => column['name'] == 'opening_balance')) {
-      await db.execute('ALTER TABLE customers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0 CHECK (opening_balance >= 0)');
+    final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('customers', 'suppliers')");
+    final existingTables = tables.map((row) => row['name']).toSet();
+    if (existingTables.contains('customers')) {
+      final customerColumns = await db.rawQuery('PRAGMA table_info(customers)');
+      if (!customerColumns.any((column) => column['name'] == 'opening_balance')) {
+        await db.execute('ALTER TABLE customers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0 CHECK (opening_balance >= 0)');
+      }
     }
-    final supplierColumns = await db.rawQuery('PRAGMA table_info(suppliers)');
-    if (!supplierColumns.any((column) => column['name'] == 'opening_balance')) {
-      await db.execute('ALTER TABLE suppliers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0');
+    if (existingTables.contains('suppliers')) {
+      final supplierColumns = await db.rawQuery('PRAGMA table_info(suppliers)');
+      if (!supplierColumns.any((column) => column['name'] == 'opening_balance')) {
+        await db.execute('ALTER TABLE suppliers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0');
+      }
     }
   }
 
