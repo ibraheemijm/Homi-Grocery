@@ -955,4 +955,13 @@ void main() {
     expect(balance.credit, 50);
   });
 
+  test('يعرض الرصيد الافتتاحي للمورد كبند مستقل في كشف الحساب', () async {
+    final supplierId = await suppliers.addSupplier(name: 'مورد كشف الحساب', openingBalance: -350);
+    final entries = await suppliers.ledger(supplierId, userId: managerId);
+    expect(entries, hasLength(1));
+    expect(entries.single.title, 'رصيد افتتاحي');
+    expect(entries.single.amount, 350);
+    expect(entries.single.isPayable, isFalse);
+  });
+
 }
