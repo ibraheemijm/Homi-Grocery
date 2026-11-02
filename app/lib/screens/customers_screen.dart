@@ -97,7 +97,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               FilledButton.icon(onPressed: _addCustomer, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة زبون')),
                           ]),
                           const SizedBox(height: 6),
-                          Text('الأرصدة محسوبة من الفواتير والتحصيلات المسجلة، وليست أرقامًا ثابتة.', style: theme.textTheme.bodyMedium),
+                          Text('الرصيد الحالي يجمع الرصيد الافتتاحي مع فواتير البيع والتحصيلات المسجلة.', style: theme.textTheme.bodyMedium),
                           const SizedBox(height: 16),
                           TextField(
                             controller: _search,
