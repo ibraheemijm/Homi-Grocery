@@ -164,6 +164,16 @@ void main() {
     expect(summary.overpaymentRefunded, 75);
     expect(summary.overpaymentOutstanding, 125);
     expect(summary.outstandingAfterReturns, 0);
+    expect(
+      summary.paymentLines.map((line) => [line.label, line.amount]).toList(),
+      [
+        ['إجمالي الفاتورة', 1000],
+        ['المبلغ المستلم', 1200],
+        ['المبلغ المسترد', 75],
+        ['صافي المبلغ المدفوع', 1125],
+        ['زيادة مستحقة للزبون', 125],
+      ],
+    );
   });
 
   test('يصفر رصيد الزيادة المستحقة عند ردها كاملة', () async {
@@ -185,6 +195,65 @@ void main() {
     expect(summary.overpaymentReceived, 200);
     expect(summary.overpaymentRefunded, 200);
     expect(summary.overpaymentOutstanding, 0);
+    expect(
+      summary.paymentLines.map((line) => [line.label, line.amount]).toList(),
+      [
+        ['إجمالي الفاتورة', 1000],
+        ['المبلغ المستلم', 1200],
+        ['المبلغ المسترد', 200],
+        ['صافي المبلغ المدفوع', 1000],
+      ],
+    );
+  });
+
+  test('يعرض المبلغ المستلم والزيادة المستحقة عند عدم استردادها', () async {
+    await database.insert('sales', {
+      'id': 9,
+      'invoice_number': 'HG-OVERPAY-9',
+      'total': 1000,
+      'paid_amount': 1000,
+      'overpayment_amount': 200,
+    });
+    await database.insert('customer_overpayments', {
+      'sale_id': 9,
+      'received_amount': 200,
+      'refunded_amount': 0,
+    });
+
+    final summary = await printer.loadSummary(9);
+
+    expect(
+      summary.paymentLines.map((line) => [line.label, line.amount]).toList(),
+      [
+        ['إجمالي الفاتورة', 1000],
+        ['المبلغ المستلم', 1200],
+        ['زيادة مستحقة للزبون', 200],
+      ],
+    );
+    expect(summary.remainingLabel, 'المتبقي');
+    expect(summary.outstandingAfterReturns, 0);
+  });
+
+  test('يعرض المبلغ المدفوع والمتبقي عند الدفع بالمبلغ بالضبط', () async {
+    await database.insert('sales', {
+      'id': 11,
+      'invoice_number': 'HG-EXACT-11',
+      'total': 1000,
+      'paid_amount': 1000,
+      'overpayment_amount': 0,
+    });
+
+    final summary = await printer.loadSummary(11);
+
+    expect(
+      summary.paymentLines.map((line) => [line.label, line.amount]).toList(),
+      [
+        ['إجمالي الفاتورة', 1000],
+        ['المبلغ المدفوع', 1000],
+      ],
+    );
+    expect(summary.remainingLabel, 'المتبقي');
+    expect(summary.outstandingAfterReturns, 0);
   });
 
   test('يبني PDF فعليًا دون فتح نافذة الطباعة', () async {
