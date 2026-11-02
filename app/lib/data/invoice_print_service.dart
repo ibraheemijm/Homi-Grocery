@@ -239,6 +239,14 @@ class InvoicePrintService {
               thermal,
             ),
             _amountRow(
+              'صافي المبلغ بعد الاسترداد',
+              (sale['paid_amount'] as num).toInt() +
+                  summary.overpaymentReceived -
+                  summary.overpaymentRefunded,
+              thermal,
+              bold: true,
+            ),
+            _amountRow(
               'رصيد زائد مستحق للزبون',
               summary.overpaymentOutstanding,
               thermal,
