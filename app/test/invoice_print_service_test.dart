@@ -27,6 +27,7 @@ void main() {
         discount INTEGER NOT NULL DEFAULT 0,
         total INTEGER NOT NULL,
         paid_amount INTEGER NOT NULL,
+        overpayment_amount INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT '2026-01-01T10:00:00.000'
       )
     ''');
@@ -52,6 +53,14 @@ void main() {
         id INTEGER PRIMARY KEY,
         sale_id INTEGER NOT NULL,
         amount INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      CREATE TABLE customer_overpayments (
+        id INTEGER PRIMARY KEY,
+        sale_id INTEGER NOT NULL UNIQUE,
+        received_amount INTEGER NOT NULL,
+        refunded_amount INTEGER NOT NULL DEFAULT 0
       )
     ''');
     printer = InvoicePrintService(database);
@@ -132,6 +141,50 @@ void main() {
     expect(summary.refundedAmount, 250);
     // الدين الأصلي 400؛ لا يجوز أن يتحول إلى رصيد سالب بسبب زيادة المرتجعات.
     expect(summary.outstandingAfterReturns, 0);
+  });
+
+
+  test('يعرض الزيادة المستحقة والجزء المسترد منها بصورة مستقلة عن دين الفاتورة', () async {
+    await database.insert('sales', {
+      'id': 7,
+      'invoice_number': 'HG-OVERPAY-7',
+      'total': 1000,
+      'paid_amount': 1000,
+      'overpayment_amount': 200,
+    });
+    await database.insert('customer_overpayments', {
+      'sale_id': 7,
+      'received_amount': 200,
+      'refunded_amount': 75,
+    });
+
+    final summary = await printer.loadSummary(7);
+
+    expect(summary.overpaymentReceived, 200);
+    expect(summary.overpaymentRefunded, 75);
+    expect(summary.overpaymentOutstanding, 125);
+    expect(summary.outstandingAfterReturns, 0);
+  });
+
+  test('يصفر رصيد الزيادة المستحقة عند ردها كاملة', () async {
+    await database.insert('sales', {
+      'id': 8,
+      'invoice_number': 'HG-OVERPAY-8',
+      'total': 1000,
+      'paid_amount': 1000,
+      'overpayment_amount': 200,
+    });
+    await database.insert('customer_overpayments', {
+      'sale_id': 8,
+      'received_amount': 200,
+      'refunded_amount': 200,
+    });
+
+    final summary = await printer.loadSummary(8);
+
+    expect(summary.overpaymentReceived, 200);
+    expect(summary.overpaymentRefunded, 200);
+    expect(summary.overpaymentOutstanding, 0);
   });
 
   test('يبني PDF فعليًا دون فتح نافذة الطباعة', () async {
