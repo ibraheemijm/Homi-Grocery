@@ -141,7 +141,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                   Text(supplier.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                                   const SizedBox(height: 4),
                                   if (_canViewSupplierData)
-                                    Text('فواتير الشراء: ${supplier.purchaseCount} • قبل الدفعات العامة: ${supplier.totalDebt} ج.س')
+                                    Text('فواتير الشراء: ${supplier.purchaseCount} • رصيد الفواتير: ${supplier.totalDebt} ج.س • افتتاحي: ${supplier.openingBalance} ج.س')
                                   else
                                     const Text('بيانات المورد الأساسية'),
                                 ])),
@@ -152,6 +152,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                     Text(supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن', style: theme.textTheme.labelSmall),
                                   ]),
                                 ],
+                                if (_isManager)
+                                  IconButton(tooltip: 'تعديل الرصيد الافتتاحي', onPressed: () => _editOpeningBalance(supplier), icon: const Icon(Icons.edit_note_rounded)),
                                 if (_canPaySupplier)
                                   IconButton(tooltip: 'تسجيل دفعة', onPressed: _canViewSupplierData && supplier.balance <= 0 ? null : () => _recordPayment(supplier), icon: const Icon(Icons.payments_outlined)),
                               ]),
@@ -170,6 +172,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     final name = TextEditingController();
     final phone = TextEditingController();
     final note = TextEditingController();
+    final openingBalance = TextEditingController(text: '0');
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -180,6 +183,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الهاتف (اختياري)', border: OutlineInputBorder())),
           const SizedBox(height: 10),
           TextField(controller: note, decoration: const InputDecoration(labelText: 'ملاحظات (اختياري)', border: OutlineInputBorder())),
+          const SizedBox(height: 10),
+          TextField(controller: openingBalance, keyboardType: const TextInputType.numberWithOptions(signed: true), decoration: const InputDecoration(labelText: 'الرصيد الافتتاحي للمورد', helperText: 'موجب: مستحق للمورد • سالب: مستحق لنا', border: OutlineInputBorder())),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
@@ -189,12 +194,53 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
     if (result == true && mounted) {
       try {
-        await _repository!.addSupplier(name: name.text, phone: phone.text, notes: note.text);
+        final opening = int.tryParse(openingBalance.text.trim());
+        if (opening == null) throw ArgumentError('أدخل رصيدًا افتتاحيًا صحيحًا.');
+        await _repository!.addSupplier(name: name.text, phone: phone.text, notes: note.text, openingBalance: opening);
         await _load();
         _message('تم حفظ المورد.');
       } catch (error) { _message('تعذر حفظ المورد: $error'); }
     }
-    name.dispose(); phone.dispose(); note.dispose();
+    name.dispose(); phone.dispose(); note.dispose(); openingBalance.dispose();
+  }
+
+  Future<void> _editOpeningBalance(SupplierBalance supplier) async {
+    if (!_isManager) return;
+    final amount = TextEditingController(text: supplier.openingBalance.toString());
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('الرصيد الافتتاحي — ${supplier.name}'),
+        content: TextField(
+          controller: amount,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(signed: true),
+          decoration: const InputDecoration(
+            labelText: 'الرصيد الافتتاحي',
+            helperText: 'موجب: مستحق للمورد • سالب: مستحق لنا',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (result == true && mounted) {
+      try {
+        final value = int.tryParse(amount.text.trim());
+        if (value == null) throw ArgumentError('أدخل مبلغًا صحيحًا.');
+        await _repository!.setOpeningBalance(
+          supplierId: supplier.id, amount: value, userId: widget.userId,
+        );
+        await _load();
+        _message('تم تحديث الرصيد الافتتاحي للمورد.');
+      } catch (error) {
+        _message('تعذر تحديث الرصيد الافتتاحي: $error');
+      }
+    }
+    amount.dispose();
   }
 
   _PurchaseDraftLine _newPurchaseDraft([GroceryProduct? product]) {
