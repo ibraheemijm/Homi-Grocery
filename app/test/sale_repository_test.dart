@@ -80,6 +80,10 @@ void main() {
     expect(movements.last['direction'], 'out'); expect(movements.last['amount'], 100);
     expect(movements.last['category'], 'رد زيادة دفع للزبون');
     expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 200);
+    final invoice = (await sales.invoiceHistory(userId: managerId)).single;
+    expect(invoice['overpayment_received'], 300);
+    expect(invoice['overpayment_refunded'], 100);
+    expect(invoice['overpayment_outstanding'], 200);
   });
 
 
