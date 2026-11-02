@@ -28,6 +28,7 @@ class _SalesScreenState extends State<SalesScreen> {
   bool get _canViewInvoices => !widget.cashierMode || widget.cashierPermissions.contains('view_invoice_history') || widget.cashierPermissions.contains('returns') || widget.cashierPermissions.contains('return_refunds');
   bool get _canReturn => !widget.cashierMode || widget.cashierPermissions.contains('returns');
   bool get _canRefund => !widget.cashierMode || widget.cashierPermissions.contains('return_refunds');
+  bool get _canRefundOverpayment => !widget.cashierMode || widget.cashierPermissions.contains('customer_overpayments');
   final _search = TextEditingController();
   final _customer = TextEditingController();
   final _customerNickname = TextEditingController();
@@ -1042,6 +1043,33 @@ class _SalesScreenState extends State<SalesScreen> {
       await _searchProducts(_search.text);
       if (!mounted) return;
       setState(() => _saving = false);
+
+      // إذا ظهرت زيادة، نتيح تسويتها فورًا بدل تركها مستحقة دون إجراء واضح.
+      var refundedNow = 0;
+      var overpaymentOutstanding = sale.overpaymentAmount;
+      if (sale.overpaymentAmount > 0 && _canRefundOverpayment) {
+        final refund = await _showOverpaymentRefundDialog(sale);
+        if (refund != null) {
+          try {
+            overpaymentOutstanding = await _salesRepository!.refundCustomerOverpayment(
+              saleId: sale.id,
+              amount: refund['amount']! as int,
+              paymentMethod: refund['method']! as String,
+              userId: widget.userId,
+              shiftId: widget.shiftId,
+            );
+            refundedNow = refund['amount']! as int;
+          } catch (error) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('لم يُسجل رد الزيادة: $error. بقي المبلغ مستحقًا للزبون.')),
+              );
+            }
+          }
+        }
+      }
+
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -1052,8 +1080,16 @@ class _SalesScreenState extends State<SalesScreen> {
             _totalRow('الإجمالي', sale.total),
             _totalRow('إجمالي المبلغ المستلم', sale.paidAmount + sale.overpaymentAmount),
             _totalRow('المتبقي من قيمة الفاتورة', sale.remainingAmount),
-            if (sale.overpaymentAmount > 0)
-              _totalRow('زيادة مستحقة للزبون', sale.overpaymentAmount),
+            if (refundedNow > 0) _totalRow('المبلغ المسترد', refundedNow),
+            if (refundedNow > 0)
+              _totalRow('صافي المبلغ المدفوع', sale.paidAmount + sale.overpaymentAmount - refundedNow),
+            if (overpaymentOutstanding > 0)
+              _totalRow('زيادة مستحقة للزبون', overpaymentOutstanding),
+            if (sale.overpaymentAmount > 0 && !_canRefundOverpayment)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('تحتاج تسوية هذه الزيادة إلى منح صلاحية رد مبالغ الزيادة للكاشير أو تنفيذها من حساب المدير.'),
+              ),
           ]),
           actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('حسنًا'))],
         ),
@@ -1063,6 +1099,78 @@ class _SalesScreenState extends State<SalesScreen> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('لم تُحفظ الفاتورة، ولم تُعتمد حركة البيع: $error')));
     }
+  }
+
+  // يتيح رد الزيادة كاملة أو جزئيًا فور حفظ الفاتورة، أو إبقاءها مستحقة.
+  Future<Map<String, Object?>?> _showOverpaymentRefundDialog(SaleRecord sale) async {
+    final amountController = TextEditingController(text: '${sale.overpaymentAmount}');
+    var paymentMethod = widget.shiftId == null ? 'تحويل بنكي' : 'نقدي';
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refreshDialog) => AlertDialog(
+          title: const Text('تسوية الزيادة المستلمة'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _totalRow('الزيادة المستلمة', sale.overpaymentAmount, strong: true),
+                const SizedBox(height: 8),
+                const Text('أدخل المبلغ الذي سترده الآن. يمكنك رد الزيادة كاملة أو جزء منها، أو تركها مستحقة للزبون.'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'مبلغ الرد الآن',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: paymentMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'طريقة رد المبلغ',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'نقدي', child: Text('نقدًا من الخزينة')),
+                    DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) refreshDialog(() => paymentMethod = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إبقاؤها مستحقة'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final amount = int.tryParse(amountController.text.trim());
+                if (amount == null || amount <= 0 || amount > sale.overpaymentAmount) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('أدخل مبلغًا صحيحًا لا يتجاوز الزيادة المستلمة.')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, {'amount': amount, 'method': paymentMethod});
+              },
+              child: const Text('تأكيد الرد'),
+            ),
+          ],
+        ),
+      ),
+    );
+    amountController.dispose();
+    return result;
   }
 
   // فتح نموذج مرتجع مرتبط ببنود الفاتورة الأصلية.
