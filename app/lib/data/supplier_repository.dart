@@ -755,7 +755,8 @@ class SupplierRepository {
         SELECT COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0) AS debt,
           COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) +
           COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) -
-          COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid
+          COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid,
+          COALESCE((SELECT opening_balance FROM suppliers WHERE id = ?), 0) AS opening_balance
       ''', [supplierId, supplierId, supplierId, supplierId, supplierId]);
       final openingBalance = (result.first['opening_balance'] as num?)?.toInt() ?? 0;
       final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt() + openingBalance).clamp(0, 1 << 62).toInt();
