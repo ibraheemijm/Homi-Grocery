@@ -761,73 +761,197 @@ class _SalesScreenState extends State<SalesScreen> {
       final cashController = TextEditingController(text: '$_total');
       final bankController = TextEditingController(text: '0');
       String method = 'نقدي';
+      String paymentChannel = 'نقدي';
+
+      // يضبط قيمة واحدة أو يوزعها على الحقلين حسب وسيلة الاستلام.
+      void setReceivedAmount(int amount) {
+        final safeAmount = amount.clamp(0, 1 << 62).toInt();
+        if (paymentChannel == 'نقدي') {
+          cashController.text = '$safeAmount';
+          bankController.text = '0';
+        } else if (paymentChannel == 'تحويل بنكي') {
+          cashController.text = '0';
+          bankController.text = '$safeAmount';
+        } else {
+          final cash = safeAmount ~/ 2;
+          cashController.text = '$cash';
+          bankController.text = '${safeAmount - cash}';
+        }
+      }
+
       result = await showDialog<Map<String, Object?>>(
         context: context,
-        builder: (dialogContext) => StatefulBuilder(builder: (context, refreshDialog) => AlertDialog(
-          title: const Text('تأكيد الدفع'),
-          content: SizedBox(width: 380, child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _totalRow('إجمالي الفاتورة', _total),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: method,
-              decoration: const InputDecoration(labelText: 'طريقة السداد', border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-                if (_canCreditSales) ...[
-                  const DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
-                  const DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
-                ],
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, refreshDialog) {
+            final cash = int.tryParse(cashController.text.trim()) ?? 0;
+            final bank = int.tryParse(bankController.text.trim()) ?? 0;
+            final received = cash + bank;
+            return AlertDialog(
+              title: const Text('تأكيد الدفع'),
+              content: SizedBox(
+                width: 380,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _totalRow('إجمالي الفاتورة', _total),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: method,
+                        decoration: const InputDecoration(
+                          labelText: 'طريقة السداد',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: 'نقدي', child: Text('كامل')),
+                          if (_canCreditSales) ...[
+                            const DropdownMenuItem(value: 'جزئي', child: Text('دفع جزئي')),
+                            const DropdownMenuItem(value: 'آجل', child: Text('آجل / دون دفع')),
+                          ],
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          refreshDialog(() {
+                            method = value;
+                            final amount = method == 'آجل'
+                                ? 0
+                                : method == 'جزئي'
+                                    ? (_total > 1 ? _total ~/ 2 : 0)
+                                    : _total;
+                            setReceivedAmount(amount);
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: paymentChannel,
+                        decoration: const InputDecoration(
+                          labelText: 'طريقة استلام المبلغ',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                          DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+                          DropdownMenuItem(value: 'مختلط', child: Text('مختلط (نقدي + تحويل بنكي)')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          refreshDialog(() {
+                            paymentChannel = value;
+                            final amount = method == 'آجل'
+                                ? 0
+                                : method == 'جزئي'
+                                    ? (_total > 1 ? _total ~/ 2 : 0)
+                                    : _total;
+                            setReceivedAmount(amount);
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      if (paymentChannel == 'نقدي')
+                        TextField(
+                          controller: cashController,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'المبلغ النقدي المستلم',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => refreshDialog(() {}),
+                        )
+                      else if (paymentChannel == 'تحويل بنكي')
+                        TextField(
+                          controller: bankController,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'المبلغ المحول بنكيًا',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => refreshDialog(() {}),
+                        )
+                      else ...[
+                        TextField(
+                          controller: cashController,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'المبلغ النقدي المستلم',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => refreshDialog(() {}),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: bankController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'المبلغ المحول بنكيًا',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => refreshDialog(() {}),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      _totalRow('إجمالي المبلغ المستلم', received, strong: true),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'إذا زاد المبلغ المستلم عن الإجمالي، تُسجل الزيادة كمبلغ مستحق للزبون ولا تُضاف إلى إيراد البيع.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('رجوع'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final enteredCash = int.tryParse(cashController.text.trim());
+                    final enteredBank = int.tryParse(bankController.text.trim());
+                    if (enteredCash == null || enteredBank == null ||
+                        enteredCash < 0 || enteredBank < 0) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('أدخل مبالغ صحيحة غير سالبة.')),
+                      );
+                      return;
+                    }
+                    final totalReceived = enteredCash + enteredBank;
+                    final channelMatches = paymentChannel == 'نقدي'
+                        ? enteredCash > 0 && enteredBank == 0
+                        : paymentChannel == 'تحويل بنكي'
+                            ? enteredBank > 0 && enteredCash == 0
+                            : enteredCash > 0 && enteredBank > 0;
+                    if (!channelMatches ||
+                        (method == 'نقدي' && totalReceived < _total) ||
+                        (method == 'آجل' && totalReceived != 0) ||
+                        (method == 'جزئي' &&
+                            (totalReceived == 0 || totalReceived >= _total))) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text('تحقق من المبالغ وطريقة السداد المختارة.'),
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogContext, {
+                      'paid': totalReceived,
+                      'method': method,
+                      'channel': paymentChannel,
+                      'cash': enteredCash,
+                      'bank': enteredBank,
+                    });
+                  },
+                  child: const Text('حفظ الفاتورة'),
+                ),
               ],
-              onChanged: (value) {
-                if (value == null) return;
-                refreshDialog(() {
-                  method = value;
-                  if (method == 'نقدي') {
-                    cashController.text = '$_total';
-                    bankController.text = '0';
-                  }
-                  if (method == 'جزئي') {
-                    cashController.text = _total > 1 ? '${_total ~/ 2}' : '0';
-                    bankController.text = '0';
-                  }
-                  if (method == 'آجل') {
-                    cashController.text = '0';
-                    bankController.text = '0';
-                  }
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(controller: cashController, keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'المبلغ النقدي المستلم', border: OutlineInputBorder()),
-              onChanged: (_) => refreshDialog(() {})),
-            const SizedBox(height: 10),
-            TextField(controller: bankController, keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'المبلغ المحول بنكيًا', border: OutlineInputBorder()),
-              onChanged: (_) => refreshDialog(() {})),
-            const SizedBox(height: 6),
-            Text('إجمالي المستلم: ${(int.tryParse(cashController.text) ?? 0) + (int.tryParse(bankController.text) ?? 0)} ج.س'),
-            const SizedBox(height: 8),
-            const Text('إذا زاد المبلغ المستلم عن الإجمالي، تُسجل الزيادة كمبلغ مستحق للزبون ولا تُضاف إلى إيراد البيع.', style: TextStyle(fontSize: 12)),
-          ])),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
-            FilledButton(onPressed: () {
-              final cash = int.tryParse(cashController.text.trim()) ?? -1;
-              final bank = int.tryParse(bankController.text.trim()) ?? -1;
-              final received = cash + bank;
-              if (cash < 0 || bank < 0 ||
-                  (method == 'نقدي' && received < _total) ||
-                  (method == 'آجل' && received != 0) ||
-                  (method == 'جزئي' && (received == 0 || received >= _total))) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
-                return;
-              }
-              final channel = cash > 0 && bank > 0 ? 'مختلط' : bank > 0 ? 'تحويل بنكي' : 'نقدي';
-              Navigator.pop(dialogContext, {'paid': received, 'method': method, 'channel': channel, 'cash': cash, 'bank': bank});
-            }, child: const Text('حفظ الفاتورة')),
-          ],
-        )),
+            );
+          },
+        ),
       );
       cashController.dispose();
       bankController.dispose();
