@@ -104,6 +104,14 @@ void main() {
     expect(stats.lowStockCount, 1);
   });
 
+  test('تضيف أرصدة الزبائن الافتتاحية إلى إجمالي الديون في لوحة التحكم', () async {
+    final customers = CustomerRepository(database);
+    await customers.addCustomer(name: 'زبون برصيد قديم', openingBalance: 750);
+
+    final stats = await DashboardRepository(database).load(userId: managerId, now: DateTime.now());
+    expect(stats.customerDebt, 750);
+  });
+
   test('تخصم مرتجعات اليوم وردود النقد الفعلية من صافي لوحة التحكم', () async {
     final products = ProductRepository(database);
     final sales = SaleRepository(database);
