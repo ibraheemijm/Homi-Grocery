@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 18;
+  static const int _version = 19;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -108,6 +108,9 @@ class GroceryDatabase {
         if (oldVersion < 18) {
           await createCustomerOverpaymentsSchema(db);
         }
+        if (oldVersion < 19) {
+          await createSalesOverpaymentSchema(db);
+        }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
     );
@@ -167,6 +170,7 @@ class GroceryDatabase {
         discount INTEGER NOT NULL DEFAULT 0 CHECK (discount >= 0),
         total INTEGER NOT NULL CHECK (total >= 0),
         paid_amount INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+        overpayment_amount INTEGER NOT NULL DEFAULT 0 CHECK (overpayment_amount >= 0),
         payment_method TEXT NOT NULL,
         created_at TEXT NOT NULL
       )
@@ -185,6 +189,15 @@ class GroceryDatabase {
     ''');
     await db.execute('CREATE INDEX idx_sales_created_at ON sales(created_at)');
     await db.execute('CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id)');
+  }
+
+
+  // يضيف حقل الزيادة إلى الفواتير القديمة دون تعديل قيمها أو حذفها.
+  static Future<void> createSalesOverpaymentSchema(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(sales)');
+    if (!columns.any((column) => column['name'] == 'overpayment_amount')) {
+      await db.execute('ALTER TABLE sales ADD COLUMN overpayment_amount INTEGER NOT NULL DEFAULT 0 CHECK (overpayment_amount >= 0)');
+    }
   }
 
   // إنشاء سجل الزبائن والتحصيلات، مع ربط فواتير المبيعات القديمة دون حذفها.

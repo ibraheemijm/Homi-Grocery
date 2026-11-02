@@ -508,6 +508,7 @@ class SaleRepository {
         'discount': discount,
         'total': total,
         'paid_amount': paidAmount,
+        'overpayment_amount': overpaymentAmount,
         'payment_method': paymentMethod,
         'created_at': createdAt,
       });
