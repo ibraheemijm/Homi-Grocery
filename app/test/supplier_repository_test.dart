@@ -453,6 +453,41 @@ void main() {
     expect(refund['direction'], 'in');
   });
 
+
+  test('يرفض وسيلة استرداد غير معتمدة من المورد دون تسجيل حركة مالية', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'صنف استرداد غير معتمد', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final supplierId = await suppliers.addSupplier(name: 'مورد وسيلة الدفع');
+    final purchase = await suppliers.createPurchase(
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'صنف استرداد غير معتمد',
+        unit: 'حبة', quantity: 1, unitCost: 100)],
+      paidAmount: 100,
+      paymentChannel: 'تحويل بنكي',
+      userId: managerId,
+    );
+    final itemId = (await suppliers.returnablePurchaseItems(
+      purchase.id, userId: managerId,
+    )).single['id'] as int;
+    final returnId = await suppliers.createSupplierReturn(
+      userId: managerId,
+      purchaseId: purchase.id,
+      quantitiesByPurchaseItemId: {itemId: 1},
+    );
+
+    await expectLater(
+      suppliers.recordSupplierReturnRefund(
+        userId: managerId, returnId: returnId, amount: 50,
+        paymentMethod: 'شيك',
+      ),
+      throwsArgumentError,
+    );
+    expect(await database.query('supplier_return_refunds'), isEmpty);
+    expect(await database.query('cash_transactions',
+      where: "reference_type = 'supplier_return_refund'"), isEmpty);
+  });
+
   test('يدعم عدة أصناف في فاتورة واحدة ويحدّث المخزون لكل صنف', () async {
     final riceId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 2,
