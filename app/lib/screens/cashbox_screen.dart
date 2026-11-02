@@ -293,8 +293,11 @@ class _CashboxScreenState extends State<CashboxScreen> {
         title: const Text('الخزينة والتقرير اليومي'),
         actions: [
           if (_canRefundOverpayments)
-            IconButton(tooltip: 'مبالغ مستحقة للزبائن', onPressed: _showPendingOverpayments,
-              icon: const Icon(Icons.assignment_return_outlined)),
+            TextButton.icon(
+              onPressed: _showPendingOverpayments,
+              icon: const Icon(Icons.assignment_return_outlined),
+              label: const Text('تسوية زيادات الزبائن'),
+            ),
           IconButton(
             tooltip: 'تحديث',
             onPressed: () => setState(_reload),
