@@ -184,7 +184,12 @@ void main() {
     await AuthRepository(database).saveCashierPermissions(
       manager: managerAccount, cashierId: cashier.id,
       permissions: settings.map((setting) => setting.key == 'customer_overpayments'
-        ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true)
+        ? CashierPermissionSetting(
+            key: setting.key,
+            label: setting.label,
+            isAllowed: true,
+            maxAmount: 50,
+          )
         : setting).toList());
     await expectLater(
       sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
