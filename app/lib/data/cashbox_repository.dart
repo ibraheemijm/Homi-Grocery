@@ -162,7 +162,9 @@ class CashboxRepository {
     }
     if (category.trim().isEmpty) throw ArgumentError('اسم الحركة مطلوب.');
     if (amount <= 0) throw ArgumentError('المبلغ يجب أن يكون أكبر من صفر.');
-    if (paymentMethod.trim().isEmpty) throw ArgumentError('حدد طريقة الدفع.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod.trim())) {
+      throw ArgumentError('طريقة الدفع غير مدعومة.');
+    }
     return _database.transaction((txn) async {
       if (paymentMethod.trim() == 'نقدي') {
         await CashShiftRepository.validateActiveShift(
