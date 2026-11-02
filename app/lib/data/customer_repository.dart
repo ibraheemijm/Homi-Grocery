@@ -99,6 +99,7 @@ class CustomerRepository implements CustomerDataSource {
           )
         )) FROM sales s WHERE s.customer_id = c.id), 0)
         - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0)
+        + c.opening_balance
       ) DESC, c.name COLLATE NOCASE ASC
     ''', ['%${query.trim()}%', query.trim()]);
     return rows.map((row) => CustomerBalance(
@@ -248,7 +249,8 @@ class CustomerRepository implements CustomerDataSource {
             COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
           )
         )), 0) AS debt,
-        COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected
+        COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected,
+        COALESCE((SELECT opening_balance FROM customers WHERE id = ?), 0) AS opening_balance
         FROM sales s WHERE s.customer_id = ?
       ''', [customerId, customerId, customerId]);
       final debt = (result.first['debt'] as num).toInt();
