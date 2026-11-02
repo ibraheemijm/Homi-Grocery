@@ -167,11 +167,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _occasionStart = '';
   String _occasionEnd = '';
   bool _occasionEnabled = false;
+  Set<String> _cashierPermissions = const {};
 
   @override
   void initState() {
     super.initState();
     _loadDashboardStats();
+    _loadCashierPermissions();
     _loadRecentInvoices();
     _loadHomePreferences();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -262,6 +264,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return _use24HourClock ? time : '$time ${_clockNow.hour < 12 ? 'ص' : 'م'}';
   }
 
+
+  // تحميل صلاحيات الكاشير الفعلية حتى تطابق واجهة البيع صلاحيات قاعدة البيانات.
+  Future<void> _loadCashierPermissions() async {
+    if (widget.user.isManager) return;
+    try {
+      final database = await GroceryDatabase.open();
+      final rows = await database.query('cashier_permissions',
+        columns: ['permission_key'], where: 'user_id = ? AND is_allowed = 1',
+        whereArgs: [widget.user.id]);
+      if (!mounted) return;
+      setState(() => _cashierPermissions = rows
+          .map((row) => row['permission_key'] as String).toSet());
+    } catch (_) {
+      if (mounted) setState(() => _cashierPermissions = const {});
+    }
+  }
+
   // تحميل إحصاءات فعلية من قاعدة البيانات المحلية.
   Future<void> _loadDashboardStats() async {
     try {
@@ -312,6 +331,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ? SalesScreen(
                                 userId: widget.user.id,
                                 shiftId: widget.shiftId,
+                                cashierMode: !widget.user.isManager,
+                                cashierPermissions: _cashierPermissions,
                                 onDataChanged: () {
                                   _loadDashboardStats();
                                   _loadRecentInvoices();

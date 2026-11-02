@@ -161,6 +161,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                   final invoice = _invoices[index];
                                   final total = invoice['total'] as int;
                                   final paid = invoice['paid_amount'] as int;
+                                  final overpayment = (invoice['overpayment_amount'] as num?)?.toInt() ?? 0;
                                   return Card(
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
@@ -183,7 +184,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                           const SizedBox(height: 6),
                                           Text('الزبون: ${(invoice['customer_name'] as String?)?.trim().isNotEmpty == true ? invoice['customer_name'] : 'زبون نقدي'}'),
                                           Text('التاريخ: ${_date(invoice['created_at'] as String)}'),
-                                          Text('عدد البنود: ${invoice['item_count']} • المستلم: $paid ج.س • المتبقي: ${total - paid} ج.س'),
+                                          Text('عدد البنود: ${invoice['item_count']} • المستلم: ${paid + overpayment} ج.س • المتبقي: ${total - paid} ج.س'),
+                                          if (overpayment > 0)
+                                            Text('زيادة مستحقة للزبون: $overpayment ج.س', style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w700)),
                                           const SizedBox(height: 8),
                                           Wrap(
                                             alignment: WrapAlignment.start,

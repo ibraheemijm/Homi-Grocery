@@ -927,7 +927,7 @@ class _SalesScreenState extends State<SalesScreen> {
             Text('رقم الفاتورة: ${sale.invoiceNumber}'),
             const SizedBox(height: 8),
             _totalRow('الإجمالي', sale.total),
-            _totalRow('المستلم', sale.paidAmount),
+            _totalRow('إجمالي المبلغ المستلم', sale.paidAmount + sale.overpaymentAmount),
             _totalRow('المتبقي من قيمة الفاتورة', sale.remainingAmount),
             if (sale.overpaymentAmount > 0)
               _totalRow('زيادة مستحقة للزبون', sale.overpaymentAmount),

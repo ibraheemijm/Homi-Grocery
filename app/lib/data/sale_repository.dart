@@ -244,7 +244,7 @@ class SaleRepository {
     final normalized = query.trim();
     return _database.rawQuery('''
       SELECT s.id, s.invoice_number, s.customer_name, s.total,
-        s.paid_amount, s.payment_method, s.created_at,
+        s.paid_amount, s.overpayment_amount, s.payment_method, s.created_at,
         (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
       FROM sales s
       WHERE (? = '' OR s.invoice_number LIKE ? OR COALESCE(s.customer_name, '') LIKE ?)
