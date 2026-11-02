@@ -34,6 +34,7 @@ abstract interface class CustomerDataSource {
   Future<List<CustomerBalance>> balances({required int userId, String query = ''});
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
   Future<int> addCustomer({required String name, String? phone, String? notes, int openingBalance = 0});
+  Future<void> setOpeningBalance({required int customerId, required int amount, required int userId});
   Future<void> recordPayment({
     required int customerId,
     required int amount,
