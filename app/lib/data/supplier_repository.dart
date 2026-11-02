@@ -631,8 +631,8 @@ class SupplierRepository {
     if (returnId <= 0 || amount <= 0) {
       throw ArgumentError('حدد مرتجعًا ومبلغ رد صالحين.');
     }
-    if (paymentMethod.trim().isEmpty) {
-      throw ArgumentError('حدد طريقة استلام المبلغ.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod.trim())) {
+      throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
     }
     return _database.transaction((txn) async {
       final permissionLimit = await _requireCashierPermission(
