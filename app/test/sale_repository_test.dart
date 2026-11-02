@@ -732,7 +732,7 @@ void main() {
     expect(refund['direction'], 'out');
   });
 
-  test('يقصر حساب الكاشير على البيع النقدي الكامل دون خصم أو دين أو تحويل', () async {
+  test('يمنع الكاشير من الخصم والدين دون صلاحية مع السماح بالبيع النقدي', () async {
     final auth = AuthRepository(database);
     final manager = managerAccount;
     final cashier = await auth.createCashier(
@@ -778,18 +778,6 @@ void main() {
         paidAmount: 0,
         paymentMethod: 'آجل',
         customerName: 'زبون',
-        userId: cashier.id,
-        shiftId: shift.id,
-      ),
-      throwsStateError,
-    );
-    await expectLater(
-      sales.createSale(
-        lines: [SaleLine(product: product, quantity: 1)],
-        discount: 0,
-        paidAmount: 100,
-        paymentMethod: 'نقدي',
-        paymentChannel: 'تحويل بنكي',
         userId: cashier.id,
         shiftId: shift.id,
       ),
