@@ -258,7 +258,7 @@ class InvoicePrintService {
           if (summary.refundedAmount > 0)
             _amountRow('رد نقدي مسجل للزبون', summary.refundedAmount, thermal),
           _amountRow(
-            'المتبقي بعد المرتجعات (قبل التحصيلات اللاحقة)',
+            'المتبقي من الفاتورة بعد المرتجعات (قبل التحصيلات اللاحقة)',
             summary.outstandingAfterReturns,
             thermal,
             bold: true,
