@@ -385,7 +385,7 @@ class _SalesScreenState extends State<SalesScreen> {
           const SizedBox(height: 5),
           Text(
             widget.cashierMode && !_canCreditSales
-                ? 'أضف الأصناف إلى الفاتورة ثم استلم كامل المبلغ نقدًا.'
+                ? 'أضف الأصناف إلى الفاتورة واستلم المبلغ نقدًا أو بتحويل بنكي أو بالطريقتين.'
                 : 'أنشئ فاتورة جديدة وسيُحدّث المخزون تلقائيًا بعد الحفظ.',
             style: theme.textTheme.bodyMedium,
           ),
@@ -753,8 +753,8 @@ class _SalesScreenState extends State<SalesScreen> {
     ]),
   );
 
-  // اختيار طريقة الدفع والمبلغ المستلم، مع السماح بالبيع الآجل والجزئي.
-  // الكاشير لا يختار طريقة سداد؛ مساره نقدي كامل فقط.
+  // اختيار طريقة السداد وتوزيع المقبوض بين النقد والتحويل لكلا الدورين.
+  // صلاحية البيع الآجل والجزئي تبقى مستقلة عن وسيلة استلام المبلغ.
   Future<void> _checkout() async {
     Map<String, Object?>? result;
     {
@@ -798,19 +798,15 @@ class _SalesScreenState extends State<SalesScreen> {
               },
             ),
             const SizedBox(height: 12),
-            if (!widget.cashierMode) ...[
-              TextField(controller: cashController, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'المبلغ النقدي', border: OutlineInputBorder()),
-                onChanged: (_) => refreshDialog(() {})),
-              const SizedBox(height: 10),
-              TextField(controller: bankController, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'المبلغ المحول بنكيًا', border: OutlineInputBorder()),
-                onChanged: (_) => refreshDialog(() {})),
-              const SizedBox(height: 6),
-              Text('إجمالي المستلم: ${(int.tryParse(cashController.text) ?? 0) + (int.tryParse(bankController.text) ?? 0)} ج.س'),
-            ] else
-              TextField(controller: cashController, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'المبلغ النقدي المستلم', border: OutlineInputBorder())),
+            TextField(controller: cashController, keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'المبلغ النقدي المستلم', border: OutlineInputBorder()),
+              onChanged: (_) => refreshDialog(() {})),
+            const SizedBox(height: 10),
+            TextField(controller: bankController, keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'المبلغ المحول بنكيًا', border: OutlineInputBorder()),
+              onChanged: (_) => refreshDialog(() {})),
+            const SizedBox(height: 6),
+            Text('إجمالي المستلم: ${(int.tryParse(cashController.text) ?? 0) + (int.tryParse(bankController.text) ?? 0)} ج.س'),
             const SizedBox(height: 8),
             const Text('إذا زاد المبلغ المستلم عن الإجمالي، تُسجل الزيادة كمبلغ مستحق للزبون ولا تُضاف إلى إيراد البيع.', style: TextStyle(fontSize: 12)),
           ])),
@@ -818,7 +814,7 @@ class _SalesScreenState extends State<SalesScreen> {
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
             FilledButton(onPressed: () {
               final cash = int.tryParse(cashController.text.trim()) ?? -1;
-              final bank = widget.cashierMode ? 0 : (int.tryParse(bankController.text.trim()) ?? -1);
+              final bank = int.tryParse(bankController.text.trim()) ?? -1;
               final received = cash + bank;
               if (cash < 0 || bank < 0 ||
                   (method == 'نقدي' && received < _total) ||
