@@ -132,7 +132,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                                     const SizedBox(height: 4),
                                     if (_canViewLedger)
-                                      Text('الفواتير: ${customer.salesCount} • إجمالي المتبقي قبل التحصيلات: ${customer.totalDebt} ج.س'),
+                                      Text('الفواتير: ${customer.salesCount} • رصيد الفواتير: ${customer.totalDebt} ج.س • افتتاحي: ${customer.openingBalance} ج.س'),
                                   ])),
                                   const SizedBox(width: 8),
                                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -144,6 +144,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       style: theme.textTheme.labelSmall),
                                   ]),
                                   const SizedBox(width: 8),
+                                  if (_isManager)
+                                    IconButton(
+                                      tooltip: 'تعديل الرصيد الافتتاحي',
+                                      onPressed: () => _editOpeningBalance(customer),
+                                      icon: const Icon(Icons.edit_note_rounded),
+                                    ),
                                   if (_canViewLedger)
                                     IconButton(
                                       tooltip: 'كشف الحساب',
@@ -244,6 +250,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (!_canAddCustomer) return;
     final name = TextEditingController();
     final phone = TextEditingController();
+    final openingBalance = TextEditingController(text: '0');
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -252,6 +259,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
           TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: 'اسم الزبون')),
           const SizedBox(height: 10),
           TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الهاتف (اختياري)')),
+          const SizedBox(height: 10),
+          TextField(controller: openingBalance, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الرصيد الافتتاحي المستحق لنا', helperText: 'اتركه صفرًا إذا لم توجد ديون سابقة')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
@@ -261,7 +270,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
     if (result == true && mounted) {
       try {
-        await _repository!.addCustomer(name: name.text, phone: phone.text);
+        final opening = int.tryParse(openingBalance.text.trim());
+        if (opening == null || opening < 0) throw ArgumentError('أدخل رصيدًا افتتاحيًا صحيحًا.');
+        await _repository!.addCustomer(name: name.text, phone: phone.text, openingBalance: opening);
         await _load();
       } catch (error) {
         _message('تعذر إضافة الزبون: $error');
@@ -269,6 +280,46 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
     name.dispose();
     phone.dispose();
+    openingBalance.dispose();
+  }
+
+  Future<void> _editOpeningBalance(CustomerBalance customer) async {
+    if (!_isManager) return;
+    final amount = TextEditingController(text: customer.openingBalance.toString());
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('الرصيد الافتتاحي — ${customer.name}'),
+        content: TextField(
+          controller: amount,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'المبلغ المستحق لنا من الزبون',
+            helperText: 'لا يشمل الفواتير أو التحصيلات المسجلة لاحقًا',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (result == true && mounted) {
+      try {
+        final value = int.tryParse(amount.text.trim());
+        if (value == null || value < 0) throw ArgumentError('أدخل مبلغًا صحيحًا غير سالب.');
+        await (_repository as CustomerRepository).setOpeningBalance(
+          customerId: customer.id, amount: value, userId: widget.userId,
+        );
+        await _load();
+        _message('تم تحديث الرصيد الافتتاحي.');
+      } catch (error) {
+        _message('تعذر تحديث الرصيد الافتتاحي: $error');
+      }
+    }
+    amount.dispose();
   }
 
   Future<void> _collect(CustomerBalance customer) async {
