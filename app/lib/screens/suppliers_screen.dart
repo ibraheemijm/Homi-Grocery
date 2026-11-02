@@ -147,6 +147,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 ])),
                                 if (_canViewSupplierData) ...[
                                   const SizedBox(width: 8),
+                                  IconButton(tooltip: 'كشف حساب المورد', onPressed: () => _showSupplierLedger(supplier), icon: const Icon(Icons.receipt_long_outlined)),
                                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                                     Text(supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س', style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary)),
                                     Text(supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن', style: theme.textTheme.labelSmall),
@@ -164,6 +165,50 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   ),
                 ),
     );
+  }
+
+  Future<void> _showSupplierLedger(SupplierBalance supplier) async {
+    if (!_canViewSupplierData) return;
+    try {
+      final entries = await _repository!.ledger(supplier.id, userId: widget.userId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('كشف حساب المورد — ${supplier.name}'),
+          content: SizedBox(
+            width: 560,
+            child: entries.isEmpty
+                ? const Padding(padding: EdgeInsets.all(18), child: Text('لا توجد حركات مالية مسجلة لهذا المورد.'))
+                : SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      for (final entry in entries)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            entry.isPayable ? Icons.north_east_rounded : Icons.south_west_rounded,
+                            color: entry.isPayable ? Colors.red.shade700 : Colors.green.shade700,
+                          ),
+                          title: Text(entry.title),
+                          subtitle: Text([_formatLedgerDate(entry.createdAt), if (entry.note?.isNotEmpty == true) entry.note!].join(' • ')),
+                          trailing: Text('${entry.amount} ج.س', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                    ]),
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق'))],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل كشف حساب المورد: $error');
+    }
+  }
+
+  String _formatLedgerDate(String value) {
+    final date = DateTime.tryParse(value)?.toLocal();
+    if (date == null) return value;
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${date.year}-${two(date.month)}-${two(date.day)} ${two(date.hour)}:${two(date.minute)}';
   }
 
   Future<void> _addSupplier() async {
