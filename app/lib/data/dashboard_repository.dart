@@ -64,7 +64,8 @@ class DashboardRepository {
     final debt = await _database.rawQuery('''
       SELECT
         COALESCE((SELECT SUM(total - paid_amount) FROM sales), 0) -
-        COALESCE((SELECT SUM(amount) FROM customer_payments), 0) AS balance
+        COALESCE((SELECT SUM(amount) FROM customer_payments), 0) +
+        COALESCE((SELECT SUM(opening_balance) FROM customers), 0) AS balance
     ''');
     final lowStock = await _database.rawQuery('''
       SELECT COUNT(*) AS count FROM products
