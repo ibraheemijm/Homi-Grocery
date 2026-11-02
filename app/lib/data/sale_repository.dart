@@ -848,8 +848,8 @@ class SaleRepository {
   }) async {
     if (saleId <= 0) throw ArgumentError('معرّف الفاتورة غير صالح.');
     if (amount <= 0) throw ArgumentError('مبلغ الرد يجب أن يكون أكبر من صفر.');
-    if (paymentMethod.trim().isEmpty) {
-      throw ArgumentError('حدد طريقة رد المبلغ.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod.trim())) {
+      throw ArgumentError('طريقة رد المبلغ غير مدعومة.');
     }
     return _database.transaction((txn) async {
       final accounts = await txn.query(
