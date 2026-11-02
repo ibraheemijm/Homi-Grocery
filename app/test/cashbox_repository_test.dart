@@ -115,6 +115,18 @@ void main() {
     expect(await cashbox.recent(userId: managerId), isEmpty);
   });
 
+
+  test('يرفض وسيلة حركة خزينة غير معتمدة', () async {
+    await expectLater(
+      cashbox.recordManualMovement(
+        direction: 'in', category: 'دخل غير مصنف', amount: 100,
+        paymentMethod: 'شيك', userId: managerId,
+      ),
+      throwsArgumentError,
+    );
+    expect(await cashbox.recent(userId: managerId), isEmpty);
+  });
+
   test('يربط الحركة اليدوية النقدية بالمستخدم والوردية ولا يربط التحويل بالدرج', () async {
     final manager = AuthUser(id: managerId, username: 'cashbox_test_manager', displayName: 'مدير الاختبار', role: 'manager');
     final shift = await shifts.openShift(userId: manager.id, openingCash: 0);
