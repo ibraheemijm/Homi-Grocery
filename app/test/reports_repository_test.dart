@@ -171,7 +171,8 @@ void main() {
     expect(report.purchaseCount, 1);
     expect(report.supplierReturns, 25);
     expect(report.customerCollections, 100);
-    expect(report.supplierPayments, 50);
+    // يشمل 50 مدفوعة عند الشراء و50 سدادًا لاحقًا للمورد.
+    expect(report.supplierPayments, 100);
     expect(report.supplierRefunds, 10);
     expect(report.returnRefunds, 20);
     expect(report.cashIncome, 650);
