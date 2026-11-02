@@ -186,8 +186,47 @@ void main() {
       permissions: settings.map((setting) => setting.key == 'customer_overpayments'
         ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true)
         : setting).toList());
-    expect(await sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
+    await expectLater(
+      sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
+        paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id),
+      throwsA(isA<StateError>()),
+    );
+    expect(await sales.refundCustomerOverpayment(saleId: sale.id, amount: 50,
+      paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id), 250);
+    expect(await sales.refundCustomerOverpayment(saleId: sale.id, amount: 50,
       paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id), 200);
+  });
+
+  test('يحمي قائمة الزيادات المعلقة بهوية المستخدم وصلاحية الرد', () async {
+    final cashier = await AuthRepository(database).createCashier(
+      manager: managerAccount,
+      username: 'cashier_overpayment_reader',
+      displayName: 'كاشير تسوية الزيادة',
+      password: 'CashierPass!2026',
+    );
+
+    await expectLater(
+      sales.pendingCustomerOverpayments(userId: cashier.id),
+      throwsA(isA<StateError>()),
+    );
+
+    final settings = await AuthRepository(database).getCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+    );
+    await AuthRepository(database).saveCashierPermissions(
+      manager: managerAccount,
+      cashierId: cashier.id,
+      permissions: settings.map((setting) => setting.key == 'customer_overpayments'
+          ? CashierPermissionSetting(
+              key: setting.key,
+              label: setting.label,
+              isAllowed: true,
+            )
+          : setting).toList(),
+    );
+    expect(await sales.pendingCustomerOverpayments(userId: cashier.id), isEmpty);
+    expect(await sales.pendingCustomerOverpayments(userId: managerId), isEmpty);
   });
 
   test('يسمح للكاشير بالتحويل البنكي والدفع المختلط دون صلاحية إضافية', () async {

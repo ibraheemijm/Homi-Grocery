@@ -65,7 +65,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
     if (!_canRefundOverpayments) return;
     final db = await GroceryDatabase.open();
     final repo = SaleRepository(db);
-    Future<List<Map<String, Object?>>> load() => repo.pendingCustomerOverpayments();
+    Future<List<Map<String, Object?>>> load() => repo.pendingCustomerOverpayments(userId: widget.userId);
     var rows = await load();
     if (!mounted) return;
     await showDialog<void>(

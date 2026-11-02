@@ -298,7 +298,15 @@ class SaleRepository {
       final users = await txn.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
       if (users.isEmpty || users.single['is_active'] != 1) throw StateError('الحساب غير نشط أو غير موجود.');
       if (users.single['role'] == 'cashier') {
-        await _requireCashierPermission(txn, userId: userId, permissionKey: 'customer_overpayments', permissionLabel: 'رد مبالغ الزيادة المستحقة للزبائن');
+        final limit = await _requireCashierPermission(
+          txn,
+          userId: userId,
+          permissionKey: 'customer_overpayments',
+          permissionLabel: 'رد مبالغ الزيادة المستحقة للزبائن',
+        );
+        if (limit != null && amount > limit) {
+          throw StateError('مبلغ الرد يتجاوز الحد المسموح ($limit ج.س).');
+        }
       } else if (users.single['role'] != 'manager') {
         throw StateError('نوع الحساب غير مصرح له برد المبالغ.');
       }
@@ -320,13 +328,43 @@ class SaleRepository {
     });
   }
 
-  /// يعيد سجل الزيادات التي لم تُرد بالكامل، مرتبطًا برقم الفاتورة فقط.
-  Future<List<Map<String, Object?>>> pendingCustomerOverpayments() async => _database.rawQuery('''
-    SELECT o.sale_id, s.invoice_number, o.received_amount, o.refunded_amount,
-      (o.received_amount - o.refunded_amount) AS outstanding_amount, o.created_at
-    FROM customer_overpayments o JOIN sales s ON s.id = o.sale_id
-    WHERE o.received_amount > o.refunded_amount ORDER BY o.id DESC
-  ''');
+  /// يعيد سجل الزيادات المعلقة بعد التحقق من هوية المستخدم وصلاحيته.
+  Future<List<Map<String, Object?>>> pendingCustomerOverpayments({
+    required int userId,
+  }) async {
+    final users = await _database.query(
+      'users',
+      columns: ['role', 'is_active'],
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = users.single['role'];
+    if (role == 'cashier') {
+      final permissions = await _database.query(
+        'cashier_permissions',
+        columns: ['is_allowed'],
+        where: "user_id = ? AND permission_key = 'customer_overpayments'",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+        throw StateError('لا يملك الكاشير صلاحية عرض الزيادات المستحقة للزبائن.');
+      }
+    } else if (role != 'manager') {
+      throw StateError('نوع الحساب غير مصرح له بعرض الزيادات المستحقة.');
+    }
+
+    return _database.rawQuery('''
+      SELECT o.sale_id, s.invoice_number, o.received_amount, o.refunded_amount,
+        (o.received_amount - o.refunded_amount) AS outstanding_amount, o.created_at
+      FROM customer_overpayments o JOIN sales s ON s.id = o.sale_id
+      WHERE o.received_amount > o.refunded_amount ORDER BY o.id DESC
+    ''');
+  }
 
   // حفظ الفاتورة وبنودها وتحديث المخزون في معاملة واحدة.
   Future<SaleRecord> createSale({
