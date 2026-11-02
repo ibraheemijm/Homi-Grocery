@@ -20,6 +20,9 @@ class InvoicePrintSummary {
     required this.returnedAmount,
     required this.refundedAmount,
     required this.outstandingAfterReturns,
+    required this.overpaymentReceived,
+    required this.overpaymentRefunded,
+    required this.overpaymentOutstanding,
   });
 
   final Map<String, Object?> sale;
@@ -27,6 +30,9 @@ class InvoicePrintSummary {
   final int returnedAmount;
   final int refundedAmount;
   final int outstandingAfterReturns;
+  final int overpaymentReceived;
+  final int overpaymentRefunded;
+  final int overpaymentOutstanding;
 }
 
 class InvoicePrintService {
@@ -68,6 +74,21 @@ class InvoicePrintService {
     );
     final returnedAmount = (returns.single['amount'] as num).toInt();
     final refundedAmount = (refunds.single['amount'] as num).toInt();
+    final overpaymentRows = await _database.query(
+      'customer_overpayments',
+      columns: ['received_amount', 'refunded_amount'],
+      where: 'sale_id = ?',
+      whereArgs: [saleId],
+      limit: 1,
+    );
+    final overpaymentReceived = overpaymentRows.isNotEmpty
+        ? (overpaymentRows.single['received_amount'] as num).toInt()
+        : ((sale['overpayment_amount'] as num?)?.toInt() ?? 0);
+    final overpaymentRefunded = overpaymentRows.isNotEmpty
+        ? (overpaymentRows.single['refunded_amount'] as num).toInt()
+        : 0;
+    final overpaymentOutstanding =
+        (overpaymentReceived - overpaymentRefunded).clamp(0, overpaymentReceived).toInt();
     final total = (sale['total'] as num).toInt();
     final paid = (sale['paid_amount'] as num).toInt();
     final originalBalance = (total - paid).clamp(0, total).toInt();
@@ -78,6 +99,9 @@ class InvoicePrintService {
       returnedAmount: returnedAmount,
       refundedAmount: refundedAmount,
       outstandingAfterReturns: originalBalance - debtCoveredByReturns,
+      overpaymentReceived: overpaymentReceived,
+      overpaymentRefunded: overpaymentRefunded,
+      overpaymentOutstanding: overpaymentOutstanding,
     );
   }
 
@@ -203,7 +227,24 @@ class InvoicePrintService {
           _amountRow('الخصم', sale['discount'] as int, thermal),
           pw.Divider(),
           _amountRow('الإجمالي النهائي', sale['total'] as int, thermal, bold: true),
-          _amountRow('المبلغ المستلم عند البيع', (sale['paid_amount'] as num).toInt(), thermal),
+          _amountRow(
+            'إجمالي المبلغ المستلم',
+            (sale['paid_amount'] as num).toInt() + summary.overpaymentReceived,
+            thermal,
+          ),
+          if (summary.overpaymentReceived > 0) ...[
+            _amountRow(
+              'المبلغ المسترد من الزيادة',
+              summary.overpaymentRefunded,
+              thermal,
+            ),
+            _amountRow(
+              'رصيد زائد مستحق للزبون',
+              summary.overpaymentOutstanding,
+              thermal,
+              bold: summary.overpaymentOutstanding > 0,
+            ),
+          ],
           if (summary.returnedAmount > 0)
             _amountRow('قيمة المرتجعات المسجلة', summary.returnedAmount, thermal),
           if (summary.refundedAmount > 0)
