@@ -814,6 +814,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           if (value == null) return;
                           refreshDialog(() {
                             method = value;
+                            if (method == 'آجل') paymentChannel = 'نقدي';
                             final amount = method == 'آجل'
                                 ? 0
                                 : method == 'جزئي'
@@ -835,7 +836,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
                           DropdownMenuItem(value: 'مختلط', child: Text('مختلط (نقدي + تحويل بنكي)')),
                         ],
-                        onChanged: (value) {
+                        onChanged: method == 'آجل' ? null : (value) {
                           if (value == null) return;
                           refreshDialog(() {
                             paymentChannel = value;
@@ -921,11 +922,13 @@ class _SalesScreenState extends State<SalesScreen> {
                       return;
                     }
                     final totalReceived = enteredCash + enteredBank;
-                    final channelMatches = paymentChannel == 'نقدي'
-                        ? enteredCash > 0 && enteredBank == 0
-                        : paymentChannel == 'تحويل بنكي'
-                            ? enteredBank > 0 && enteredCash == 0
-                            : enteredCash > 0 && enteredBank > 0;
+                    final channelMatches = method == 'آجل'
+                        ? enteredCash == 0 && enteredBank == 0
+                        : paymentChannel == 'نقدي'
+                            ? enteredCash > 0 && enteredBank == 0
+                            : paymentChannel == 'تحويل بنكي'
+                                ? enteredBank > 0 && enteredCash == 0
+                                : enteredCash > 0 && enteredBank > 0;
                     if (!channelMatches ||
                         (method == 'نقدي' && totalReceived < _total) ||
                         (method == 'آجل' && totalReceived != 0) ||
