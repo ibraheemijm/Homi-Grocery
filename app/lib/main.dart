@@ -326,7 +326,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     : _selectedIndex == 5
                                         ? SuppliersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                         : _selectedIndex == 6
-                                            ? CashboxScreen(userId: widget.user.id, shiftId: widget.shiftId)
+                                            ? CashboxScreen(userId: widget.user.id, isManager: widget.user.isManager, shiftId: widget.shiftId)
                                             : _selectedIndex == 7
                                                 ? ReportsScreen(userId: widget.user.id)
                                                 : _selectedIndex == 8

@@ -325,6 +325,8 @@ class SaleRepository {
     required int paidAmount,
     required String paymentMethod,
     String paymentChannel = 'نقدي',
+    int? cashPaidAmount,
+    int? bankPaidAmount,
     String? customerName,
     int? customerId,
     required int userId,
@@ -349,12 +351,21 @@ class SaleRepository {
     final total = subtotal - discount;
     // المبلغ المستلم قد يتجاوز الإجمالي؛ الزيادة التزام مستقل وليست إيرادًا.
     final receivedAmount = paidAmount;
+    final cashReceived = cashPaidAmount ?? (paymentChannel == 'تحويل بنكي' ? 0 : receivedAmount);
+    final bankReceived = bankPaidAmount ?? (paymentChannel == 'تحويل بنكي' ? receivedAmount : 0);
+    if (cashReceived < 0 || bankReceived < 0 || cashReceived + bankReceived != receivedAmount) {
+      throw ArgumentError('مجموع النقد والتحويل يجب أن يساوي إجمالي المبلغ المستلم.');
+    }
+    final effectiveChannel = cashReceived > 0 && bankReceived > 0 ? 'مختلط' : bankReceived > 0 ? 'تحويل بنكي' : 'نقدي';
+    if (paymentChannel != effectiveChannel && cashPaidAmount != null && bankPaidAmount != null) {
+      throw ArgumentError('طريقة الدفع لا تتوافق مع توزيع المبلغ.');
+    }
     final overpaymentAmount = (receivedAmount - total).clamp(0, 1 << 62).toInt();
     paidAmount = receivedAmount > total ? total : receivedAmount;
     if (!const ['نقدي', 'جزئي', 'آجل'].contains(paymentMethod)) {
       throw ArgumentError('طريقة السداد غير معروفة.');
     }
-    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
+    if (!const {'نقدي', 'تحويل بنكي', 'مختلط'}.contains(effectiveChannel)) {
       throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
     }
     if (paymentMethod == 'نقدي' && paidAmount != total) {
@@ -397,7 +408,7 @@ class SaleRepository {
         throw StateError('نوع الحساب غير مصرح له بتسجيل المبيعات.');
       }
       if (role == 'cashier') {
-          if (total <= 0 || paymentChannel != 'نقدي') {
+          if (total <= 0 || bankReceived > 0) {
             throw StateError(
               'الكاشير لا يسجل بيعًا صفريًا أو يستلم عبر التحويل البنكي.',
             );
@@ -454,7 +465,7 @@ class SaleRepository {
             }
           }
       }
-      if (paidAmount > 0 && paymentChannel == 'نقدي') {
+      if (cashReceived > 0) {
         await CashShiftRepository.validateActiveShift(
           txn,
           shiftId: shiftId,
@@ -500,18 +511,16 @@ class SaleRepository {
         'payment_method': paymentMethod,
         'created_at': createdAt,
       });
-      if (receivedAmount > 0) {
+      // تفصل حركة كل وسيلة دفع حتى لا يختلط رصيد الخزينة برصيد البنك.
+      for (final receipt in [
+        if (cashReceived > 0) ('نقدي', cashReceived),
+        if (bankReceived > 0) ('تحويل بنكي', bankReceived),
+      ]) {
         await txn.insert('cash_transactions', {
-          'direction': 'in',
-          'category': 'مبيعات',
-          'amount': receivedAmount,
-          'payment_method': paymentChannel,
-          'reference_type': 'sale',
-          'reference_id': saleId,
-          'user_id': userId,
-          'shift_id': paymentChannel == 'نقدي' ? shiftId : null,
-          'note': 'فاتورة $invoice',
-          'created_at': createdAt,
+          'direction': 'in', 'category': 'مبيعات', 'amount': receipt.$2,
+          'payment_method': receipt.$1, 'reference_type': 'sale', 'reference_id': saleId,
+          'user_id': userId, 'shift_id': receipt.$1 == 'نقدي' ? shiftId : null,
+          'note': 'فاتورة $invoice', 'created_at': createdAt,
         });
       }
 

@@ -82,6 +82,24 @@ void main() {
     expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 200);
   });
 
+
+  test('يفصل المقبوض النقدي والتحويل البنكي والزيادة عن إيراد الفاتورة', () async {
+    final productId = await products.add(const GroceryProduct(name: 'حليب', sellingPrice: 700, stockQuantity: 4));
+    final product = (await products.getById(productId))!;
+    final shiftId = await ensureManagerShift();
+    final sale = await sales.createSale(lines: [SaleLine(product: product, quantity: 1)],
+      discount: 0, paidAmount: 1000, paymentMethod: 'نقدي', paymentChannel: 'مختلط',
+      cashPaidAmount: 400, bankPaidAmount: 600, userId: managerId, shiftId: shiftId);
+    expect(sale.total, 700); expect(sale.paidAmount, 700); expect(sale.overpaymentAmount, 300);
+    final movements = await database.query('cash_transactions',
+      where: "reference_type = 'sale' AND reference_id = ?", whereArgs: [sale.id]);
+    expect(movements, hasLength(2));
+    expect(movements.map((row) => row['payment_method']).toSet(), {'نقدي', 'تحويل بنكي'});
+    expect(movements.fold<int>(0, (sum, row) => sum + (row['amount'] as int)), 1000);
+    expect(movements.firstWhere((row) => row['payment_method'] == 'نقدي')['shift_id'], shiftId);
+    expect(movements.firstWhere((row) => row['payment_method'] == 'تحويل بنكي')['shift_id'], isNull);
+  });
+
   test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(

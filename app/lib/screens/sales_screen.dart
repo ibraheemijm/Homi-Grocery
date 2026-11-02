@@ -758,11 +758,12 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _checkout() async {
     Map<String, Object?>? result;
     if (widget.cashierMode && !_canCreditSales) {
-      result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي'};
+      result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي', 'cash': _total, 'bank': 0};
     } else {
       final paidController = TextEditingController(text: '$_total');
+      final cashController = TextEditingController(text: '$_total');
+      final bankController = TextEditingController(text: '0');
       String method = 'نقدي';
-      String paymentChannel = 'نقدي';
       result = await showDialog<Map<String, Object?>>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(builder: (context, refreshDialog) => AlertDialog(
@@ -793,18 +794,19 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(height: 12),
             TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
             const SizedBox(height: 10),
-            if (!widget.cashierMode)
-              DropdownButtonFormField<String>(
-                initialValue: paymentChannel,
-                decoration: const InputDecoration(labelText: 'طريقة استلام المبلغ', border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
-                  DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
-                ],
-                onChanged: (value) {
-                  if (value != null) refreshDialog(() => paymentChannel = value);
-                },
-              ),
+            if (!widget.cashierMode) ...[
+              TextField(controller: cashController, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'المبلغ النقدي', border: OutlineInputBorder()),
+                onChanged: (_) => refreshDialog(() {})),
+              const SizedBox(height: 10),
+              TextField(controller: bankController, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'المبلغ المحول بنكيًا', border: OutlineInputBorder()),
+                onChanged: (_) => refreshDialog(() {})),
+              const SizedBox(height: 6),
+              Text('إجمالي المستلم: ${(int.tryParse(cashController.text) ?? 0) + (int.tryParse(bankController.text) ?? 0)} ج.س'),
+            ] else
+              TextField(controller: cashController, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'المبلغ النقدي المستلم', border: OutlineInputBorder())),
             const SizedBox(height: 8),
             const Text('إذا زاد المبلغ المستلم عن الإجمالي، تُسجل الزيادة كمبلغ مستحق للزبون ولا تُضاف إلى إيراد البيع.', style: TextStyle(fontSize: 12)),
           ])),
@@ -812,20 +814,25 @@ class _SalesScreenState extends State<SalesScreen> {
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
             FilledButton(onPressed: () {
               final paid = int.tryParse(paidController.text.trim());
-              if (paid == null || paid < 0 ||
+              final cash = int.tryParse(cashController.text.trim()) ?? -1;
+              final bank = widget.cashierMode ? 0 : (int.tryParse(bankController.text.trim()) ?? -1);
+              final received = cash + bank;
+              if (paid == null || paid < 0 || cash < 0 || bank < 0 || received != paid ||
                   (method == 'نقدي' && paid < _total) ||
-                  (paid > _total && method != 'نقدي') ||
                   (method == 'آجل' && paid != 0) ||
-                  (method == 'جزئي' && (paid == 0 || paid == _total))) {
+                  (method == 'جزئي' && (paid == 0 || paid >= _total))) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
                 return;
               }
-              Navigator.pop(dialogContext, {'paid': paid, 'method': method, 'channel': paymentChannel});
+              final channel = cash > 0 && bank > 0 ? 'مختلط' : bank > 0 ? 'تحويل بنكي' : 'نقدي';
+              Navigator.pop(dialogContext, {'paid': received, 'method': method, 'channel': channel, 'cash': cash, 'bank': bank});
             }, child: const Text('حفظ الفاتورة')),
           ],
         )),
       );
       paidController.dispose();
+      cashController.dispose();
+      bankController.dispose();
     }
     if (result == null || !mounted) return;
 
@@ -886,6 +893,8 @@ class _SalesScreenState extends State<SalesScreen> {
         paidAmount: result['paid']! as int,
         paymentMethod: result['method']! as String,
         paymentChannel: result['channel']! as String,
+        cashPaidAmount: result['cash'] as int?,
+        bankPaidAmount: result['bank'] as int?,
         customerName: customerNameForDebt,
         customerId: hasDebt ? _selectedCustomerId : null,
         userId: widget.userId,

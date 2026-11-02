@@ -5,9 +5,10 @@ import '../data/grocery_database.dart';
 
 /// شاشة الخزينة والتقرير اليومي للمبالغ المسجلة فعليًا.
 class CashboxScreen extends StatefulWidget {
-  const CashboxScreen({required this.userId, this.shiftId, this.canViewCashbox = true, this.canRecordExpenses = false, this.canRecordManualMovements = true, super.key});
+  const CashboxScreen({required this.userId, this.isManager = false, this.shiftId, this.canViewCashbox = true, this.canRecordExpenses = false, this.canRecordManualMovements = true, super.key});
 
   final int userId;
+  final bool isManager;
   final int? shiftId;
   final bool canViewCashbox;
   final bool canRecordExpenses;
@@ -20,11 +21,13 @@ class CashboxScreen extends StatefulWidget {
 class _CashboxScreenState extends State<CashboxScreen> {
   late Future<_CashboxData> _data;
   String _paymentFilter = 'الكل';
+  bool _canRefundOverpayments = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.canViewCashbox) _reload();
+    _loadOverpaymentPermission();
   }
 
   void _reload() {
@@ -38,6 +41,107 @@ class _CashboxScreenState extends State<CashboxScreen> {
       await repo.summary(userId: widget.userId),
       await repo.recent(userId: widget.userId, paymentMethod: _paymentFilter == 'الكل' ? null : _paymentFilter),
     );
+  }
+
+
+  Future<void> _loadOverpaymentPermission() async {
+    if (widget.isManager) {
+      if (mounted) setState(() => _canRefundOverpayments = true);
+      return;
+    }
+    try {
+      final db = await GroceryDatabase.open();
+      final rows = await db.query('cashier_permissions', columns: ['is_allowed'],
+        where: "user_id = ? AND permission_key = 'customer_overpayments'",
+        whereArgs: [widget.userId], limit: 1);
+      if (mounted) setState(() => _canRefundOverpayments = rows.isNotEmpty && rows.single['is_allowed'] == 1);
+    } catch (_) {
+      if (mounted) setState(() => _canRefundOverpayments = false);
+    }
+  }
+
+  Future<void> _showPendingOverpayments() async {
+    if (!_canRefundOverpayments) return;
+    final db = await GroceryDatabase.open();
+    final repo = SaleRepository(db);
+    Future<List<Map<String, Object?>>> load() => repo.pendingCustomerOverpayments();
+    var rows = await load();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: const Text('مبالغ مستحقة للزبائن'),
+          content: SizedBox(width: 520, child: rows.isEmpty
+            ? const Text('لا توجد مبالغ زيادة معلقة.')
+            : ConstrainedBox(constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView(shrinkWrap: true, children: [
+                  for (final row in rows)
+                    Card(child: ListTile(
+                      title: Text('فاتورة ${row['invoice_number']}'),
+                      subtitle: Text('المستلم الزائد: ${row['received_amount']} ج.س • سبق رده: ${row['refunded_amount']} ج.س'),
+                      trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text('${row['outstanding_amount']} ج.س', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Text('متبقي', style: TextStyle(fontSize: 11)),
+                      ]),
+                      onTap: () async {
+                        await _refundOverpayment(repo, row);
+                        rows = await load();
+                        if (mounted) refresh(() {});
+                      },
+                    )),
+                ]))),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      ),
+    );
+    if (mounted && widget.canViewCashbox) setState(_reload);
+  }
+
+  Future<void> _refundOverpayment(SaleRepository repo, Map<String, Object?> row) async {
+    final amountController = TextEditingController(text: '${row['outstanding_amount']}');
+    String method = 'نقدي';
+    final amount = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(builder: (context, refresh) => AlertDialog(
+        title: Text('رد زيادة فاتورة ${row['invoice_number']}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('المبلغ المتبقي: ${row['outstanding_amount']} ج.س'),
+          TextField(controller: amountController, keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'مبلغ الرد')),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: method, decoration: const InputDecoration(labelText: 'وسيلة الرد'),
+            items: const [
+              DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+              DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+            ],
+            onChanged: (value) { if (value != null) refresh(() => method = value); },
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+          FilledButton(onPressed: () {
+            final value = int.tryParse(amountController.text.trim());
+            final maximum = (row['outstanding_amount'] as num).toInt();
+            if (value == null || value <= 0 || value > maximum) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أدخل مبلغًا صحيحًا لا يتجاوز المستحق.')));
+              return;
+            }
+            Navigator.pop(dialogContext, value);
+          }, child: const Text('تأكيد الرد')),
+        ],
+      )),
+    );
+    amountController.dispose();
+    if (amount == null || !mounted) return;
+    try {
+      await repo.refundCustomerOverpayment(saleId: (row['sale_id'] as num).toInt(),
+        amount: amount, paymentMethod: method, userId: widget.userId, shiftId: widget.shiftId);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل رد الزيادة.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر رد المبلغ: $error')));
+    }
   }
 
   Future<void> _addMovement() async {
@@ -187,6 +291,9 @@ class _CashboxScreenState extends State<CashboxScreen> {
       appBar: AppBar(
         title: const Text('الخزينة والتقرير اليومي'),
         actions: [
+          if (_canRefundOverpayments)
+            IconButton(tooltip: 'مبالغ مستحقة للزبائن', onPressed: _showPendingOverpayments,
+              icon: const Icon(Icons.assignment_return_outlined)),
           IconButton(
             tooltip: 'تحديث',
             onPressed: () => setState(_reload),
