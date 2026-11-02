@@ -152,6 +152,49 @@ void main() {
       paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id), 200);
   });
 
+  test('يسمح للكاشير بالتحويل البنكي والدفع المختلط دون صلاحية إضافية', () async {
+    final cashier = await AuthRepository(database).createCashier(
+      manager: managerAccount, username: 'cashier_bank',
+      displayName: 'كاشير التحويل', password: 'CashierPass!2026');
+    final managerShiftId = await ensureManagerShift();
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId, userId: managerId, closingCash: 0);
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id, openingCash: 0);
+    final productId = await products.add(const GroceryProduct(
+      name: 'معلبات', sellingPrice: 500, stockQuantity: 4));
+    final product = (await products.getById(productId))!;
+
+    final bankSale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)], discount: 0,
+      paidAmount: 500, paymentMethod: 'نقدي', paymentChannel: 'تحويل بنكي',
+      cashPaidAmount: 0, bankPaidAmount: 500,
+      userId: cashier.id, shiftId: shift.id);
+    expect(bankSale.total, 500);
+    final bankMovement = (await database.query('cash_transactions',
+      where: "reference_type = 'sale' AND reference_id = ?",
+      whereArgs: [bankSale.id])).single;
+    expect(bankMovement['payment_method'], 'تحويل بنكي');
+    expect(bankMovement['amount'], 500);
+    expect(bankMovement['shift_id'], isNull);
+
+    final mixedSale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)], discount: 0,
+      paidAmount: 500, paymentMethod: 'نقدي', paymentChannel: 'مختلط',
+      cashPaidAmount: 200, bankPaidAmount: 300,
+      userId: cashier.id, shiftId: shift.id);
+    final mixedMovements = await database.query('cash_transactions',
+      where: "reference_type = 'sale' AND reference_id = ?",
+      whereArgs: [mixedSale.id]);
+    expect(mixedMovements, hasLength(2));
+    expect(mixedMovements.map((row) => row['payment_method']).toSet(),
+      {'نقدي', 'تحويل بنكي'});
+    expect(mixedMovements.firstWhere(
+      (row) => row['payment_method'] == 'نقدي')['shift_id'], shift.id);
+    expect(mixedMovements.firstWhere(
+      (row) => row['payment_method'] == 'تحويل بنكي')['shift_id'], isNull);
+  });
+
   test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(
