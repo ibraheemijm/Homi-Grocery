@@ -280,10 +280,15 @@ class ReportsRepository {
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM supplier_returns WHERE created_at >= ? AND created_at < ?
     ''', [start, end]);
+    // يشمل ما دُفع عند تسجيل فاتورة الشراء وما سُدد لاحقًا للمورد.
+    // لا نستخدم cash_transactions هنا حتى لا نخلط المدفوعات بتصنيفات الخزينة أو نكررها.
     final supplierPayments = await _database.rawQuery('''
-      SELECT COALESCE(SUM(amount), 0) AS total
-      FROM supplier_payments WHERE created_at >= ? AND created_at < ?
-    ''', [start, end]);
+      SELECT
+        COALESCE((SELECT SUM(paid_amount) FROM purchases
+          WHERE created_at >= ? AND created_at < ?), 0) +
+        COALESCE((SELECT SUM(amount) FROM supplier_payments
+          WHERE created_at >= ? AND created_at < ?), 0) AS total
+    ''', [start, end, start, end]);
     final supplierRefunds = await _database.rawQuery('''
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM supplier_return_refunds WHERE created_at >= ? AND created_at < ?
