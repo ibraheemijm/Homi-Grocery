@@ -106,14 +106,14 @@ void main() {
     expect(sale.remainingAmount, 0); expect(sale.overpaymentAmount, 300);
     expect(sale.customerName, isNull); expect(await database.query('customers'), isEmpty);
     expect((await database.query('cash_transactions')).single['amount'], 1000);
-    expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 300);
+    expect((await sales.pendingCustomerOverpayments(userId: managerId)).single['outstanding_amount'], 300);
     final remaining = await sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
       paymentMethod: 'نقدي', userId: managerId, shiftId: shiftId);
     expect(remaining, 200);
     final movements = await database.query('cash_transactions', orderBy: 'id');
     expect(movements.last['direction'], 'out'); expect(movements.last['amount'], 100);
     expect(movements.last['category'], 'رد زيادة دفع للزبون');
-    expect((await sales.pendingCustomerOverpayments()).single['outstanding_amount'], 200);
+    expect((await sales.pendingCustomerOverpayments(userId: managerId)).single['outstanding_amount'], 200);
     final invoice = (await sales.invoiceHistory(userId: managerId)).single;
     expect(invoice['overpayment_received'], 300);
     expect(invoice['overpayment_refunded'], 100);
