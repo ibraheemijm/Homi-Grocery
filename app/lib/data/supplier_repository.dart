@@ -27,13 +27,14 @@ class PendingSupplierRefund {
 }
 
 class SupplierBalance {
-  const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid});
+  const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid, this.openingBalance = 0});
   final int id;
   final String name;
   final int purchaseCount;
   final int totalDebt;
   final int totalPaid;
-  int get balance => totalDebt - totalPaid;
+  final int openingBalance;
+  int get balance => totalDebt - totalPaid + openingBalance;
   int get credit => (-balance).clamp(0, 1 << 62).toInt();
 }
 
@@ -137,13 +138,14 @@ class SupplierRepository {
   }
 
 
-  Future<int> addSupplier({required String name, String? phone, String? notes}) async {
+  Future<int> addSupplier({required String name, String? phone, String? notes, int openingBalance = 0}) async {
     final normalized = name.trim();
     if (normalized.isEmpty) throw ArgumentError('اسم المورد مطلوب.');
     final id = await _database.insert('suppliers', {
       'name': normalized,
       'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
       'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+      'opening_balance': openingBalance,
       'created_at': DateTime.now().toUtc().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     if (id != 0) return id;
@@ -216,10 +218,20 @@ class SupplierRepository {
     return _cashierLimit(txn, userId: userId, permissionKey: permissionKey, label: label);
   }
 
+  // تعديل الرصيد الافتتاحي للمورد للمدير فقط؛ الموجب مستحق للمورد والسالب مستحق لنا.
+  Future<void> setOpeningBalance({required int supplierId, required int amount, required int userId}) async {
+    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
+    if (users.isEmpty || users.single['is_active'] != 1 || users.single['role'] != 'manager') {
+      throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير فقط.');
+    }
+    final changed = await _database.update('suppliers', {'opening_balance': amount}, where: 'id = ?', whereArgs: [supplierId]);
+    if (changed == 0) throw StateError('المورد غير موجود.');
+  }
+
   Future<List<SupplierBalance>> balances({required int userId, String query = ''}) async {
     await _requireReadAccess(userId);
     final rows = await _database.rawQuery('''
-      SELECT s.id, s.name,
+      SELECT s.id, s.name, s.opening_balance AS opening_balance,
         (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) AS purchase_count,
         COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0) AS total_debt,
         COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) + COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
@@ -228,7 +240,8 @@ class SupplierRepository {
       ORDER BY (COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0)
         - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0)
         - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
-        + COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)) DESC,
+        + COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+        + s.opening_balance) DESC,
         s.name COLLATE NOCASE ASC
     ''', ['%${query.trim()}%']);
     return rows.map((r) => SupplierBalance(
@@ -236,6 +249,7 @@ class SupplierRepository {
       purchaseCount: (r['purchase_count'] as num).toInt(),
       totalDebt: (r['total_debt'] as num).toInt(),
       totalPaid: (r['total_paid'] as num).toInt(),
+      openingBalance: (r['opening_balance'] as num).toInt(),
     )).toList(growable: false);
   }
 
@@ -742,8 +756,9 @@ class SupplierRepository {
           COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) +
           COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) -
           COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid
-      ''', [supplierId, supplierId, supplierId, supplierId]);
-      final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt()).clamp(0, 1 << 62).toInt();
+      ''', [supplierId, supplierId, supplierId, supplierId, supplierId]);
+      final openingBalance = (result.first['opening_balance'] as num?)?.toInt() ?? 0;
+      final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt() + openingBalance).clamp(0, 1 << 62).toInt();
       if (amount > outstanding) throw ArgumentError('الدفع يتجاوز المستحق للمورد ($outstanding ج.س).');
       final createdAt = DateTime.now().toUtc().toIso8601String();
       final paymentId = await txn.insert('supplier_payments', {
