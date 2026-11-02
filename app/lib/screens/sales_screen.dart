@@ -757,9 +757,7 @@ class _SalesScreenState extends State<SalesScreen> {
   // الكاشير لا يختار طريقة سداد؛ مساره نقدي كامل فقط.
   Future<void> _checkout() async {
     Map<String, Object?>? result;
-    if (widget.cashierMode && !_canCreditSales) {
-      result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي', 'cash': _total, 'bank': 0};
-    } else {
+    {
       final cashController = TextEditingController(text: '$_total');
       final bankController = TextEditingController(text: '0');
       String method = 'نقدي';
