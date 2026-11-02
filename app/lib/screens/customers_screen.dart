@@ -310,7 +310,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       try {
         final value = int.tryParse(amount.text.trim());
         if (value == null || value < 0) throw ArgumentError('أدخل مبلغًا صحيحًا غير سالب.');
-        await (_repository as CustomerRepository).setOpeningBalance(
+        await _repository!.setOpeningBalance(
           customerId: customer.id, amount: value, userId: widget.userId,
         );
         await _load();
