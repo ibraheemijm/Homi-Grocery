@@ -179,6 +179,7 @@ class CustomerRepository implements CustomerDataSource {
   }
 
   // تعديل الرصيد الافتتاحي للمدير فقط، دون إنشاء حركة خزينة.
+  @override
   Future<void> setOpeningBalance({required int customerId, required int amount, required int userId}) async {
     if (amount < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
     final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
