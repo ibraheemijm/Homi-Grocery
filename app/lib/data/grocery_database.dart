@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 19;
+  static const int _version = 20;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -41,6 +41,7 @@ class GroceryDatabase {
         await createStockMovementsSchema(db);
         await createSalesReturnsSchema(db);
         await createPurchasesSchema(db);
+        await createOpeningBalancesSchema(db);
         await createSaleReturnRefundsSchema(db);
         await createCashTransactionsSchema(db);
         await createSupplierReturnsSchema(db);
@@ -110,6 +111,9 @@ class GroceryDatabase {
         }
         if (oldVersion < 19) {
           await createSalesOverpaymentSchema(db);
+        }
+        if (oldVersion < 20) {
+          await createOpeningBalancesSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -485,6 +489,18 @@ class GroceryDatabase {
     final columns = await db.rawQuery('PRAGMA table_info(sale_items)');
     if (!columns.any((column) => column['name'] == 'cost_price')) {
       await db.execute('ALTER TABLE sale_items ADD COLUMN cost_price INTEGER CHECK (cost_price IS NULL OR cost_price >= 0)');
+    }
+  }
+
+  // إضافة الأرصدة الافتتاحية دون إنشاء فواتير أو حركات خزينة وهمية.
+  static Future<void> createOpeningBalancesSchema(DatabaseExecutor db) async {
+    final customerColumns = await db.rawQuery('PRAGMA table_info(customers)');
+    if (!customerColumns.any((column) => column['name'] == 'opening_balance')) {
+      await db.execute('ALTER TABLE customers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0 CHECK (opening_balance >= 0)');
+    }
+    final supplierColumns = await db.rawQuery('PRAGMA table_info(suppliers)');
+    if (!supplierColumns.any((column) => column['name'] == 'opening_balance')) {
+      await db.execute('ALTER TABLE suppliers ADD COLUMN opening_balance INTEGER NOT NULL DEFAULT 0');
     }
   }
 
