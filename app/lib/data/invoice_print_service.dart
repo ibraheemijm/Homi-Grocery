@@ -12,6 +12,15 @@ import 'font_preferences.dart';
 import 'pdf_file_exporter.dart';
 import 'pdf_file_name.dart';
 
+/// بند مالي موحد في ملخص الدفع المطبوع.
+class InvoiceAmountLine {
+  const InvoiceAmountLine(this.label, this.amount, {this.bold = false});
+
+  final String label;
+  final int amount;
+  final bool bold;
+}
+
 /// تجمع بيانات الفاتورة من قاعدة البيانات وتعرض نافذة الطباعة أو الحفظ PDF.
 class InvoicePrintSummary {
   const InvoicePrintSummary({
@@ -33,6 +42,39 @@ class InvoicePrintSummary {
   final int overpaymentReceived;
   final int overpaymentRefunded;
   final int overpaymentOutstanding;
+
+  int get invoicePaidAmount => (sale['paid_amount'] as num).toInt();
+
+  int get totalReceived => invoicePaidAmount + overpaymentReceived;
+
+  int get netPaidAmount => totalReceived - overpaymentRefunded;
+
+  /// يطابق ترتيب البنود المعتمد لكل حالة دون إظهار البنود الصفرية غير المنطبقة.
+  List<InvoiceAmountLine> get paymentLines {
+    final lines = <InvoiceAmountLine>[
+      InvoiceAmountLine('إجمالي الفاتورة', (sale['total'] as num).toInt(), bold: true),
+    ];
+
+    if (overpaymentReceived > 0) {
+      lines.add(InvoiceAmountLine('المبلغ المستلم', totalReceived));
+      if (overpaymentRefunded > 0) {
+        lines
+          ..add(InvoiceAmountLine('المبلغ المسترد', overpaymentRefunded))
+          ..add(InvoiceAmountLine('صافي المبلغ المدفوع', netPaidAmount, bold: true));
+      }
+      if (overpaymentOutstanding > 0) {
+        lines.add(InvoiceAmountLine('زيادة مستحقة للزبون', overpaymentOutstanding, bold: true));
+      }
+    } else {
+      lines.add(InvoiceAmountLine('المبلغ المدفوع', invoicePaidAmount));
+    }
+
+    return lines;
+  }
+
+  String get remainingLabel => returnedAmount > 0
+      ? 'المتبقي من الفاتورة بعد المرتجعات (قبل التحصيلات اللاحقة)'
+      : 'المتبقي';
 }
 
 class InvoicePrintService {
@@ -226,39 +268,14 @@ class InvoicePrintService {
           _amountRow('الإجمالي قبل الخصم', sale['subtotal'] as int, thermal),
           _amountRow('الخصم', sale['discount'] as int, thermal),
           pw.Divider(),
-          _amountRow('الإجمالي النهائي', sale['total'] as int, thermal, bold: true),
-          _amountRow(
-            'إجمالي المبلغ المستلم',
-            (sale['paid_amount'] as num).toInt() + summary.overpaymentReceived,
-            thermal,
-          ),
-          if (summary.overpaymentReceived > 0) ...[
-            _amountRow(
-              'المبلغ المسترد من الزيادة',
-              summary.overpaymentRefunded,
-              thermal,
-            ),
-            _amountRow(
-              'صافي المبلغ بعد الاسترداد',
-              (sale['paid_amount'] as num).toInt() +
-                  summary.overpaymentReceived -
-                  summary.overpaymentRefunded,
-              thermal,
-              bold: true,
-            ),
-            _amountRow(
-              'رصيد زائد مستحق للزبون',
-              summary.overpaymentOutstanding,
-              thermal,
-              bold: summary.overpaymentOutstanding > 0,
-            ),
-          ],
+          for (final line in summary.paymentLines)
+            _amountRow(line.label, line.amount, thermal, bold: line.bold),
           if (summary.returnedAmount > 0)
             _amountRow('قيمة المرتجعات المسجلة', summary.returnedAmount, thermal),
           if (summary.refundedAmount > 0)
             _amountRow('رد نقدي مسجل للزبون', summary.refundedAmount, thermal),
           _amountRow(
-            'المتبقي من الفاتورة بعد المرتجعات (قبل التحصيلات اللاحقة)',
+            summary.remainingLabel,
             summary.outstandingAfterReturns,
             thermal,
             bold: true,
