@@ -218,7 +218,6 @@ class _CashboxScreenState extends State<CashboxScreen> {
                     items: const [
                       DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
                       DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
-                      DropdownMenuItem(value: 'محفظة إلكترونية', child: Text('محفظة إلكترونية')),
                     ],
                     onChanged: (value) {
                       if (value != null) setDialogState(() => paymentMethod = value);
