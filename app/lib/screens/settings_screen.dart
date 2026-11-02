@@ -6,7 +6,9 @@ import '../data/grocery_database.dart';
 import '../data/font_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.canManageSystemSettings = false});
+
+  final bool canManageSystemSettings;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -180,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _message = 'أدخل اسم البقالة أولًا.');
       return;
     }
-    if (_systemStartDate.isAfter(DateTime.now())) {
+    if (widget.canManageSystemSettings && _systemStartDate.isAfter(DateTime.now())) {
       setState(() => _message = 'تاريخ بدء استخدام البرنامج لا يمكن أن يكون في المستقبل.');
       return;
     }
@@ -203,7 +205,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final db = await GroceryDatabase.open();
-      if (!await _confirmSystemStartDateChange(db)) {
+      if (widget.canManageSystemSettings && !await _confirmSystemStartDateChange(db)) {
         if (mounted) setState(() => _saving = false);
         return;
       }
@@ -212,7 +214,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'clock_24h': _clock24.toString(),
         'sales_view_mode': _salesViewMode,
         'pdf_filename_language': _pdfFilenameLanguage,
-        'system_start_date': _dateValue(_systemStartDate),
+        if (widget.canManageSystemSettings)
+          'system_start_date': _dateValue(_systemStartDate),
         'occasion_enabled': _occasionEnabled.toString(),
         'occasion_text': _occasionText.text.trim(),
         'occasion_start': _occasionStart.text.trim(),
@@ -228,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
       await FontPreferences.save(uiFamily: _uiFont, documentFamily: _documentFont);
-      _savedSystemStartDate = _systemStartDate;
+      if (widget.canManageSystemSettings) _savedSystemStartDate = _systemStartDate;
       if (mounted) setState(() => _message = 'تم حفظ الإعدادات. طُبّق خط الواجهة، وسيُستخدم خط المستندات عند إنشاء الفواتير وملفات PDF.');
     } catch (error) {
       if (mounted) setState(() => _message = 'تعذر حفظ الإعدادات: $error');
@@ -267,6 +270,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           const SizedBox(height: 18),
+                          if (widget.canManageSystemSettings) ...[
                           const Text('التاريخ المحاسبي',
                               style: TextStyle(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
@@ -280,6 +284,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             label: Text('تاريخ بدء الاستخدام: ${_dateValue(_systemStartDate)}'),
                           ),
                           const SizedBox(height: 18),
+                          ],
                           const Text('إعدادات العرض',
                               style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<String>(
