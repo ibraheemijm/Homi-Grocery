@@ -760,7 +760,6 @@ class _SalesScreenState extends State<SalesScreen> {
     if (widget.cashierMode && !_canCreditSales) {
       result = {'paid': _total, 'method': 'نقدي', 'channel': 'نقدي', 'cash': _total, 'bank': 0};
     } else {
-      final paidController = TextEditingController(text: '$_total');
       final cashController = TextEditingController(text: '$_total');
       final bankController = TextEditingController(text: '0');
       String method = 'نقدي';
@@ -785,15 +784,22 @@ class _SalesScreenState extends State<SalesScreen> {
                 if (value == null) return;
                 refreshDialog(() {
                   method = value;
-                  if (method == 'نقدي') paidController.text = '$_total';
-                  if (method == 'جزئي') paidController.text = _total > 1 ? '${_total ~/ 2}' : '0';
-                  if (method == 'آجل') paidController.text = '0';
+                  if (method == 'نقدي') {
+                    cashController.text = '$_total';
+                    bankController.text = '0';
+                  }
+                  if (method == 'جزئي') {
+                    cashController.text = _total > 1 ? '${_total ~/ 2}' : '0';
+                    bankController.text = '0';
+                  }
+                  if (method == 'آجل') {
+                    cashController.text = '0';
+                    bankController.text = '0';
+                  }
                 });
               },
             ),
             const SizedBox(height: 12),
-            TextField(controller: paidController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
-            const SizedBox(height: 10),
             if (!widget.cashierMode) ...[
               TextField(controller: cashController, keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'المبلغ النقدي', border: OutlineInputBorder()),
@@ -813,14 +819,13 @@ class _SalesScreenState extends State<SalesScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('رجوع')),
             FilledButton(onPressed: () {
-              final paid = int.tryParse(paidController.text.trim());
               final cash = int.tryParse(cashController.text.trim()) ?? -1;
               final bank = widget.cashierMode ? 0 : (int.tryParse(bankController.text.trim()) ?? -1);
               final received = cash + bank;
-              if (paid == null || paid < 0 || cash < 0 || bank < 0 || received != paid ||
-                  (method == 'نقدي' && paid < _total) ||
-                  (method == 'آجل' && paid != 0) ||
-                  (method == 'جزئي' && (paid == 0 || paid >= _total))) {
+              if (cash < 0 || bank < 0 ||
+                  (method == 'نقدي' && received < _total) ||
+                  (method == 'آجل' && received != 0) ||
+                  (method == 'جزئي' && (received == 0 || received >= _total))) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المبلغ لا يتوافق مع طريقة السداد المختارة.')));
                 return;
               }
@@ -830,7 +835,6 @@ class _SalesScreenState extends State<SalesScreen> {
           ],
         )),
       );
-      paidController.dispose();
       cashController.dispose();
       bankController.dispose();
     }

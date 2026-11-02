@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/cashbox_repository.dart';
 import '../data/grocery_database.dart';
+import '../data/sale_repository.dart';
 
 /// شاشة الخزينة والتقرير اليومي للمبالغ المسجلة فعليًا.
 class CashboxScreen extends StatefulWidget {

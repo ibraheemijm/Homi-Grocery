@@ -357,7 +357,7 @@ class SaleRepository {
       throw ArgumentError('مجموع النقد والتحويل يجب أن يساوي إجمالي المبلغ المستلم.');
     }
     final effectiveChannel = cashReceived > 0 && bankReceived > 0 ? 'مختلط' : bankReceived > 0 ? 'تحويل بنكي' : 'نقدي';
-    if (paymentChannel != effectiveChannel && cashPaidAmount != null && bankPaidAmount != null) {
+    if (paymentChannel != effectiveChannel && (cashPaidAmount != null || bankPaidAmount != null)) {
       throw ArgumentError('طريقة الدفع لا تتوافق مع توزيع المبلغ.');
     }
     final overpaymentAmount = (receivedAmount - total).clamp(0, 1 << 62).toInt();

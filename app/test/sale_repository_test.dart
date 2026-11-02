@@ -100,6 +100,21 @@ void main() {
     expect(movements.firstWhere((row) => row['payment_method'] == 'تحويل بنكي')['shift_id'], isNull);
   });
 
+
+  test('يرفض توزيع مبالغ دفع لا يساوي إجمالي المبلغ المستلم', () async {
+    final productId = await products.add(const GroceryProduct(name: 'عصير', sellingPrice: 500, stockQuantity: 3));
+    final product = (await products.getById(productId))!;
+    final shiftId = await ensureManagerShift();
+    await expectLater(
+      sales.createSale(lines: [SaleLine(product: product, quantity: 1)],
+        discount: 0, paidAmount: 500, paymentMethod: 'نقدي', paymentChannel: 'مختلط',
+        cashPaidAmount: 200, bankPaidAmount: 200, userId: managerId, shiftId: shiftId),
+      throwsArgumentError,
+    );
+    expect(await database.query('sales'), isEmpty);
+    expect(await database.query('cash_transactions'), isEmpty);
+  });
+
   test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(
