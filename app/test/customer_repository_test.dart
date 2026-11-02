@@ -30,6 +30,7 @@ void main() {
     await GroceryDatabase.createCashTransactionsSchema(database);
     await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSaleReturnRefundsSchema(database);
+    await GroceryDatabase.createOpeningBalancesSchema(database);
     managerId = await database.insert('users', {
       'username': 'test_manager', 'display_name': 'مدير الاختبار',
       'password_hash': 'test-hash', 'password_salt': 'test-salt',
@@ -463,6 +464,47 @@ void main() {
       paymentMethod: 'تحويل بنكي',
       userId: cashier.id,
     );
+    expect((await customers.balances(userId: managerId)).single.balance, 200);
+  });
+
+  test('يضيف الرصيد الافتتاحي للزبون في الرصيد والكشف ويسمح بتحصيله', () async {
+    final customerId = await customers.addCustomer(name: 'زبون برصيد سابق', openingBalance: 1000);
+    var balance = (await customers.balances(userId: managerId)).single;
+    expect(balance.id, customerId);
+    expect(balance.openingBalance, 1000);
+    expect(balance.balance, 1000);
+
+    final ledger = await customers.ledger(customerId, userId: managerId);
+    expect(ledger, hasLength(1));
+    expect(ledger.single.title, 'رصيد افتتاحي');
+    expect(ledger.single.amount, 1000);
+    expect(ledger.single.isCredit, isFalse);
+
+    await customers.recordPayment(
+      customerId: customerId,
+      amount: 400,
+      paymentMethod: 'تحويل بنكي',
+      userId: managerId,
+    );
+    balance = (await customers.balances(userId: managerId)).single;
+    expect(balance.balance, 600);
+    expect(await database.query('cash_transactions'), hasLength(1));
+  });
+
+  test('يمنع الرصيد الافتتاحي السالب للزبون ويقصر تعديله على المدير', () async {
+    await expectLater(customers.addCustomer(name: 'رصيد غير صالح', openingBalance: -1), throwsArgumentError);
+    final customerId = await customers.addCustomer(name: 'زبون تعديل الرصيد');
+    final cashierId = await database.insert('users', {
+      'username': 'opening_balance_cashier', 'display_name': 'كاشير',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      customers.setOpeningBalance(customerId: customerId, amount: 200, userId: cashierId),
+      throwsStateError,
+    );
+    await customers.setOpeningBalance(customerId: customerId, amount: 200, userId: managerId);
     expect((await customers.balances(userId: managerId)).single.balance, 200);
   });
 
