@@ -26,6 +26,16 @@ class PendingSupplierRefund {
   final int refundableAmount;
 }
 
+class SupplierLedgerEntry {
+  const SupplierLedgerEntry({required this.title, required this.amount, required this.isPayable, required this.createdAt, this.note});
+  final String title;
+  final int amount;
+  // true تعني أن الحركة تزيد ما علينا للمورد، وfalse تعني أنها لصالح المتجر.
+  final bool isPayable;
+  final String createdAt;
+  final String? note;
+}
+
 class SupplierBalance {
   const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid, this.openingBalance = 0});
   final int id;
@@ -250,6 +260,46 @@ class SupplierRepository {
       totalDebt: (r['total_debt'] as num).toInt(),
       totalPaid: (r['total_paid'] as num).toInt(),
       openingBalance: (r['opening_balance'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  // كشف حساب المورد ويعرض الرصيد الافتتاحي كبند مستقل عن الفواتير والحركات.
+  Future<List<SupplierLedgerEntry>> ledger(int supplierId, {required int userId}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.rawQuery('''
+      SELECT 'رصيد افتتاحي' AS title, ABS(s.opening_balance) AS amount,
+        CASE WHEN s.opening_balance > 0 THEN 1 ELSE 0 END AS is_payable,
+        s.created_at AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+      FROM suppliers s WHERE s.id = ? AND s.opening_balance <> 0
+      UNION ALL
+      SELECT 'فاتورة شراء ' || p.invoice_number AS title,
+        MAX(0, p.total - p.paid_amount) AS amount, 1 AS is_payable,
+        p.created_at AS created_at, p.note AS note
+      FROM purchases p WHERE p.supplier_id = ?
+      UNION ALL
+      SELECT 'سداد للمورد' AS title, sp.amount AS amount, 0 AS is_payable,
+        sp.created_at AS created_at, sp.note AS note
+      FROM supplier_payments sp WHERE sp.supplier_id = ?
+      UNION ALL
+      SELECT 'مرتجع شراء' AS title, sr.amount AS amount, 0 AS is_payable,
+        sr.created_at AS created_at, sr.note AS note
+      FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id
+      WHERE p.supplier_id = ?
+      UNION ALL
+      SELECT 'استرداد مبلغ مرتجع' AS title, srr.amount AS amount, 1 AS is_payable,
+        srr.created_at AS created_at, COALESCE(srr.note, srr.payment_method) AS note
+      FROM supplier_return_refunds srr
+      JOIN supplier_returns sr ON sr.id = srr.supplier_return_id
+      JOIN purchases p ON p.id = sr.purchase_id
+      WHERE p.supplier_id = ?
+      ORDER BY created_at ASC
+    ''', [supplierId, supplierId, supplierId, supplierId, supplierId]);
+    return rows.map((row) => SupplierLedgerEntry(
+      title: row['title'] as String,
+      amount: (row['amount'] as num).toInt(),
+      isPayable: (row['is_payable'] as num).toInt() == 1,
+      createdAt: row['created_at'] as String,
+      note: row['note'] as String?,
     )).toList(growable: false);
   }
 
