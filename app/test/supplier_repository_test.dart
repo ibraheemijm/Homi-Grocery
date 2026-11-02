@@ -29,6 +29,7 @@ void main() {
     await GroceryDatabase.createCashShiftsSchema(database);
     await GroceryDatabase.createSupplierReturnsSchema(database);
     await GroceryDatabase.createSupplierReturnRefundsSchema(database);
+    await GroceryDatabase.createOpeningBalancesSchema(database);
     managerId = await database.insert('users', {
       'username': 'test_manager', 'display_name': 'مدير الاختبار',
       'password_hash': 'test-hash', 'password_salt': 'test-salt',
@@ -896,6 +897,62 @@ void main() {
       userId: cashier.id,
     );
     expect((await suppliers.balances(userId: managerId)).single.balance, 100);
+  });
+
+  test('يحتسب الرصيد الافتتاحي الموجب للمورد ضمن المستحق ويسمح بسداده', () async {
+    final supplierId = await suppliers.addSupplier(name: 'مورد برصيد افتتاحي موجب', openingBalance: 500);
+    var balance = (await suppliers.balances(userId: managerId)).single;
+    expect(balance.openingBalance, 500);
+    expect(balance.balance, 500);
+
+    await suppliers.recordPayment(
+      supplierId: supplierId,
+      amount: 300,
+      paymentMethod: 'تحويل بنكي',
+      userId: managerId,
+    );
+    balance = (await suppliers.balances(userId: managerId)).single;
+    expect(balance.balance, 200);
+    expect(await database.query('cash_transactions'), hasLength(1));
+  });
+
+  test('يخصم الرصيد الافتتاحي السالب للمورد من مشتريات النظام قبل السماح بالسداد', () async {
+    final supplierId = await suppliers.addSupplier(name: 'مورد له رصيد دائن', openingBalance: -200);
+    final productId = await products.add(const GroceryProduct(
+      name: 'صنف يقابل الرصيد الدائن', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    await suppliers.createPurchase(
+      userId: managerId,
+      supplierId: supplierId,
+      lines: [PurchaseLine(productId: productId, productName: 'صنف يقابل الرصيد الدائن', unit: 'حبة', quantity: 3, unitCost: 100)],
+      paidAmount: 0,
+    );
+    expect((await suppliers.balances(userId: managerId)).single.balance, 100);
+    await suppliers.recordPayment(
+      supplierId: supplierId,
+      amount: 100,
+      paymentMethod: 'تحويل بنكي',
+      userId: managerId,
+    );
+    expect((await suppliers.balances(userId: managerId)).single.balance, 0);
+  });
+
+  test('يمنع غير المدير من تعديل الرصيد الافتتاحي للمورد', () async {
+    final supplierId = await suppliers.addSupplier(name: 'مورد صلاحية الرصيد');
+    final cashierId = await database.insert('users', {
+      'username': 'supplier_opening_cashier', 'display_name': 'كاشير',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      suppliers.setOpeningBalance(supplierId: supplierId, amount: -50, userId: cashierId),
+      throwsStateError,
+    );
+    await suppliers.setOpeningBalance(supplierId: supplierId, amount: -50, userId: managerId);
+    final balance = (await suppliers.balances(userId: managerId)).single;
+    expect(balance.balance, -50);
+    expect(balance.credit, 50);
   });
 
 }
