@@ -161,7 +161,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                   final invoice = _invoices[index];
                                   final total = invoice['total'] as int;
                                   final paid = invoice['paid_amount'] as int;
-                                  final overpayment = (invoice['overpayment_amount'] as num?)?.toInt() ?? 0;
+                                  final overpayment = (invoice['overpayment_received'] as num?)?.toInt()
+                                      ?? (invoice['overpayment_amount'] as num?)?.toInt() ?? 0;
+                                  final overpaymentRefunded =
+                                      (invoice['overpayment_refunded'] as num?)?.toInt() ?? 0;
+                                  final overpaymentOutstanding =
+                                      (invoice['overpayment_outstanding'] as num?)?.toInt()
+                                      ?? (overpayment - overpaymentRefunded).clamp(0, overpayment).toInt();
                                   return Card(
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
@@ -185,8 +191,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                           Text('الزبون: ${(invoice['customer_name'] as String?)?.trim().isNotEmpty == true ? invoice['customer_name'] : 'زبون نقدي'}'),
                                           Text('التاريخ: ${_date(invoice['created_at'] as String)}'),
                                           Text('عدد البنود: ${invoice['item_count']} • المستلم: ${paid + overpayment} ج.س • المتبقي: ${total - paid} ج.س'),
-                                          if (overpayment > 0)
-                                            Text('زيادة مستحقة للزبون: $overpayment ج.س', style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w700)),
+                                          if (overpayment > 0) ...[
+                                            Text('الزيادة الأصلية: $overpayment ج.س • المسترد: $overpaymentRefunded ج.س'),
+                                            if (overpaymentOutstanding > 0)
+                                              Text('المتبقي المستحق للزبون: $overpaymentOutstanding ج.س',
+                                                style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w700))
+                                            else
+                                              const Text('تم رد الزيادة بالكامل',
+                                                style: TextStyle(color: Colors.green, fontWeight: FontWeight.w700)),
+                                          ],
                                           const SizedBox(height: 8),
                                           Wrap(
                                             alignment: WrapAlignment.start,
