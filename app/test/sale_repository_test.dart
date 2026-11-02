@@ -115,6 +115,43 @@ void main() {
     expect(await database.query('cash_transactions'), isEmpty);
   });
 
+
+  test('يسمح للكاشير باستلام الزيادة نقدًا دون منحه البيع الآجل', () async {
+    final cashier = await AuthRepository(database).createCashier(
+      manager: managerAccount, username: 'cashier_overpay',
+      displayName: 'كاشير الزيادة', password: 'CashierPass!2026');
+    final managerShiftId = await ensureManagerShift();
+    await CashShiftRepository(database).closeShift(
+      shiftId: managerShiftId, userId: managerId, closingCash: 0);
+    final shift = await CashShiftRepository(database).openShift(
+      userId: cashier.id, openingCash: 0);
+    final productId = await products.add(const GroceryProduct(
+      name: 'خبز', sellingPrice: 500, stockQuantity: 5));
+    final product = (await products.getById(productId))!;
+    final sale = await sales.createSale(
+      lines: [SaleLine(product: product, quantity: 1)], discount: 0,
+      paidAmount: 800, paymentMethod: 'نقدي', paymentChannel: 'نقدي',
+      userId: cashier.id, shiftId: shift.id);
+    expect(sale.total, 500);
+    expect(sale.paidAmount, 500);
+    expect(sale.overpaymentAmount, 300);
+    expect(sale.customerName, isNull);
+    expect(await database.query('customers'), isEmpty);
+    await expectLater(
+      sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
+        paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id),
+      throwsA(isA<StateError>()));
+    final settings = await AuthRepository(database).getCashierPermissions(
+      manager: managerAccount, cashierId: cashier.id);
+    await AuthRepository(database).saveCashierPermissions(
+      manager: managerAccount, cashierId: cashier.id,
+      permissions: settings.map((setting) => setting.key == 'customer_overpayments'
+        ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true)
+        : setting).toList());
+    expect(await sales.refundCustomerOverpayment(saleId: sale.id, amount: 100,
+      paymentMethod: 'نقدي', userId: cashier.id, shiftId: shift.id), 200);
+  });
+
   test('يحمي سجل الفواتير من الكاشير حتى منح صلاحية العرض', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(
