@@ -127,6 +127,8 @@ class ProductRepository {
       }
       return txn.insert('products', {
         ...product.toMap(),
+        // لا يُسمح لمسار المشتريات بتحديد سعر البيع؛ يضبطه المدير لاحقًا.
+        'selling_price': 0,
         'created_by_user_id': userId,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
