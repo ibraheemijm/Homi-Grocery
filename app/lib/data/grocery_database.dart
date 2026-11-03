@@ -714,10 +714,13 @@ class GroceryDatabase {
     await db.execute('''
       CREATE TRIGGER trg_products_low_stock_insert
       AFTER INSERT ON products
-      WHEN NEW.stock_quantity <= NEW.minimum_quantity
       BEGIN
         INSERT OR IGNORE INTO low_stock_alert_state (product_id, is_low, episode)
-        VALUES (NEW.id, 1, 1);
+        VALUES (
+          NEW.id,
+          CASE WHEN NEW.stock_quantity <= NEW.minimum_quantity THEN 1 ELSE 0 END,
+          CASE WHEN NEW.stock_quantity <= NEW.minimum_quantity THEN 1 ELSE 0 END
+        );
         INSERT OR IGNORE INTO local_notifications
           (type, title, body, event_key, related_id, created_at)
         SELECT
