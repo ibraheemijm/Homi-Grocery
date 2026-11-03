@@ -803,6 +803,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     note.dispose();
   }
 
+  String _purchaseDateLabel(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
   Future<void> _showPurchaseHistory() async {
     if (!_canViewPurchaseHistory) return;
 
@@ -843,44 +846,145 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       }
       final purchases = await _repository!.purchaseHistory(userId: widget.userId);
       if (!mounted) return;
+      final searchController = TextEditingController();
+      DateTime? fromDate;
+      DateTime? toDate;
+      var displayedPurchases = purchases;
+      var filtering = false;
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('سجل فواتير الشراء'),
-          content: SizedBox(
-            width: 620,
-            child: purchases.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text('لا توجد فواتير شراء مسجلة بعد.', textAlign: TextAlign.center),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: purchases.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final purchase = purchases[index];
-                      final date = DateTime.tryParse(purchase.createdAt)?.toLocal();
-                      final dateLabel = date == null
-                          ? purchase.createdAt
-                          : '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
-                        title: Text('${purchase.invoiceNumber} • ${purchase.supplierName}'),
-                        subtitle: Text('$dateLabel\nالإجمالي: ${purchase.total} ج.س • المدفوع: ${purchase.paidAmount} ج.س • المتبقي: ${purchase.remainingAmount} ج.س'),
-                        isThreeLine: true,
-                        trailing: const Icon(Icons.chevron_left_rounded),
-                        onTap: () => _showPurchaseDetails(purchase),
-                      );
-                    },
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('سجل فواتير الشراء'),
+            content: SizedBox(
+              width: 640,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'بحث برقم الفاتورة أو اسم المورد',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final selected = await showDatePicker(
+                            context: dialogContext,
+                            initialDate: fromDate ?? toDate ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                            helpText: 'بداية الفترة',
+                          );
+                          if (selected != null) setDialogState(() => fromDate = selected);
+                        },
+                        icon: const Icon(Icons.calendar_today),
+                        label: Text(fromDate == null ? 'من تاريخ' : 'من ${_purchaseDateLabel(fromDate!)}'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final selected = await showDatePicker(
+                            context: dialogContext,
+                            initialDate: toDate ?? fromDate ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                            helpText: 'نهاية الفترة',
+                          );
+                          if (selected != null) setDialogState(() => toDate = selected);
+                        },
+                        icon: const Icon(Icons.event),
+                        label: Text(toDate == null ? 'إلى تاريخ' : 'إلى ${_purchaseDateLabel(toDate!)}'),
+                      ),
+                      TextButton(
+                        onPressed: () => setDialogState(() {
+                          fromDate = null;
+                          toDate = null;
+                          searchController.clear();
+                        }),
+                        child: const Text('مسح الفلاتر'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: filtering ? null : () async {
+                          if (fromDate != null && toDate != null &&
+                              DateTime(fromDate!.year, fromDate!.month, fromDate!.day)
+                                  .isAfter(DateTime(toDate!.year, toDate!.month, toDate!.day))) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(content: Text('تاريخ البداية يجب ألا يتجاوز تاريخ النهاية.')),
+                            );
+                            return;
+                          }
+                          setDialogState(() => filtering = true);
+                          try {
+                            final rows = await _repository!.purchaseHistory(
+                              userId: widget.userId,
+                              query: searchController.text,
+                              fromDate: fromDate,
+                              toDate: toDate,
+                            );
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() => displayedPurchases = rows);
+                          } catch (error) {
+                            if (dialogContext.mounted) {
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                SnackBar(content: Text('تعذر تطبيق التصفية: $error')),
+                              );
+                            }
+                          } finally {
+                            if (dialogContext.mounted) setDialogState(() => filtering = false);
+                          }
+                        },
+                        icon: const Icon(Icons.filter_alt),
+                        label: const Text('تطبيق'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (filtering) const LinearProgressIndicator(),
+                  Flexible(
+                    child: displayedPurchases.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('لا توجد فواتير مطابقة لمعايير البحث.', textAlign: TextAlign.center),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: displayedPurchases.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final purchase = displayedPurchases[index];
+                              final date = DateTime.tryParse(purchase.createdAt)?.toLocal();
+                              final dateLabel = date == null
+                                  ? purchase.createdAt
+                                  : '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
+                                title: Text('${purchase.invoiceNumber} • ${purchase.supplierName}'),
+                                subtitle: Text('$dateLabel\\nالإجمالي: ${purchase.total} ج.س • المدفوع: ${purchase.paidAmount} ج.س • المتبقي: ${purchase.remainingAmount} ج.س'),
+                                isThreeLine: true,
+                                trailing: const Icon(Icons.chevron_left_rounded),
+                                onTap: () => _showPurchaseDetails(purchase),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
-          ],
         ),
       );
+      searchController.dispose();
     } catch (error) {
       _message('تعذر تحميل سجل المشتريات: $error');
     }
