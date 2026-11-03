@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 22;
+  static const int _version = 23;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -123,6 +123,18 @@ class GroceryDatabase {
           final productColumns = await db.rawQuery('PRAGMA table_info(products)');
           if (!productColumns.any((column) => column['name'] == 'created_by_user_id')) {
             await db.execute('ALTER TABLE products ADD COLUMN created_by_user_id INTEGER');
+          }
+        }
+        if (oldVersion < 23) {
+          final approvalColumns = await db.rawQuery(
+            'PRAGMA table_info(delivery_publication_approvals)',
+          );
+          if (!approvalColumns.any(
+            (column) => column['name'] == 'decided_by_user_id',
+          )) {
+            await db.execute(
+              'ALTER TABLE delivery_publication_approvals ADD COLUMN decided_by_user_id INTEGER',
+            );
           }
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -666,7 +678,8 @@ class GroceryDatabase {
         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'revoked')),
         created_at TEXT NOT NULL,
         decided_at TEXT,
-        decision_note TEXT
+        decision_note TEXT,
+        decided_by_user_id INTEGER
       )
     ''');
     await db.execute(
