@@ -229,13 +229,6 @@ class CashShiftRepository {
         where: "id = ? AND status = 'open'",
         whereArgs: [shiftId],
       );
-      final users = await txn.query(
-        'users',
-        columns: ['username'],
-        where: 'id = ?',
-        whereArgs: [userId],
-        limit: 1,
-      );
       await txn.insert('auth_audit_log', {
         'user_id': userId,
         'username_snapshot': users.single['username'],
