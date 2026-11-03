@@ -5,7 +5,9 @@ import '../data/backup_repository.dart';
 import '../data/grocery_database.dart';
 
 class BackupScreen extends StatefulWidget {
-  const BackupScreen({super.key});
+  const BackupScreen({super.key, required this.managerUserId});
+
+  final int managerUserId;
   @override
   State<BackupScreen> createState() => _BackupScreenState();
 }
@@ -17,7 +19,7 @@ class _BackupScreenState extends State<BackupScreen> {
   String? _lastBackupPath;
   String? _message;
   bool _isError = false;
-  Future<BackupRepository> _repo() async => BackupRepository(await GroceryDatabase.open());
+  Future<BackupRepository> _repo() async => BackupRepository(await GroceryDatabase.open(), managerUserId: widget.managerUserId);
 
   @override
   void initState() {
