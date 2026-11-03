@@ -103,6 +103,25 @@ void main() {
     expect(find.text('بدء عملية بيع'), findsWidgets);
   });
 
+  testWidgets('تعرض لوحة المدير على Android تحديث السحب ومحتوى الهاتف',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_dashboardApp());
+    await tester.pump();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
+    expect(find.text('الوصول السريع'), findsOneWidget);
+    expect(find.text('آخر الفواتير'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
   testWidgets('يحافظ عنصر التنقل المحدد على تباين واضح في المظهر الداكن',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
