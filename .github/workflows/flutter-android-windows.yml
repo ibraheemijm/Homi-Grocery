@@ -1,11 +1,8 @@
 name: Flutter Windows checks
 
 on:
+  # تشغيل Windows يدويًا فقط؛ تعديلات Android لا تطلق بناء Windows تلقائيًا.
   workflow_dispatch:
-  push:
-    branches: [feature/flutter-foundation]
-  pull_request:
-    branches: [main]
 
 concurrency:
   group: flutter-windows-${{ github.workflow }}-${{ github.ref }}
