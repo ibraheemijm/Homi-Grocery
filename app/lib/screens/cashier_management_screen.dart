@@ -716,8 +716,8 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
           const _CashierWorkspaceItem('الزبائن والديون', Icons.people_alt_rounded, 'customers'),
         if (const {'view_supplier_data', 'supplier_purchases', 'supplier_payments', 'supplier_returns', 'supplier_return_refunds'}.any(_permissions.contains))
           const _CashierWorkspaceItem('الموردون والمشتريات', Icons.local_shipping_rounded, 'suppliers'),
-        if (_permissions.contains('view_cashbox') || _permissions.contains('cash_expenses'))
-          const _CashierWorkspaceItem('الخزينة', Icons.account_balance_wallet_rounded, 'cashbox'),
+        if (_permissions.contains('cash_expenses'))
+          const _CashierWorkspaceItem('المصروفات', Icons.account_balance_wallet_rounded, 'cashbox'),
         if (_permissions.contains('view_reports'))
           const _CashierWorkspaceItem('التقارير', Icons.analytics_rounded, 'reports'),
         if (_permissions.contains('stock_adjustments'))
@@ -742,7 +742,7 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
       case 'suppliers':
         return SuppliersScreen(userId: widget.cashier.id, shiftId: widget.shiftId, cashierPermissions: _permissions);
       case 'cashbox':
-        return CashboxScreen(userId: widget.cashier.id, shiftId: widget.shiftId, canViewCashbox: _permissions.contains('view_cashbox'), canRecordExpenses: _permissions.contains('cash_expenses'), canRecordManualMovements: false);
+        return CashboxScreen(userId: widget.cashier.id, shiftId: widget.shiftId, canViewCashbox: false, canRecordExpenses: _permissions.contains('cash_expenses'), canRecordManualMovements: false);
       case 'reports':
         return ReportsScreen(userId: widget.cashier.id);
       case 'stock':
