@@ -48,6 +48,8 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _saving = false;
   String _salesViewMode = 'grid';
   String? _error;
+  final ScrollController _androidSalesScrollController = ScrollController();
+  final GlobalKey _androidCartSectionKey = GlobalKey();
 
   @override
   void initState() { super.initState(); _initialize(); }
@@ -280,6 +282,7 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void dispose() {
     _customerSearchTimer?.cancel();
+    _androidSalesScrollController.dispose();
     _search.dispose(); _customer.dispose(); _customerNickname.dispose(); _discountController.dispose(); super.dispose();
   }
 
@@ -310,6 +313,13 @@ class _SalesScreenState extends State<SalesScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
+                      final androidPhone =
+                          defaultTargetPlatform == TargetPlatform.android &&
+                              constraints.maxWidth < 600;
+                      if (androidPhone) {
+                        return _buildAndroidPhoneLayout(theme);
+                      }
+
                       final narrow = constraints.maxWidth < 850;
                       if (narrow) {
                         return SingleChildScrollView(
@@ -373,6 +383,87 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
     );
   }
+
+  // تخطيط هاتف Android: قائمة الأصناف قابلة للتمرير، وملخص الفاتورة ثابت أسفل الشاشة.
+  Widget _buildAndroidPhoneLayout(ThemeData theme) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            child: _buildSalesHeading(theme),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _androidSalesScrollController,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCatalog(theme, compact: true),
+                  const SizedBox(height: 12),
+                  KeyedSubtree(
+                    key: _androidCartSectionKey,
+                    child: _buildCart(theme, compact: true),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_canViewInvoices) _buildRecent(theme, compact: true),
+                ],
+              ),
+            ),
+          ),
+          _buildAndroidCartBar(theme),
+        ],
+      );
+
+  // يظل الإجمالي وعدد الأصناف ظاهرين أثناء تصفح قائمة المنتجات.
+  Widget _buildAndroidCartBar(ThemeData theme) => Material(
+        color: theme.colorScheme.surface,
+        elevation: 8,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_cart.length} صنف في الفاتورة',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      Text(
+                        '${_total} ج.س',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: () {
+                    final target = _androidCartSectionKey.currentContext;
+                    if (target != null) {
+                      Scrollable.ensureVisible(
+                        target,
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: 0.04,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.receipt_long_rounded),
+                  label: const Text('عرض الفاتورة'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Widget _buildSalesHeading(ThemeData theme) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
