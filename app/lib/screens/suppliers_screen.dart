@@ -241,7 +241,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       try {
         final opening = int.tryParse(openingBalance.text.trim());
         if (opening == null) throw ArgumentError('أدخل رصيدًا افتتاحيًا صحيحًا.');
-        await _repository!.addSupplier(name: name.text, phone: phone.text, notes: note.text, openingBalance: opening);
+        await _repository!.addSupplier(userId: widget.userId, name: name.text, phone: phone.text, notes: note.text, openingBalance: opening);
         await _load();
         _message('تم حفظ المورد.');
       } catch (error) { _message('تعذر حفظ المورد: $error'); }

@@ -65,7 +65,7 @@ void main() {
   test('يسمح بالبحث عن اسم المورد بصلاحية الشراء دون كشف رصيده', () async {
     final auth = AuthRepository(database);
     final cashier = await auth.createCashier(manager: managerAccount, username: 'supplier_lookup_cashier', displayName: 'كاشير شراء', password: 'CashierPass!2026');
-    final supplierId = await suppliers.addSupplier(name: 'مورد بحث محدود');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد بحث محدود');
     final settings = await auth.getCashierPermissions(manager: managerAccount, cashierId: cashier.id);
     await auth.saveCashierPermissions(manager: managerAccount, cashierId: cashier.id, permissions: settings.map((setting) => setting.key == 'supplier_purchases' ? CashierPermissionSetting(key: setting.key, label: setting.label, isAllowed: true) : setting).toList());
     final lookup = await suppliers.supplierLookup(userId: cashier.id);
@@ -85,7 +85,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'زيت', purchasePrice: 200, sellingPrice: 250, stockQuantity: 2,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد المرتجعات');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد المرتجعات');
     final purchase = await suppliers.createPurchase(
       userId: managerId,
       supplierId: supplierId,
@@ -127,7 +127,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 140, stockQuantity: 3,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الاستردادات');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الاستردادات');
     final purchase = await suppliers.createPurchase(
       userId: managerId,
       supplierId: supplierId,
@@ -179,7 +179,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الصلاحيات');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الصلاحيات');
     final purchase = await suppliers.createPurchase(
         userId: managerId,
       supplierId: supplierId,
@@ -306,7 +306,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 4,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد السكر');
     final purchase = await suppliers.createPurchase(
         userId: managerId,
       supplierId: supplierId,
@@ -351,7 +351,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الوردية');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الوردية');
     final purchase = await suppliers.createPurchase(
       supplierId: supplierId,
       lines: [
@@ -414,7 +414,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الاسترداد النقدي');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الاسترداد النقدي');
     final purchase = await suppliers.createPurchase(
       supplierId: supplierId,
       lines: [
@@ -459,7 +459,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'صنف استرداد غير معتمد', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد وسيلة الدفع');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد وسيلة الدفع');
     final purchase = await suppliers.createPurchase(
       supplierId: supplierId,
       lines: [PurchaseLine(productId: productId, productName: 'صنف استرداد غير معتمد',
@@ -496,7 +496,7 @@ void main() {
     final oilId = await products.add(const GroceryProduct(
       name: 'زيت', purchasePrice: 200, sellingPrice: 280, stockQuantity: 5,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد متعدد الأصناف');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد متعدد الأصناف');
 
     final purchase = await suppliers.createPurchase(
         paymentChannel: 'تحويل بنكي',
@@ -522,7 +522,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'طحين', purchasePrice: 100, sellingPrice: 150, stockQuantity: 3,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الطحين');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الطحين');
 
     await expectLater(
       suppliers.createPurchase(
@@ -548,7 +548,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 2,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الأرز');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الأرز');
     final line = PurchaseLine(productId: productId, productName: 'أرز', unit: 'كيلوجرام', quantity: 2, unitCost: 100);
 
     await expectLater(
@@ -571,7 +571,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'زيت', purchasePrice: 50, sellingPrice: 80, stockQuantity: 1,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الزيت');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الزيت');
     await suppliers.createPurchase(
         paymentChannel: 'تحويل بنكي',
         userId: managerId,
@@ -599,7 +599,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد السكر');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد السكر');
     final purchase = await suppliers.createPurchase(
         paymentChannel: 'تحويل بنكي',
         userId: managerId,
@@ -642,7 +642,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'أرز', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الأرز');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الأرز');
     final purchase = await suppliers.createPurchase(
         userId: managerId,
       supplierId: supplierId,
@@ -677,7 +677,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد السكر بخصم');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد السكر بخصم');
     final purchase = await suppliers.createPurchase(
         userId: managerId,
       supplierId: supplierId,
@@ -708,7 +708,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'زيت', purchasePrice: 50, sellingPrice: 80, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الزيت');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الزيت');
     final purchase = await suppliers.createPurchase(
         userId: managerId,
       supplierId: supplierId,
@@ -739,7 +739,7 @@ void main() {
     final productId = await products.add(const GroceryProduct(
       name: 'حليب', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
-    final supplierId = await suppliers.addSupplier(name: 'مورد الحليب');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الحليب');
     final purchase = await suppliers.createPurchase(
         paymentChannel: 'تحويل بنكي',
         userId: managerId,
@@ -786,8 +786,28 @@ void main() {
   });
 
   test('يرفض اسم المورد الفارغ', () async {
-    await expectLater(suppliers.addSupplier(name: '  '), throwsArgumentError);
+    await expectLater(suppliers.addSupplier(userId: managerId, name: '  '), throwsArgumentError);
   });
+  test('يمنع الكاشير والحساب الموقوف من إنشاء مورد مباشرة عبر المستودع', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'supplier_create_cashier', 'display_name': 'كاشير',
+      'password_hash': 'test-hash', 'password_salt': 'test-salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await expectLater(
+      suppliers.addSupplier(userId: cashierId, name: 'مورد ممنوع'),
+      throwsA(isA<StateError>()),
+    );
+    await database.update('users', {'is_active': 0}, where: 'id = ?', whereArgs: [managerId]);
+    await expectLater(
+      suppliers.addSupplier(userId: managerId, name: 'مورد من مدير موقوف'),
+      throwsA(isA<StateError>()),
+    );
+    expect(await database.query('suppliers'), isEmpty);
+    expect(await database.query('auth_audit_log'), isEmpty);
+  });
+
   test('يفرض صلاحيات وحدود فواتير الشراء ومدفوعات المورد للكاشير', () async {
     final auth = AuthRepository(database);
     final manager = managerAccount;
@@ -797,7 +817,7 @@ void main() {
       displayName: 'الكاشير',
       password: 'CashierPass!2026',
     );
-    final supplierId = await suppliers.addSupplier(name: 'مورد الصلاحيات');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد الصلاحيات');
     final productId = await products.add(const GroceryProduct(
       name: 'صنف المورد',
       purchasePrice: 100,
@@ -900,7 +920,7 @@ void main() {
   });
 
   test('يحتسب الرصيد الافتتاحي الموجب للمورد ضمن المستحق ويسمح بسداده', () async {
-    final supplierId = await suppliers.addSupplier(name: 'مورد برصيد افتتاحي موجب', openingBalance: 500);
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد برصيد افتتاحي موجب', openingBalance: 500);
     var balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.openingBalance, 500);
     expect(balance.balance, 500);
@@ -917,7 +937,7 @@ void main() {
   });
 
   test('يخصم الرصيد الافتتاحي السالب للمورد من مشتريات النظام قبل السماح بالسداد', () async {
-    final supplierId = await suppliers.addSupplier(name: 'مورد له رصيد دائن', openingBalance: -200);
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد له رصيد دائن', openingBalance: -200);
     final productId = await products.add(const GroceryProduct(
       name: 'صنف يقابل الرصيد الدائن', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
     ));
@@ -938,7 +958,7 @@ void main() {
   });
 
   test('يمنع غير المدير من تعديل الرصيد الافتتاحي للمورد', () async {
-    final supplierId = await suppliers.addSupplier(name: 'مورد صلاحية الرصيد');
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد صلاحية الرصيد');
     final cashierId = await database.insert('users', {
       'username': 'supplier_opening_cashier', 'display_name': 'كاشير',
       'password_hash': 'test-hash', 'password_salt': 'test-salt',
@@ -956,7 +976,7 @@ void main() {
   });
 
   test('يعرض الرصيد الافتتاحي للمورد كبند مستقل في كشف الحساب', () async {
-    final supplierId = await suppliers.addSupplier(name: 'مورد كشف الحساب', openingBalance: -350);
+    final supplierId = await suppliers.addSupplier(userId: managerId, name: 'مورد كشف الحساب', openingBalance: -350);
     final entries = await suppliers.ledger(supplierId, userId: managerId);
     expect(entries, hasLength(1));
     expect(entries.single.title, 'رصيد افتتاحي');

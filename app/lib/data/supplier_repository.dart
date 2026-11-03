@@ -148,20 +148,54 @@ class SupplierRepository {
   }
 
 
-  Future<int> addSupplier({required String name, String? phone, String? notes, int openingBalance = 0}) async {
+  /// إضافة المورد للمدير فقط؛ يعاد فحص الحساب داخل المعاملة ولا تعتمد الحماية على الواجهة.
+  Future<int> addSupplier({
+    required int userId,
+    required String name,
+    String? phone,
+    String? notes,
+    int openingBalance = 0,
+  }) async {
     final normalized = name.trim();
     if (normalized.isEmpty) throw ArgumentError('اسم المورد مطلوب.');
-    final id = await _database.insert('suppliers', {
-      'name': normalized,
-      'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
-      'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
-      'opening_balance': openingBalance,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    if (id != 0) return id;
-    final rows = await _database.query('suppliers', columns: ['id'], where: 'name = ? COLLATE NOCASE', whereArgs: [normalized], limit: 1);
-    if (rows.isEmpty) throw StateError('تعذر حفظ المورد.');
-    return rows.first['id'] as int;
+    return _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('إضافة الموردين والأرصدة الافتتاحية متاحة للمدير النشط فقط.');
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      final id = await txn.insert('suppliers', {
+        'name': normalized,
+        'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
+        'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+        'opening_balance': openingBalance,
+        'created_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id != 0) {
+        await txn.insert('auth_audit_log', {
+          'user_id': userId,
+          'username_snapshot': users.single['username'],
+          'action': 'supplier_created:$id',
+          'created_at': now,
+        });
+        return id;
+      }
+      final rows = await txn.query(
+        'suppliers',
+        columns: ['id'],
+        where: 'name = ? COLLATE NOCASE',
+        whereArgs: [normalized],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('تعذر حفظ المورد.');
+      return rows.first['id'] as int;
+    });
   }
 
   // يتحقق من هوية المستخدم وصلاحية عرض بيانات الموردين قبل إرجاع الأرصدة.
