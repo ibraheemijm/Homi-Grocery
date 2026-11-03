@@ -684,8 +684,8 @@ void main() {
       )).map((p) => p.id),
       [first.id],
     );
-    expect(
-      await suppliers.purchaseHistory(
+    await expectLater(
+      suppliers.purchaseHistory(
         userId: managerId,
         fromDate: DateTime(2026, 11, 4),
         toDate: DateTime(2026, 11, 3),
