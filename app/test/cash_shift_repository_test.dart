@@ -258,4 +258,30 @@ void main() {
       throwsA(isA<CashShiftException>()),
     );
   });
+
+  test('يرفض إغلاق الوردية إذا أُوقف الحساب بعد فتحها', () async {
+    final manager = await auth.createInitialManager(
+      username: 'store_admin',
+      displayName: 'مدير المتجر',
+      password: 'StrongPass!2026',
+    );
+    final shift = await shifts.openShift(userId: manager.id, openingCash: 250);
+    await database.update(
+      'users',
+      {'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [manager.id],
+    );
+
+    await expectLater(
+      shifts.closeShift(shiftId: shift.id, userId: manager.id, closingCash: 250),
+      throwsA(isA<CashShiftException>()),
+    );
+    final stillOpen = await database.query(
+      'cash_shifts',
+      where: 'id = ? AND status = ?',
+      whereArgs: [shift.id, 'open'],
+    );
+    expect(stillOpen, hasLength(1));
+  });
 }
