@@ -8,6 +8,7 @@ import 'grocery_database.dart';
 class BackupRepository {
   BackupRepository(
     this._database, {
+    required this.managerUserId,
     Future<void> Function()? closeForMaintenance,
     Future<Database> Function()? openRestoredDatabase,
     Future<Directory> Function()? resolveBackupDirectory,
@@ -16,6 +17,21 @@ class BackupRepository {
         _resolveBackupDirectory = resolveBackupDirectory;
 
   final Database _database;
+  final int managerUserId;
+
+  /// تتحقق طبقة البيانات من المدير النشط ولا تعتمد على إخفاء عناصر الواجهة.
+  Future<void> _requireActiveManager() async {
+    final rows = await _database.query(
+      'users',
+      columns: ['id'],
+      where: "id = ? AND role = 'manager' AND is_active = 1",
+      whereArgs: [managerUserId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw StateError('إنشاء النسخ الاحتياطية واستعادتها وإدارتها متاح للمدير النشط فقط.');
+    }
+  }
   final Future<void> Function() _closeForMaintenance;
   final Future<Database> Function() _openRestoredDatabase;
   final Future<Directory> Function()? _resolveBackupDirectory;
@@ -34,6 +50,7 @@ class BackupRepository {
 
   /// Returns managed local backups newest first; unrelated files are ignored.
   Future<List<File>> listBackups() async {
+    await _requireActiveManager();
     final directory = await backupDirectory();
     final files = <File>[];
     await for (final entity in directory.list(followLinks: false)) {
@@ -55,6 +72,7 @@ class BackupRepository {
 
   /// Deletes only a managed backup in the application's backup directory.
   Future<void> deleteBackup(String path) async {
+    await _requireActiveManager();
     final directory = await backupDirectory();
     final file = File(path);
     final normalizedParent = p.normalize(directory.absolute.path);
@@ -71,6 +89,7 @@ class BackupRepository {
   }
 
   Future<File> createBackup() async {
+    await _requireActiveManager();
     final directory = await backupDirectory();
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
     final destination = File(p.join(directory.path, 'homi-grocery-$stamp.db'));
@@ -145,6 +164,7 @@ class BackupRepository {
   }
 
   Future<void> restoreBackup(String sourcePath) async {
+    await _requireActiveManager();
     final source = File(sourcePath);
     final targetPath = _database.path;
     if (p.equals(p.normalize(source.absolute.path), p.normalize(File(targetPath).absolute.path))) {
