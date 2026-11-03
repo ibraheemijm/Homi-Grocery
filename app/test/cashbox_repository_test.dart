@@ -66,7 +66,7 @@ void main() {
     expect(await cashbox.recent(userId: managerId, paymentMethod: 'تحويل بنكي'), hasLength(2));
   });
 
-  test('يحمي قراءة الخزينة ويتيحها للكاشير بعد منح الصلاحية', () async {
+  test('يمنع الكاشير من قراءة إجمالي الخزينة حتى مع وجود صلاحية قديمة', () async {
     final manager = AuthUser(
       id: managerId,
       username: 'cashbox_test_manager',
@@ -83,24 +83,18 @@ void main() {
     await expectLater(cashbox.summary(userId: cashier.id), throwsStateError);
     await expectLater(cashbox.recent(userId: cashier.id), throwsStateError);
 
-    final settings = await auth.getCashierPermissions(
-      manager: manager,
-      cashierId: cashier.id,
-    );
-    await auth.saveCashierPermissions(
-      manager: manager,
-      cashierId: cashier.id,
-      permissions: settings.map((setting) => setting.key == 'view_cashbox'
-          ? CashierPermissionSetting(
-              key: setting.key,
-              label: setting.label,
-              isAllowed: true,
-            )
-          : setting).toList(),
-    );
+    // يحاكي سجل صلاحية قديمًا من إصدار كان يسمح بعرض إجمالي الخزينة.
+    await database.insert('cashier_permissions', {
+      'user_id': cashier.id,
+      'permission_key': 'view_cashbox',
+      'is_allowed': 1,
+      'updated_by': managerId,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
 
-    expect((await cashbox.summary(userId: cashier.id)).currentBalance, 0);
-    expect(await cashbox.recent(userId: cashier.id), isEmpty);
+    await expectLater(cashbox.summary(userId: cashier.id), throwsStateError);
+    await expectLater(cashbox.recent(userId: cashier.id), throwsStateError);
+    expect(cashierPermissionLabels.containsKey('view_cashbox'), isFalse);
   });
 
   test('يرفض المبالغ غير الصالحة واتجاه الحركة غير المعروف', () async {
