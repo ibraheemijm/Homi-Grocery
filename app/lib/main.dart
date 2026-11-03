@@ -305,7 +305,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const _NavigationItem('الإعدادات', Icons.settings_rounded),
         const _NavigationItem('حركات المخزون', Icons.history_rounded),
         const _NavigationItem('الإشعارات وسجل الموافقات', Icons.notifications_active_rounded),
-        const _NavigationItem('النسخ الاحتياطي والاستعادة', Icons.backup_rounded),
+        if (widget.user.isManager)
+          const _NavigationItem('النسخ الاحتياطي والاستعادة', Icons.backup_rounded),
         if (widget.user.isManager)
           const _NavigationItem('إدارة الكاشيرين', Icons.manage_accounts_rounded),
       ];
@@ -356,8 +357,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
                                             ? const NotificationsScreen()
-                                            : _selectedIndex == 11
-                                                ? const BackupScreen()
+                                            : _selectedIndex == 11 && widget.user.isManager
+                                                ? BackupScreen(managerUserId: widget.user.id)
                                                 : _selectedIndex == 12 && widget.user.isManager
                                                     ? CashierManagementScreen(manager: widget.user)
                                                     : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
