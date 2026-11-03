@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../data/grocery_database.dart';
 import '../data/customer_repository.dart';
@@ -435,7 +436,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: theme.textTheme.bodySmall,
                       ),
                       Text(
-                        '${_total} ج.س',
+                        '$_total ج.س',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
