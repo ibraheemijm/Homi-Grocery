@@ -1,6 +1,7 @@
 // المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'data/dashboard_repository.dart';
