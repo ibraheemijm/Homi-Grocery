@@ -73,7 +73,7 @@ void main() {
       openingCash: 500,
     );
     shiftId = shift.id;
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: manager.id);
     now = DateTime.utc(2026, 11, 1, 8);
     sales = SaleRepository(database, clock: () => now);
     await setReturnPermission(allowed: false);
