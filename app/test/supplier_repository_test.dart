@@ -42,7 +42,7 @@ void main() {
       displayName: 'مدير الاختبار',
       role: 'manager',
     );
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: managerId);
     suppliers = SupplierRepository(database);
   });
 
