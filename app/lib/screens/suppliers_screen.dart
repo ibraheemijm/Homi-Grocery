@@ -44,7 +44,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     try {
       final db = await GroceryDatabase.open();
       _repository = SupplierRepository(db);
-      _productsRepository = ProductRepository(db);
+      _productsRepository = ProductRepository(db, userId: widget.userId);
       _products = await _productsRepository!.search('');
       await _load();
       if (mounted) setState(() { _loading = false; _error = null; });
@@ -425,7 +425,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         return;
       }
 
-      final productId = await _productsRepository!.addUnique(
+      final productId = await _productsRepository!.createProductFromPurchase(
         GroceryProduct(
           name: details['name']!,
           unit: details['unit']!,
@@ -799,7 +799,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         );
         // ينظف المنتجات التي أُنشئت ثم أزيلت من الفاتورة، دون أرشفة ما استُخدم.
         for (final productId in newlyCreatedProductIds) {
-          await _productsRepository!.archiveIfUnused(productId);
+          await _productsRepository!.cleanupPurchaseProduct(productId);
         }
         await _load();
         _products = await _productsRepository!.search('');
