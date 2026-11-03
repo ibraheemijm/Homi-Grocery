@@ -57,7 +57,7 @@ void main() {
       openingCash: 500,
     );
     shiftId = shift.id;
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: manager.id);
     sales = SaleRepository(database);
     await auth.saveCashierPermissions(
       manager: manager,
