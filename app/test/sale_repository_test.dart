@@ -39,7 +39,7 @@ void main() {
       password: managerPassword,
     );
     managerId = managerAccount.id;
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: managerId);
     sales = SaleRepository(database);
   });
 
