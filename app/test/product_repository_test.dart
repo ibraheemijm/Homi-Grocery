@@ -156,10 +156,8 @@ void main() {
       cashierProducts.add(const GroceryProduct(name: 'إضافة مستقلة')),
       throwsStateError,
     );
-    await expectLater(
-      cashierProducts.cleanupPurchaseProduct(id),
-      throwsStateError,
-    );
+    expect(await cashierProducts.cleanupPurchaseProduct(id), isTrue);
+    expect((await cashierProducts.getById(id))!.isActive, isFalse);
   });
 
   test('يرفض حفظ صنف بلا اسم', () async {
