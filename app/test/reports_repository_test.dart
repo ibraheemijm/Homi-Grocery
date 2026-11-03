@@ -187,7 +187,7 @@ void main() {
 
   test('يعرض التحصيل والمرتجع الناتجين من مسار البيع الفعلي في التقرير اليومي', () async {
     final now = DateTime.now();
-    final products = ProductRepository(database);
+    final products = ProductRepository(database, userId: managerId);
     final sales = SaleRepository(database);
     final productId = await products.add(const GroceryProduct(
       name: 'صنف اختبار التقرير الفعلي',
