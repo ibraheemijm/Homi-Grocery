@@ -558,6 +558,14 @@ void main() {
     );
     await customers.setOpeningBalance(customerId: customerId, amount: 200, userId: managerId);
     expect((await customers.balances(userId: managerId)).single.balance, 200);
+    final audit = await database.query(
+      'auth_audit_log',
+      where: "action = ?",
+      whereArgs: ['customer_opening_balance_updated:$customerId:0:200'],
+    );
+    expect(audit, hasLength(1));
+    expect(audit.single['user_id'], managerId);
+    expect(audit.single['username_snapshot'], 'test_manager');
   });
 
 }
