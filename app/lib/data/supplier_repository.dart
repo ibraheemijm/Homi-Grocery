@@ -521,12 +521,29 @@ class SupplierRepository {
   Future<List<PurchaseHistoryRecord>> purchaseHistory({
     required int userId,
     int? supplierId,
+    String query = '',
+    DateTime? fromDate,
+    DateTime? toDate,
     int limit = 100,
   }) async {
     await _requireReadAccess(userId);
     if (limit < 1 || limit > 1000) {
       throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
     }
+    if (fromDate != null && toDate != null &&
+        DateTime(fromDate.year, fromDate.month, fromDate.day)
+            .isAfter(DateTime(toDate.year, toDate.month, toDate.day))) {
+      throw ArgumentError('تاريخ بداية البحث يجب ألا يتجاوز تاريخ النهاية.');
+    }
+    final normalizedQuery = query.trim();
+    final start = fromDate == null
+        ? null
+        : DateTime(fromDate.year, fromDate.month, fromDate.day)
+            .toUtc().toIso8601String();
+    final end = toDate == null
+        ? null
+        : DateTime(toDate.year, toDate.month, toDate.day + 1)
+            .toUtc().toIso8601String();
     final rows = await _database.rawQuery('''
       SELECT p.id, p.invoice_number, p.supplier_id, s.name AS supplier_name,
         p.subtotal, p.discount, p.total, p.paid_amount, p.payment_method,
@@ -534,9 +551,16 @@ class SupplierRepository {
       FROM purchases p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE (? IS NULL OR p.supplier_id = ?)
+        AND (? = '' OR p.invoice_number LIKE ? OR s.name LIKE ?)
+        AND (? IS NULL OR p.created_at >= ?)
+        AND (? IS NULL OR p.created_at < ?)
       ORDER BY p.created_at DESC, p.id DESC
       LIMIT ?
-    ''', [supplierId, supplierId, limit]);
+    ''', [
+      supplierId, supplierId,
+      normalizedQuery, '%$normalizedQuery%', '%$normalizedQuery%',
+      start, start, end, end, limit,
+    ]);
     return rows.map((row) => PurchaseHistoryRecord(
       id: row['id'] as int,
       invoiceNumber: row['invoice_number'] as String,
