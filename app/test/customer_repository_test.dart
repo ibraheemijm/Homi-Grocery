@@ -44,7 +44,7 @@ void main() {
       role: 'manager',
     );
     customers = CustomerRepository(database);
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: managerId);
     sales = SaleRepository(database);
   });
 
