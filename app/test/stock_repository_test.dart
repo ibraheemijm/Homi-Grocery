@@ -28,7 +28,7 @@ void main() {
       'is_active': 1,
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
-    products = ProductRepository(database);
+    products = ProductRepository(database, userId: managerId);
     stock = StockRepository(database);
   });
 
