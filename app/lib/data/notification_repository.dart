@@ -45,6 +45,7 @@ class DeliveryApproval {
     this.changeKey,
     this.decidedAt,
     this.decisionNote,
+    this.decidedByUserId,
   });
 
   final int id;
@@ -56,6 +57,7 @@ class DeliveryApproval {
   final String? changeKey;
   final String? decidedAt;
   final String? decisionNote;
+  final int? decidedByUserId;
 
   static DeliveryApproval fromRow(Map<String, Object?> row) => DeliveryApproval(
         id: row['id'] as int,
@@ -67,6 +69,7 @@ class DeliveryApproval {
         changeKey: row['change_key'] as String?,
         decidedAt: row['decided_at'] as String?,
         decisionNote: row['decision_note'] as String?,
+        decidedByUserId: row['decided_by_user_id'] as int?,
       );
 }
 
@@ -195,12 +198,14 @@ class DeliveryApprovalRepository {
   }
 
   Future<void> decide({
+    required int managerUserId,
     required int id,
     required bool approved,
     String? note,
     DateTime? now,
   }) async {
     await _database.transaction((txn) async {
+      await _requireActiveManager(txn, managerUserId);
       final rows = await txn.query(
         'delivery_publication_approvals',
         where: 'id = ?',
@@ -229,6 +234,7 @@ class DeliveryApprovalRepository {
           'status': approved ? 'approved' : 'rejected',
           'decided_at': (now ?? DateTime.now()).toUtc().toIso8601String(),
           'decision_note': note?.trim(),
+          'decided_by_user_id': managerUserId,
         },
         where: 'id = ? AND status = ?',
         whereArgs: [id, 'pending'],
@@ -239,15 +245,21 @@ class DeliveryApprovalRepository {
     });
   }
 
-  Future<void> revokeInitialApproval({String? note, DateTime? now}) async {
+  Future<void> revokeInitialApproval({
+    required int managerUserId,
+    String? note,
+    DateTime? now,
+  }) async {
     final timestamp = (now ?? DateTime.now()).toUtc().toIso8601String();
     await _database.transaction((txn) async {
+      await _requireActiveManager(txn, managerUserId);
       await txn.update(
         'delivery_publication_approvals',
         {
           'status': 'revoked',
           'decided_at': timestamp,
           'decision_note': note?.trim() ?? 'سُحبت الموافقة الأولية.',
+          'decided_by_user_id': managerUserId,
         },
         where: "request_type = 'initial_enable' AND status = 'approved'",
       );
@@ -257,10 +269,24 @@ class DeliveryApprovalRepository {
           'status': 'rejected',
           'decided_at': timestamp,
           'decision_note': 'أُلغي الطلب لأن الموافقة الأولية سُحبت.',
+          'decided_by_user_id': managerUserId,
         },
         where: "request_type = 'important_change' AND status = 'pending'",
       );
     });
+  }
+
+  Future<void> _requireActiveManager(Transaction txn, int userId) async {
+    final users = await txn.query(
+      'users',
+      columns: ['id'],
+      where: "id = ? AND role = 'manager' AND is_active = 1",
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (users.isEmpty) {
+      throw StateError('اتخاذ قرار الموافقة متاح لحساب مدير نشط فقط.');
+    }
   }
 
   Future<List<DeliveryApproval>> list({String? status, int limit = 100}) async {
