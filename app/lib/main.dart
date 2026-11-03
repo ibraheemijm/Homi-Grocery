@@ -798,8 +798,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         fontWeight: FontWeight.w600,
                       )),
                   const SizedBox(height: 8),
-                  const Text('مرحبًا بعودتك',
-                      style: TextStyle(
+                  Text('مرحبًا، ${widget.user.displayName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 23,
                         fontWeight: FontWeight.w900,
