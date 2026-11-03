@@ -353,7 +353,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('أدخل بيانات المنتج وتكلفة الشراء هنا، ثم راجع الكمية وسعر البيع وعدّلهما في سطر الفاتورة.'),
+                  const Text('أدخل بيانات المنتج وتكلفة الشراء هنا، ثم راجع الكمية في سطر الفاتورة.'),
                   const SizedBox(height: 12),
                   TextField(
                     controller: name,
@@ -641,63 +641,43 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       )),
                     ]),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: draft.pricingMode,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'طريقة حساب نسبة الربح',
-                        border: OutlineInputBorder(),
+                    if (_isManager) ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: draft.pricingMode,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'طريقة حساب نسبة الربح',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'markup', child: Text('زيادة على سعر الشراء (Markup)')),
+                          DropdownMenuItem(value: 'margin', child: Text('هامش من سعر البيع (Margin)')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          refresh(() {
+                            draft.pricingMode = value;
+                            _updateSellingPriceFromPercentage(draft);
+                          });
+                        },
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'markup',
-                          child: Text('زيادة على سعر الشراء (Markup)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'margin',
-                          child: Text('هامش من سعر البيع (Margin)'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        refresh(() {
-                          draft.pricingMode = value;
-                          _updateSellingPriceFromPercentage(draft);
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: draft.percentage,
-                            onChanged: (_) => refresh(() {
-                              _updateSellingPriceFromPercentage(draft);
-                            }),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                            decoration: const InputDecoration(
-                              labelText: 'نسبة الربح %',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(child: TextField(
+                          controller: draft.percentage,
+                          onChanged: (_) => refresh(() => _updateSellingPriceFromPercentage(draft)),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                          decoration: const InputDecoration(labelText: 'نسبة الربح %', border: OutlineInputBorder()),
+                        )),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: draft.sellingPrice,
-                            onChanged: (_) => refresh(() {
-                              _updatePercentageFromSellingPrice(draft);
-                            }),
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'سعر البيع (ج.س)',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                        Expanded(child: TextField(
+                          controller: draft.sellingPrice,
+                          onChanged: (_) => refresh(() => _updatePercentageFromSellingPrice(draft)),
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'سعر البيع (ج.س)', border: OutlineInputBorder()),
+                        )),
+                      ]),
+                    ],
                     Align(
                       alignment: AlignmentDirectional.centerEnd,
                       child: Text('الإجمالي: ${((double.tryParse(draft.quantity.text.trim()) ?? 0) * (int.tryParse(draft.cost.text.trim()) ?? 0)).round()} ج.س'),
@@ -783,7 +763,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             unit: product.unit,
             quantity: double.parse(draft.quantity.text.trim()),
             unitCost: int.parse(draft.cost.text.trim()),
-            sellingPrice: int.parse(draft.sellingPrice.text.trim()),
+            sellingPrice: _isManager ? int.parse(draft.sellingPrice.text.trim()) : null,
           );
         }).toList(growable: false);
         await _repository!.createPurchase(
