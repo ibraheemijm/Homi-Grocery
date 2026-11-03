@@ -115,7 +115,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(body: SalesScreen(userId: 1)),
         ),
       );
