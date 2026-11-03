@@ -546,7 +546,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // لوحة Android مخصصة للمدير، مع إبقاء لوحة الكمبيوتر كما هي.
   Widget _buildDashboard(BuildContext context, bool isDesktop) {
-    if (!isDesktop && widget.user.isManager) {
+    if (defaultTargetPlatform == TargetPlatform.android && widget.user.isManager) {
       return _buildAndroidDashboard(context);
     }
     final theme = Theme.of(context);
