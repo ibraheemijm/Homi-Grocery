@@ -9,7 +9,9 @@ import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
 
 class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({super.key});
+  const ProductsScreen({required this.userId, super.key});
+
+  final int userId;
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
@@ -31,7 +33,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   // فتح قاعدة البيانات قبل عرض بيانات الأصناف.
   Future<void> _initialize() async {
     try {
-      _repository = ProductRepository(await GroceryDatabase.open());
+      _repository = ProductRepository(await GroceryDatabase.open(), userId: widget.userId);
       await _load();
     } catch (error) {
       if (!mounted) return;
