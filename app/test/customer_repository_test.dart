@@ -390,9 +390,61 @@ void main() {
     expect((await customers.balances(userId: managerId)).single.balance, 200);
   });
 
+  test('يقصر إنشاء الزبائن والأرصدة الافتتاحية على المدير النشط', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'customer_creation_cashier',
+      'display_name': 'كاشير إنشاء الزبون',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 100000,
+      'role': 'cashier',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    await expectLater(
+      customers.addCustomer(
+        name: 'محاولة الكاشير',
+        userId: cashierId,
+        openingBalance: 500,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      await database.query(
+        'customers',
+        where: 'name = ?',
+        whereArgs: ['محاولة الكاشير'],
+      ),
+      isEmpty,
+    );
+
+    await database.update(
+      'users',
+      {'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [managerId],
+    );
+    await expectLater(
+      customers.addCustomer(
+        name: 'محاولة مدير موقوف',
+        userId: managerId,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      await database.query(
+        'customers',
+        where: 'name = ?',
+        whereArgs: ['محاولة مدير موقوف'],
+      ),
+      isEmpty,
+    );
+  });
+
   test('يمنع إضافة اسم فارغ', () async {
     await expectLater(
-      customers.addCustomer(name: '   '),
+      customers.addCustomer(name: '   ', userId: managerId),
       throwsArgumentError,
     );
   });
@@ -468,7 +520,7 @@ void main() {
   });
 
   test('يضيف الرصيد الافتتاحي للزبون في الرصيد والكشف ويسمح بتحصيله', () async {
-    final customerId = await customers.addCustomer(name: 'زبون برصيد سابق', openingBalance: 1000);
+    final customerId = await customers.addCustomer(name: 'زبون برصيد سابق', userId: managerId, openingBalance: 1000);
     var balance = (await customers.balances(userId: managerId)).single;
     expect(balance.id, customerId);
     expect(balance.openingBalance, 1000);
@@ -492,8 +544,8 @@ void main() {
   });
 
   test('يمنع الرصيد الافتتاحي السالب للزبون ويقصر تعديله على المدير', () async {
-    await expectLater(customers.addCustomer(name: 'رصيد غير صالح', openingBalance: -1), throwsArgumentError);
-    final customerId = await customers.addCustomer(name: 'زبون تعديل الرصيد');
+    await expectLater(customers.addCustomer(name: 'رصيد غير صالح', userId: managerId, openingBalance: -1), throwsArgumentError);
+    final customerId = await customers.addCustomer(name: 'زبون تعديل الرصيد', userId: managerId);
     final cashierId = await database.insert('users', {
       'username': 'opening_balance_cashier', 'display_name': 'كاشير',
       'password_hash': 'test-hash', 'password_salt': 'test-salt',
