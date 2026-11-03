@@ -151,7 +151,7 @@ class GroceryDatabase {
         stock_quantity REAL NOT NULL DEFAULT 0,
         minimum_quantity REAL NOT NULL DEFAULT 0 CHECK (minimum_quantity >= 0),
         image_path TEXT,
-        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_by_user_id INTEGER,
         is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
         created_at TEXT NOT NULL
       )
