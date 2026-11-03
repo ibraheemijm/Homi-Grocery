@@ -82,6 +82,7 @@ void main() {
     );
     expect((await repo.list()).single.status, 'pending');
     await repo.decide(managerUserId: manager.id, id: initial, approved: true, note: 'موافقة المالك');
+    expect((await repo.list()).single.decidedByUserId, manager.id);
     final change = await repo.requestImportantChange(
       changeKey: 'catalog-v2',
       summary: 'تغيير الأسعار المنشورة',
@@ -172,6 +173,16 @@ void main() {
       dataScope: 'بيانات الكتالوج فقط',
     );
 
+    final cashier = await auth.createCashier(
+      manager: manager,
+      username: 'approval_cashier',
+      displayName: 'كاشير الاختبار',
+      password: 'CashierPass!2026',
+    );
+    await expectLater(
+      repo.decide(managerUserId: cashier.id, id: id, approved: true),
+      throwsStateError,
+    );
     await expectLater(
       repo.decide(managerUserId: manager.id + 999, id: id, approved: true),
       throwsStateError,
