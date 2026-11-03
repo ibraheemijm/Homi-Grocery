@@ -544,8 +544,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // بناء لوحة الملخص؛ تتغير الأعمدة والمسافات بحسب مساحة الشاشة.
+  // لوحة Android مخصصة للمدير، مع إبقاء لوحة الكمبيوتر كما هي.
   Widget _buildDashboard(BuildContext context, bool isDesktop) {
+    if (!isDesktop && widget.user.isManager) {
+      return _buildAndroidDashboard(context);
+    }
     final theme = Theme.of(context);
     final horizontalPadding = isDesktop ? 28.0 : 16.0;
     return SingleChildScrollView(
@@ -692,6 +695,300 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // واجهة الهاتف: اختصارات لمس واضحة وبطاقات مختصرة دون تغيير منطق البيانات.
+  Widget _buildAndroidDashboard(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = widget.isDark;
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+          sliver: SliverToBoxAdapter(
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: brandGreen,
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  child: const Icon(Icons.storefront_rounded,
+                      color: Colors.white, size: 27),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_storeName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          )),
+                      Text('$_timeGreeting • $_digitalClock',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          )),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: isDark ? 'المظهر الفاتح' : 'المظهر الداكن',
+                  onPressed: widget.onToggleTheme,
+                  icon: Icon(isDark
+                      ? Icons.light_mode_rounded
+                      : Icons.dark_mode_rounded),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'حساب المدير',
+                  icon: const CircleAvatar(
+                    radius: 18,
+                    backgroundColor: brandMint,
+                    child: Icon(Icons.person_rounded, color: brandGreen),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'logout') _confirmLogout();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Text(widget.user.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                    const PopupMenuItem(
+                      value: 'logout',
+                      child: Text('تسجيل الخروج'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [brandGreen, Color(0xFF285D4D)],
+                ),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('إدارة متجرك في مكان واحد',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      )),
+                  const SizedBox(height: 8),
+                  const Text('مرحبًا بعودتك',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900,
+                      )),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: brandGold,
+                      foregroundColor: const Color(0xFF17251F),
+                      minimumSize: const Size.fromHeight(54),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(17),
+                      ),
+                    ),
+                    onPressed: () => setState(() => _selectedIndex = 1),
+                    icon: const Icon(Icons.add_shopping_cart_rounded),
+                    label: const Text('بدء عملية بيع',
+                        style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
+          sliver: SliverToBoxAdapter(
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('نظرة سريعة',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                ),
+                TextButton.icon(
+                  onPressed: _loadDashboardStats,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('تحديث'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+          sliver: SliverGrid(
+            delegate: SliverChildListDelegate([
+              _MetricCard(
+                title: 'مبيعات اليوم',
+                value: _stats == null ? '—' : '${_stats!.todaySales} ج.س',
+                note: 'إجمالي الفواتير اليوم',
+                icon: Icons.trending_up_rounded,
+                tint: const Color(0xFFDCE9DF),
+                onTap: () => setState(() => _selectedIndex = 7),
+              ),
+              _MetricCard(
+                title: 'المقبوض اليوم',
+                value: _stats == null ? '—' : '${_stats!.todayPaid} ج.س',
+                note: 'المبالغ المستلمة',
+                icon: Icons.payments_rounded,
+                tint: const Color(0xFFF1E6CC),
+                onTap: () => setState(() => _selectedIndex = 6),
+              ),
+              _MetricCard(
+                title: 'ديون الزبائن',
+                value: _stats == null ? '—' : '${_stats!.customerDebt} ج.س',
+                note: 'الرصيد المستحق',
+                icon: Icons.account_balance_wallet_rounded,
+                tint: const Color(0xFFF3DEDA),
+                onTap: () => setState(() => _selectedIndex = 3),
+              ),
+              _MetricCard(
+                title: 'أصناف منخفضة',
+                value: _stats == null ? '—' : '${_stats!.lowStockCount}',
+                note: 'تحتاج إلى متابعة',
+                icon: Icons.inventory_2_rounded,
+                tint: const Color(0xFFDDE7F2),
+                onTap: () => setState(() => _selectedIndex = 4),
+              ),
+            ]),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 11,
+              crossAxisSpacing: 11,
+              childAspectRatio: 1.12,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 22, 18, 8),
+          sliver: SliverToBoxAdapter(
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('الوصول السريع',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverGrid(
+            delegate: SliverChildListDelegate([
+              _androidAction(
+                icon: Icons.inventory_2_rounded,
+                label: 'الأصناف',
+                onTap: () => setState(() => _selectedIndex = 4),
+              ),
+              _androidAction(
+                icon: Icons.receipt_long_rounded,
+                label: 'الفواتير',
+                onTap: () => setState(() => _selectedIndex = 2),
+              ),
+              _androidAction(
+                icon: Icons.people_alt_rounded,
+                label: 'الزبائن والديون',
+                onTap: () => setState(() => _selectedIndex = 3),
+              ),
+              _androidAction(
+                icon: Icons.local_shipping_rounded,
+                label: 'المشتريات',
+                onTap: () => setState(() => _selectedIndex = 5),
+              ),
+              _androidAction(
+                icon: Icons.analytics_rounded,
+                label: 'التقارير',
+                onTap: () => setState(() => _selectedIndex = 7),
+              ),
+              _androidAction(
+                icon: Icons.notifications_active_rounded,
+                label: 'الإشعارات',
+                onTap: () => setState(() => _selectedIndex = 10),
+              ),
+            ]),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.98,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
+          sliver: SliverToBoxAdapter(child: _buildRecentSales(context)),
+        ),
+      ],
+    );
+  }
+
+  Widget _androidAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: brandMint,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(icon, color: brandGreen, size: 23),
+              ),
+              const SizedBox(height: 8),
+              Text(label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  )),
             ],
           ),
         ),
