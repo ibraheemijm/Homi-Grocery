@@ -83,17 +83,10 @@ class CashboxRepository {
     if (accounts.isEmpty || accounts.single['is_active'] != 1) {
       throw StateError('الحساب غير نشط أو غير موجود.');
     }
-    if (accounts.single['role'] == 'manager') return;
-    if (accounts.single['role'] != 'cashier') {
-      throw StateError('لا يملك المستخدم صلاحية عرض الخزينة.');
-    }
-    final permissions = await _database.query(
-      'cashier_permissions', columns: ['is_allowed'],
-      where: "user_id = ? AND permission_key = 'view_cashbox'",
-      whereArgs: [userId], limit: 1,
-    );
-    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
-      throw StateError('لا يملك الكاشير صلاحية عرض الخزينة.');
+    // ملخص الخزينة وحركاتها إجمالية على مستوى المتجر؛ لا تُعرض للكاشير
+    // حتى لو بقيت له صلاحية قديمة محفوظة من إصدار سابق.
+    if (accounts.single['role'] != 'manager') {
+      throw StateError('عرض ملخص الخزينة وحركات المتجر متاح للمدير فقط.');
     }
   }
 
