@@ -117,6 +117,9 @@ void main() {
   });
 
   test('لا يرسل إشعارات جماعية للأصناف المنخفضة الموجودة قبل تفعيل التتبع', () async {
+    // محاكاة صنف موجود قبل تثبيت مشغلات التنبيه في قاعدة قديمة.
+    await database.execute('DROP TRIGGER IF EXISTS trg_products_low_stock_insert');
+    await database.execute('DROP TRIGGER IF EXISTS trg_products_low_stock_update');
     await database.insert('products', {
       'name': 'أرز',
       'unit': 'كجم',
