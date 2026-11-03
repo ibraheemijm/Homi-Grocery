@@ -707,8 +707,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildAndroidDashboard(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = widget.isDark;
-    return CustomScrollView(
-      slivers: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([
+          _loadDashboardStats(),
+          _loadRecentInvoices(),
+          _loadHomePreferences(),
+        ]);
+      },
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
           sliver: SliverToBoxAdapter(
@@ -949,7 +958,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.fromLTRB(18, 22, 18, 28),
           sliver: SliverToBoxAdapter(child: _buildRecentSales(context)),
         ),
-      ],
+        ],
+      ),
     );
   }
 
