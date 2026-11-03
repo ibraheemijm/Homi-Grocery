@@ -65,6 +65,94 @@ void main() {
     expect((await repo.list()).length, 1);
   });
 
+  test('يرسل إشعارًا واحدًا عند دخول الصنف حالة المخزون المنخفض', () async {
+    final productId = await database.insert('products', {
+      'name': 'سكر',
+      'unit': 'كجم',
+      'stock_quantity': 10,
+      'minimum_quantity': 5,
+      'created_at': DateTime.utc(2026, 11, 3).toIso8601String(),
+    });
+
+    // أول انتقال إلى الحد الأدنى أو دونه ينشئ إشعارًا.
+    await database.update(
+      'products',
+      {'stock_quantity': 5},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    // الحركات الإضافية أثناء استمرار الانخفاض لا تكرر الإشعار.
+    await database.update(
+      'products',
+      {'stock_quantity': 2},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    var notifications = await NotificationRepository(database).list();
+    expect(notifications.where((item) => item.type == 'low_stock'), hasLength(1));
+
+    // العودة فوق الحد الأدنى تعيد تسليح التنبيه دون إرسال إشعار.
+    await database.update(
+      'products',
+      {'stock_quantity': 8},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    expect(
+      (await NotificationRepository(database).list())
+          .where((item) => item.type == 'low_stock'),
+      hasLength(1),
+    );
+
+    // انخفاض جديد بعد التعافي يسمح بإشعار جديد مستقل.
+    await database.update(
+      'products',
+      {'stock_quantity': 4},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    notifications = await NotificationRepository(database).list();
+    expect(notifications.where((item) => item.type == 'low_stock'), hasLength(2));
+    expect(notifications.first.relatedId, productId.toString());
+  });
+
+  test('لا يرسل إشعارات جماعية للأصناف المنخفضة الموجودة قبل تفعيل التتبع', () async {
+    await database.insert('products', {
+      'name': 'أرز',
+      'unit': 'كجم',
+      'stock_quantity': 1,
+      'minimum_quantity': 3,
+      'created_at': DateTime.utc(2026, 11, 3).toIso8601String(),
+    });
+
+    await GroceryDatabase.createLowStockAlertSchema(database);
+    expect(
+      (await NotificationRepository(database).list())
+          .where((item) => item.type == 'low_stock'),
+      isEmpty,
+    );
+
+    final rows = await database.query('products', columns: ['id'], limit: 1);
+    final productId = rows.single['id'] as int;
+    await database.update(
+      'products',
+      {'stock_quantity': 4},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    await database.update(
+      'products',
+      {'stock_quantity': 2},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    expect(
+      (await NotificationRepository(database).list())
+          .where((item) => item.type == 'low_stock'),
+      hasLength(1),
+    );
+  });
+
   test('يشترط الموافقة الأولية قبل طلب نشر تغيير مهم', () async {
     final repo = DeliveryApprovalRepository(database);
     await expectLater(
