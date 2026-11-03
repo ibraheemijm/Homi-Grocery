@@ -887,12 +887,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(18, 22, 18, 8),
+        const SliverPadding(
+          padding: EdgeInsets.fromLTRB(18, 22, 18, 8),
           sliver: SliverToBoxAdapter(
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text('الوصول السريع',
                       style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
                 ),
