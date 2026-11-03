@@ -74,7 +74,7 @@ void main() {
   });
 
   test('تحسب المبيعات والمدفوعات والديون والأصناف المنخفضة من قاعدة البيانات', () async {
-    final products = ProductRepository(database);
+    final products = ProductRepository(database, userId: managerId);
     final sales = SaleRepository(database);
     final customers = CustomerRepository(database);
 
@@ -113,7 +113,7 @@ void main() {
   });
 
   test('تخصم مرتجعات اليوم وردود النقد الفعلية من صافي لوحة التحكم', () async {
-    final products = ProductRepository(database);
+    final products = ProductRepository(database, userId: managerId);
     final sales = SaleRepository(database);
     final productId = await products.add(const GroceryProduct(
       name: 'صابون', sellingPrice: 250, stockQuantity: 4,
