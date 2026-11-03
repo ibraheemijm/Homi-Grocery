@@ -344,7 +344,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : _selectedIndex == 3
                                 ? CustomersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                 : _selectedIndex == 4
-                                    ? const ProductsScreen()
+                                    ? ProductsScreen(userId: widget.user.id)
                                     : _selectedIndex == 5
                                         ? SuppliersScreen(userId: widget.user.id, shiftId: widget.shiftId)
                                         : _selectedIndex == 6
