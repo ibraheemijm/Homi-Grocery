@@ -119,6 +119,11 @@ void main() {
     expect(find.byType(RefreshIndicator), findsOneWidget);
     expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
     expect(find.text('الوصول السريع'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('آخر الفواتير'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('آخر الفواتير'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
