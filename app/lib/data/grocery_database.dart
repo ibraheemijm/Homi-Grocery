@@ -122,7 +122,7 @@ class GroceryDatabase {
         if (oldVersion < 22) {
           final productColumns = await db.rawQuery('PRAGMA table_info(products)');
           if (!productColumns.any((column) => column['name'] == 'created_by_user_id')) {
-            await db.execute('ALTER TABLE products ADD COLUMN created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+            await db.execute('ALTER TABLE products ADD COLUMN created_by_user_id INTEGER');
           }
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
