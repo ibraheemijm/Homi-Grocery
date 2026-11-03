@@ -8,14 +8,22 @@ import 'package:homi_grocery/data/product_repository.dart';
 void main() {
   late Database database;
   late ProductRepository repository;
+  late int managerId;
 
   setUp(() async {
     // قاعدة مؤقتة لكل اختبار حتى لا تتداخل النتائج بين الاختبارات.
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
     await GroceryDatabase.createSalesSchema(database);
-    repository = ProductRepository(database);
+    managerId = await database.insert('users', {
+      'username': 'manager_test', 'display_name': 'مدير الاختبار',
+      'password_hash': 'hash', 'password_salt': 'salt',
+      'password_iterations': 100000, 'role': 'manager', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    repository = ProductRepository(database, userId: managerId);
   });
 
   tearDown(() async {
@@ -123,6 +131,35 @@ void main() {
     expect((await repository.search('زيت')).length, 1);
     expect((await repository.search('9988')).length, 1);
     expect((await repository.search('غير موجود')), isEmpty);
+  });
+
+
+  test('يسمح بإنشاء صنف من فاتورة الشراء للكاشير المصرح فقط ويربطه بمنشئه', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'cashier_test', 'display_name': 'كاشير الاختبار',
+      'password_hash': 'hash', 'password_salt': 'salt',
+      'password_iterations': 100000, 'role': 'cashier', 'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final now = DateTime.now().toUtc().toIso8601String();
+    await database.insert('cashier_permissions', {
+      'user_id': cashierId, 'permission_key': 'supplier_purchases',
+      'is_allowed': 1, 'updated_at': now,
+    });
+    final cashierProducts = ProductRepository(database, userId: cashierId);
+    final id = await cashierProducts.createProductFromPurchase(
+      const GroceryProduct(name: 'منتج من فاتورة شراء', purchasePrice: 50),
+    );
+    final row = (await database.query('products', where: 'id = ?', whereArgs: [id])).single;
+    expect(row['created_by_user_id'], cashierId);
+    await expectLater(
+      cashierProducts.add(const GroceryProduct(name: 'إضافة مستقلة')),
+      throwsStateError,
+    );
+    await expectLater(
+      cashierProducts.cleanupPurchaseProduct(id),
+      throwsStateError,
+    );
   });
 
   test('يرفض حفظ صنف بلا اسم', () async {
