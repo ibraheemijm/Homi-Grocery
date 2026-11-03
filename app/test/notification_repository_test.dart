@@ -1,17 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/notification_repository.dart';
 
 void main() {
   late Database database;
+  late AuthRepository auth;
+  late AuthUser manager;
 
   setUp(() async {
     sqfliteFfiInit();
     database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     await GroceryDatabase.createSchema(database);
     await GroceryDatabase.createNotificationsSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    auth = AuthRepository(database);
+    manager = await auth.createInitialManager(
+      username: 'approval_manager',
+      displayName: 'مدير الموافقات',
+      password: 'StrongPass!2026',
+    );
   });
 
   tearDown(() async => database.close());
@@ -71,7 +81,7 @@ void main() {
       dataScope: 'اسم المنتج والسعر والكمية فقط',
     );
     expect((await repo.list()).single.status, 'pending');
-    await repo.decide(id: initial, approved: true, note: 'موافقة المالك');
+    await repo.decide(managerUserId: manager.id, id: initial, approved: true, note: 'موافقة المالك');
     final change = await repo.requestImportantChange(
       changeKey: 'catalog-v2',
       summary: 'تغيير الأسعار المنشورة',
@@ -89,7 +99,7 @@ void main() {
       dataScope: 'بيانات الكتالوج فقط',
     );
     await repo.decide(id: initial, approved: true);
-    await repo.revokeInitialApproval();
+    await repo.revokeInitialApproval(managerUserId: manager.id);
 
     await expectLater(
       repo.requestImportantChange(
@@ -100,6 +110,7 @@ void main() {
       throwsStateError,
     );
     expect((await repo.list()).first.status, 'revoked');
+    expect((await repo.list()).first.decidedByUserId, manager.id);
   });
 
   test('سحب الموافقة الأولية يرفض طلبات التغيير المعلقة ويمنع اعتمادها', () async {
@@ -152,6 +163,31 @@ void main() {
       throwsStateError,
     );
     expect((await repo.list()).first.status, 'pending');
+  });
+
+  test('يرفض قرار مستخدم غير مدير أو مدير غير نشط', () async {
+    final repo = DeliveryApprovalRepository(database);
+    final id = await repo.requestInitialEnable(
+      summary: 'طلب اختبار الحماية',
+      dataScope: 'بيانات الكتالوج فقط',
+    );
+
+    await expectLater(
+      repo.decide(managerUserId: manager.id + 999, id: id, approved: true),
+      throwsStateError,
+    );
+    await database.update(
+      'users',
+      {'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [manager.id],
+    );
+    await expectLater(
+      repo.decide(managerUserId: manager.id, id: id, approved: true),
+      throwsStateError,
+    );
+    expect((await repo.list()).single.status, 'pending');
+    expect((await repo.list()).single.decidedByUserId, isNull);
   });
 
   test('لا يسمح باتخاذ قرار ثانٍ على طلب حُسم مسبقًا', () async {
