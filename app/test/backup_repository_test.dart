@@ -39,6 +39,25 @@ void main() {
   });
   tearDown(() async { if (database.isOpen) await database.close(); await directory.delete(recursive: true); });
 
+  test('يرفض جميع عمليات إدارة النسخ لحساب الكاشير حتى عند استدعاء المستودع مباشرة', () async {
+    final cashierId = await database.insert('users', {
+      'username': 'test-cashier',
+      'display_name': 'كاشير الاختبار',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 100000,
+      'role': 'cashier',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final repository = BackupRepository(database, managerUserId: cashierId);
+
+    await expectLater(repository.listBackups(), throwsA(isA<StateError>()));
+    await expectLater(repository.createBackup(), throwsA(isA<StateError>()));
+    await expectLater(repository.deleteBackup('/not-used.db'), throwsA(isA<StateError>()));
+    await expectLater(repository.restoreBackup('/not-used.db'), throwsA(isA<StateError>()));
+  });
+
   test('يعرض النسخ المحلية السليمة من الأحدث ويتجاهل الملفات غير المدارة', () async {
     final backupsDir = Directory('${directory.path}/managed-backups');
     await backupsDir.create();
