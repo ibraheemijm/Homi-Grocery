@@ -98,7 +98,7 @@ void main() {
       summary: 'تفعيل الكتالوج',
       dataScope: 'بيانات الكتالوج فقط',
     );
-    await repo.decide(id: initial, approved: true);
+    await repo.decide(managerUserId: manager.id, id: initial, approved: true);
     await repo.revokeInitialApproval(managerUserId: manager.id);
 
     await expectLater(
@@ -119,17 +119,17 @@ void main() {
       summary: 'تفعيل الكتالوج',
       dataScope: 'بيانات الكتالوج فقط',
     );
-    await repo.decide(id: initial, approved: true);
+    await repo.decide(managerUserId: manager.id, id: initial, approved: true);
     final pendingChange = await repo.requestImportantChange(
       changeKey: 'catalog-v3',
       summary: 'تحديث أسعار منشورة',
       dataScope: 'الأسعار فقط',
     );
 
-    await repo.revokeInitialApproval();
+    await repo.revokeInitialApproval(managerUserId: manager.id);
 
     await expectLater(
-      repo.decide(id: pendingChange, approved: true),
+      repo.decide(managerUserId: manager.id, id: pendingChange, approved: true),
       throwsStateError,
     );
     final approvals = await repo.list();
@@ -144,7 +144,7 @@ void main() {
       summary: 'تفعيل الكتالوج',
       dataScope: 'بيانات الكتالوج فقط',
     );
-    await repo.decide(id: initial, approved: true);
+    await repo.decide(managerUserId: manager.id, id: initial, approved: true);
     final pendingChange = await repo.requestImportantChange(
       changeKey: 'catalog-v4',
       summary: 'تحديث الأسعار',
@@ -159,7 +159,7 @@ void main() {
     );
 
     await expectLater(
-      repo.decide(id: pendingChange, approved: true),
+      repo.decide(managerUserId: manager.id, id: pendingChange, approved: true),
       throwsStateError,
     );
     expect((await repo.list()).first.status, 'pending');
@@ -196,9 +196,9 @@ void main() {
       summary: 'تفعيل الكتالوج',
       dataScope: 'بيانات الكتالوج فقط',
     );
-    await repo.decide(id: id, approved: false, note: 'غير جاهز');
+    await repo.decide(managerUserId: manager.id, id: id, approved: false, note: 'غير جاهز');
     await expectLater(
-      repo.decide(id: id, approved: true),
+      repo.decide(managerUserId: manager.id, id: id, approved: true),
       throwsStateError,
     );
     expect((await repo.list()).single.status, 'rejected');
