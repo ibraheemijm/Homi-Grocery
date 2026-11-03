@@ -356,7 +356,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                     : _selectedIndex == 9
                                         ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
-                                            ? const NotificationsScreen()
+                                            ? NotificationsScreen(userId: widget.user.id, isManager: widget.user.isManager)
                                             : _selectedIndex == 11 && widget.user.isManager
                                                 ? BackupScreen(managerUserId: widget.user.id)
                                                 : _selectedIndex == 12 && widget.user.isManager
