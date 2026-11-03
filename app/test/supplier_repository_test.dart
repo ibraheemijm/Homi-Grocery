@@ -890,6 +890,24 @@ void main() {
       ),
       throwsStateError,
     );
+    await expectLater(
+      suppliers.createPurchase(
+        supplierId: supplierId,
+        lines: [PurchaseLine(
+          productId: productId,
+          productName: 'صنف المورد',
+          unit: 'قطعة',
+          quantity: 1,
+          unitCost: 400,
+          sellingPrice: 200,
+        )],
+        paidAmount: 0,
+        discount: 100,
+        userId: cashier.id,
+      ),
+      throwsStateError,
+    );
+    expect((await products.getById(productId))!.sellingPrice, 150);
     expect(await database.query('purchases'), isEmpty);
 
     final purchase = await suppliers.createPurchase(
