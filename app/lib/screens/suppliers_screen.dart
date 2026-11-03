@@ -947,7 +947,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   ),
                   const SizedBox(height: 8),
                   if (filtering) const LinearProgressIndicator(),
-                  Flexible(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 420),
                     child: displayedPurchases.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.all(20),
