@@ -388,6 +388,9 @@ class SupplierRepository {
           throw StateError('الحساب غير نشط أو غير موجود.');
         }
         if (accounts.single['role'] == 'cashier') {
+          if (lines.any((line) => line.sellingPrice != null)) {
+            throw StateError('تعديل سعر البيع متاح للمدير فقط، ولا تمنحه صلاحية المشتريات.');
+          }
           final purchaseLimit = await _cashierLimit(
             txn,
             userId: userId,
