@@ -9,7 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class GroceryDatabase {
   GroceryDatabase._();
 
-  static const int _version = 23;
+  static const int _version = 24;
   static int get schemaVersion => _version;
   static Database? _instance;
 
@@ -136,6 +136,9 @@ class GroceryDatabase {
               'ALTER TABLE delivery_publication_approvals ADD COLUMN decided_by_user_id INTEGER',
             );
           }
+        }
+        if (oldVersion < 24) {
+          await createLowStockAlertSchema(db);
         }
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
@@ -685,6 +688,83 @@ class GroceryDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_delivery_approvals_status ON delivery_publication_approvals(status, created_at DESC)',
     );
+    await createLowStockAlertSchema(db);
+  }
+
+  // يتابع انتقال الصنف بين الحالة الطبيعية والمنخفضة داخل SQLite نفسها؛
+  // لذلك تشمل الحماية البيع والشراء والمرتجعات والتسويات وتعديل حد إعادة الطلب.
+  static Future<void> createLowStockAlertSchema(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS low_stock_alert_state (
+        product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+        is_low INTEGER NOT NULL DEFAULT 0 CHECK (is_low IN (0, 1)),
+        episode INTEGER NOT NULL DEFAULT 0 CHECK (episode >= 0)
+      )
+    ''');
+    // لا نرسل إشعارات جماعية عند ترقية التطبيق؛ نهيئ الحالة الحالية فقط.
+    await db.execute('''
+      INSERT OR IGNORE INTO low_stock_alert_state (product_id, is_low, episode)
+      SELECT id,
+        CASE WHEN stock_quantity <= minimum_quantity THEN 1 ELSE 0 END,
+        0
+      FROM products
+    ''');
+    await db.execute('DROP TRIGGER IF EXISTS trg_products_low_stock_insert');
+    await db.execute('DROP TRIGGER IF EXISTS trg_products_low_stock_update');
+    await db.execute('''
+      CREATE TRIGGER trg_products_low_stock_insert
+      AFTER INSERT ON products
+      WHEN NEW.stock_quantity <= NEW.minimum_quantity
+      BEGIN
+        INSERT OR IGNORE INTO low_stock_alert_state (product_id, is_low, episode)
+        VALUES (NEW.id, 1, 1);
+        INSERT OR IGNORE INTO local_notifications
+          (type, title, body, event_key, related_id, created_at)
+        SELECT
+          'low_stock',
+          'مخزون منخفض: ' || NEW.name,
+          'وصل المخزون إلى ' || NEW.stock_quantity || ' ' || NEW.unit ||
+            ' (الحد الأدنى: ' || NEW.minimum_quantity || ').',
+          'low_stock:' || NEW.id || ':' || state.episode,
+          CAST(NEW.id AS TEXT),
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        FROM low_stock_alert_state state
+        WHERE state.product_id = NEW.id AND state.is_low = 1;
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER trg_products_low_stock_update
+      AFTER UPDATE OF stock_quantity, minimum_quantity, name, unit ON products
+      BEGIN
+        UPDATE low_stock_alert_state
+        SET is_low = 0
+        WHERE product_id = NEW.id
+          AND NEW.stock_quantity > NEW.minimum_quantity;
+
+        UPDATE low_stock_alert_state
+        SET is_low = 1, episode = episode + 1
+        WHERE product_id = NEW.id
+          AND is_low = 0
+          AND OLD.stock_quantity > OLD.minimum_quantity
+          AND NEW.stock_quantity <= NEW.minimum_quantity;
+
+        INSERT OR IGNORE INTO local_notifications
+          (type, title, body, event_key, related_id, created_at)
+        SELECT
+          'low_stock',
+          'مخزون منخفض: ' || NEW.name,
+          'وصل المخزون إلى ' || NEW.stock_quantity || ' ' || NEW.unit ||
+            ' (الحد الأدنى: ' || NEW.minimum_quantity || ').',
+          'low_stock:' || NEW.id || ':' || state.episode,
+          CAST(NEW.id AS TEXT),
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        FROM low_stock_alert_state state
+        WHERE state.product_id = NEW.id
+          AND state.is_low = 1
+          AND OLD.stock_quantity > OLD.minimum_quantity
+          AND NEW.stock_quantity <= NEW.minimum_quantity;
+      END
+    ''');
   }
 
   /// إغلاق الاتصال؛ مفيد عند إنهاء التطبيق أو في الاختبارات.
