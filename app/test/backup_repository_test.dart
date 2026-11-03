@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/data/backup_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
@@ -79,7 +80,10 @@ void main() {
     );
     final backups = await repository.listBackups();
 
-    expect(backups.map((file) => file.path).toList(), [newer.path, older.path]);
+    expect(
+      backups.map((file) => p.normalize(file.path)).toList(),
+      [p.normalize(newer.path), p.normalize(older.path)],
+    );
   });
 
   test('يسمح بحذف نسخة مدارة فقط ويرفض المسارات الخارجية', () async {
