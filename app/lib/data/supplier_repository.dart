@@ -262,14 +262,43 @@ class SupplierRepository {
     return _cashierLimit(txn, userId: userId, permissionKey: permissionKey, label: label);
   }
 
-  // تعديل الرصيد الافتتاحي للمورد للمدير فقط؛ الموجب مستحق للمورد والسالب مستحق لنا.
+  // تعديل الرصيد الافتتاحي للمورد للمدير فقط مع تسجيل القيمتين ذريًا.
+  // الموجب مستحق للمورد والسالب مستحق للمتجر؛ لذلك لا نمنع الإشارة السالبة.
   Future<void> setOpeningBalance({required int supplierId, required int amount, required int userId}) async {
-    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
-    if (users.isEmpty || users.single['is_active'] != 1 || users.single['role'] != 'manager') {
-      throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير فقط.');
-    }
-    final changed = await _database.update('suppliers', {'opening_balance': amount}, where: 'id = ?', whereArgs: [supplierId]);
-    if (changed == 0) throw StateError('المورد غير موجود.');
+    await _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير النشط فقط.');
+      }
+      final suppliers = await txn.query(
+        'suppliers',
+        columns: ['opening_balance'],
+        where: 'id = ?',
+        whereArgs: [supplierId],
+        limit: 1,
+      );
+      if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
+      final previous = (suppliers.single['opening_balance'] as num).toInt();
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'suppliers',
+        {'opening_balance': amount},
+        where: 'id = ?',
+        whereArgs: [supplierId],
+      );
+      await txn.insert('auth_audit_log', {
+        'user_id': userId,
+        'username_snapshot': users.single['username'],
+        'action': 'supplier_opening_balance_updated:$supplierId:$previous:$amount',
+        'created_at': now,
+      });
+    });
   }
 
   Future<List<SupplierBalance>> balances({required int userId, String query = ''}) async {
