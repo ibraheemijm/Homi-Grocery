@@ -33,7 +33,7 @@ class CustomerLedgerEntry {
 abstract interface class CustomerDataSource {
   Future<List<CustomerBalance>> balances({required int userId, String query = ''});
   Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
-  Future<int> addCustomer({required String name, String? phone, String? notes, int openingBalance = 0});
+  Future<int> addCustomer({required String name, required int userId, String? phone, String? notes, int openingBalance = 0});
   Future<void> setOpeningBalance({required int customerId, required int amount, required int userId});
   Future<void> recordPayment({
     required int customerId,
@@ -158,24 +158,51 @@ class CustomerRepository implements CustomerDataSource {
     )).toList(growable: false);
   }
 
-  // إضافة زبون يدويًا مع منع تكرار الاسم دون قصد.
+  // إضافة الزبائن يدويًا والأرصدة الافتتاحية متاحة للمدير النشط فقط.
   @override
-  Future<int> addCustomer({required String name, String? phone, String? notes, int openingBalance = 0}) async {
-    if (openingBalance < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
-    final normalized = name.trim();
-    if (normalized.isEmpty) throw ArgumentError('اسم الزبون مطلوب.');
-    final id = await _database.insert('customers', {
-      'name': normalized,
-      'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
-      'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
-      'opening_balance': openingBalance,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    if (id != 0) return id;
-    final rows = await _database.query('customers', columns: ['id'],
-      where: 'name = ? COLLATE NOCASE', whereArgs: [normalized], limit: 1);
-    if (rows.isEmpty) throw StateError('تعذر حفظ الزبون.');
-    return rows.first['id'] as int;
+  Future<int> addCustomer({
+    required String name,
+    required int userId,
+    String? phone,
+    String? notes,
+    int openingBalance = 0,
+  }) async {
+    return _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty ||
+          users.single['is_active'] != 1 ||
+          users.single['role'] != 'manager') {
+        throw StateError('إضافة الزبائن والأرصدة الافتتاحية متاحة للمدير النشط فقط.');
+      }
+      if (openingBalance < 0) {
+        throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
+      }
+      final normalized = name.trim();
+      if (normalized.isEmpty) throw ArgumentError('اسم الزبون مطلوب.');
+      final id = await txn.insert('customers', {
+        'name': normalized,
+        'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
+        'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+        'opening_balance': openingBalance,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id != 0) return id;
+      final rows = await txn.query(
+        'customers',
+        columns: ['id'],
+        where: 'name = ? COLLATE NOCASE',
+        whereArgs: [normalized],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('تعذر حفظ الزبون.');
+      return rows.first['id'] as int;
+    });
   }
 
   // تعديل الرصيد الافتتاحي للمدير فقط، دون إنشاء حركة خزينة.
