@@ -148,10 +148,15 @@ void main() {
     });
     final cashierProducts = ProductRepository(database, userId: cashierId);
     final id = await cashierProducts.createProductFromPurchase(
-      const GroceryProduct(name: 'منتج من فاتورة شراء', purchasePrice: 50),
+      const GroceryProduct(
+        name: 'منتج من فاتورة شراء',
+        purchasePrice: 50,
+        sellingPrice: 999,
+      ),
     );
     final row = (await database.query('products', where: 'id = ?', whereArgs: [id])).single;
     expect(row['created_by_user_id'], cashierId);
+    expect(row['selling_price'], 0);
     await expectLater(
       cashierProducts.add(const GroceryProduct(name: 'إضافة مستقلة')),
       throwsStateError,
