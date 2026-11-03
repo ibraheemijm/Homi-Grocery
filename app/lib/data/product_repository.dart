@@ -150,7 +150,7 @@ class ProductRepository {
   /// لا يحذف السجل ولا يمس صنفًا دخل في بيع أو شراء أو حركة مخزون.
   Future<bool> archiveIfUnused(int productId) async {
     await _requireManager(_database);
-    return _archiveIfUnused(productId, requireOwnership: false);
+    return _archiveIfUnused(productId);
   }
 
   /// تنظيف صنف أُنشئ من فاتورة شراء ملغاة؛ لا يسمح إلا لمنشئه وبصلاحية المشتريات.
@@ -159,10 +159,10 @@ class ProductRepository {
     final owner = await _database.query('products', columns: ['id'],
       where: 'id = ? AND created_by_user_id = ?', whereArgs: [productId, userId ?? -1], limit: 1);
     if (owner.isEmpty) return false;
-    return _archiveIfUnused(productId, requireOwnership: true);
+    return _archiveIfUnused(productId);
   }
 
-  Future<bool> _archiveIfUnused(int productId, {required bool requireOwnership}) async {
+  Future<bool> _archiveIfUnused(int productId) async {
     return _database.transaction((txn) async {
       final products = await txn.query(
         'products',
