@@ -106,26 +106,30 @@ void main() {
 
   testWidgets('تعرض لوحة المدير على Android تحديث السحب ومحتوى الهاتف',
       (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(_dashboardApp());
-    await tester.pump();
+    // يعاد ضبط متغير المنصة قبل انتهاء جسم الاختبار حتى لا يتسرب إلى اختبارات Flutter التالية.
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(_dashboardApp());
+      await tester.pump();
 
-    expect(find.byType(RefreshIndicator), findsOneWidget);
-    expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
-    expect(find.text('الوصول السريع'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('آخر الفواتير'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('آخر الفواتير'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
+      expect(find.text('الوصول السريع'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('آخر الفواتير'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('آخر الفواتير'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('يحافظ عنصر التنقل المحدد على تباين واضح في المظهر الداكن',
