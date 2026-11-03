@@ -12,6 +12,7 @@ import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/customer_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
+import 'package:homi_grocery/screens/sales_screen.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 late Directory _testSupportDirectory;
@@ -102,6 +103,35 @@ void main() {
     expect(find.text('الرئيسية'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsOneWidget);
     expect(find.text('بدء عملية بيع'), findsWidgets);
+  });
+
+  testWidgets('تثبت شاشة بيع Android ملخص الفاتورة أسفل قائمة الأصناف',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: SalesScreen(userId: 1)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('اختيار الأصناف'), findsOneWidget);
+      expect(find.text('عرض الفاتورة'), findsOneWidget);
+      expect(find.text('0 صنف في الفاتورة'), findsOneWidget);
+
+      await tester.tap(find.text('عرض الفاتورة'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('الفاتورة الحالية'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('تعرض لوحة المدير على Android تحديث السحب ومحتوى الهاتف',
