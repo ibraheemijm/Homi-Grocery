@@ -60,12 +60,33 @@ class GroceryProduct {
 
 /// مستودع الأصناف: يوفر عمليات آمنة قابلة للاختبار دون ارتباط مباشر بالواجهة.
 class ProductRepository {
-  ProductRepository(this._database);
+  ProductRepository(this._database, {this.userId});
 
   final Database _database;
+  final int? userId;
+
+  Future<void> _requireManager(DatabaseExecutor executor) async {
+    final rows = await executor.query('users', columns: ['id'],
+      where: "id = ? AND role = 'manager' AND is_active = 1",
+      whereArgs: [userId ?? -1], limit: 1);
+    if (rows.isEmpty) throw StateError('إدارة الأصناف متاحة لحساب مدير نشط فقط.');
+  }
+
+  Future<void> _requirePurchasePermission(DatabaseExecutor executor) async {
+    final rows = await executor.rawQuery('''
+      SELECT u.id FROM users u
+      LEFT JOIN cashier_permissions cp ON cp.user_id = u.id
+        AND cp.permission_key = 'supplier_purchases' AND cp.is_allowed = 1
+      WHERE u.id = ? AND u.is_active = 1
+        AND (u.role = 'manager' OR (u.role = 'cashier' AND cp.id IS NOT NULL))
+      LIMIT 1
+    ''', [userId ?? -1]);
+    if (rows.isEmpty) throw StateError('إنشاء صنف من فاتورة الشراء يتطلب صلاحية مشتريات لحساب نشط.');
+  }
 
   /// حفظ صنف جديد بعد التحقق من الحقول الأساسية.
   Future<int> add(GroceryProduct product) async {
+    await _requireManager(_database);
     _validate(product);
     return _database.insert('products', {
       ...product.toMap(),
@@ -76,6 +97,7 @@ class ProductRepository {
   /// إضافة صنف مع منع تكرار الاسم بعد تطبيع المسافات والحروف العربية.
   /// يشمل الفحص الأصناف المؤرشفة حتى لا يُعاد إنشاء الصنف نفسه باسم مختلف شكليًا.
   Future<int> addUnique(GroceryProduct product) async {
+    await _requireManager(_database);
     _validate(product);
     return _database.transaction((txn) async {
       final rows = await txn.query('products', columns: ['name']);
@@ -88,6 +110,24 @@ class ProductRepository {
       }
       return txn.insert('products', {
         ...product.toMap(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+  }
+
+  /// إنشاء صنف جديد من مسار فاتورة الشراء بعد فحص صلاحية المستخدم داخل المستودع.
+  Future<int> createProductFromPurchase(GroceryProduct product) async {
+    await _requirePurchasePermission(_database);
+    _validate(product);
+    return _database.transaction((txn) async {
+      final rows = await txn.query('products', columns: ['name']);
+      final normalizedName = normalizeProductName(product.name);
+      if (rows.any((row) => normalizeProductName(row['name'] as String) == normalizedName)) {
+        throw StateError('يوجد صنف بالاسم نفسه أو باسم مطابق بعد توحيد الكتابة.');
+      }
+      return txn.insert('products', {
+        ...product.toMap(),
+        'created_by_user_id': userId,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     });
@@ -109,6 +149,20 @@ class ProductRepository {
   /// يؤرشف الصنف المنشأ أثناء فاتورة ملغاة إذا لم يُستخدم في أي عملية.
   /// لا يحذف السجل ولا يمس صنفًا دخل في بيع أو شراء أو حركة مخزون.
   Future<bool> archiveIfUnused(int productId) async {
+    await _requireManager(_database);
+    return _archiveIfUnused(productId, requireOwnership: false);
+  }
+
+  /// تنظيف صنف أُنشئ من فاتورة شراء ملغاة؛ لا يسمح إلا لمنشئه وبصلاحية المشتريات.
+  Future<bool> cleanupPurchaseProduct(int productId) async {
+    await _requirePurchasePermission(_database);
+    final owner = await _database.query('products', columns: ['id'],
+      where: 'id = ? AND created_by_user_id = ?', whereArgs: [productId, userId ?? -1], limit: 1);
+    if (owner.isEmpty) return false;
+    return _archiveIfUnused(productId, requireOwnership: true);
+  }
+
+  Future<bool> _archiveIfUnused(int productId, {required bool requireOwnership}) async {
     return _database.transaction((txn) async {
       final products = await txn.query(
         'products',
@@ -145,6 +199,7 @@ class ProductRepository {
 
   /// تحديث بيانات صنف موجود، مع التأكد من وجود معرّف له.
   Future<int> update(GroceryProduct product) async {
+    await _requireManager(_database);
     _validate(product);
     final id = product.id;
     if (id == null) {
@@ -188,6 +243,7 @@ class ProductRepository {
 
   /// تحديث سعر البيع فقط دون تغيير تكلفة الشراء أو كمية المخزون.
   Future<int> updateSellingPrice({required int productId, required int sellingPrice}) async {
+    await _requireManager(_database);
     if (productId <= 0 || sellingPrice < 0) {
       throw ArgumentError('معرّف الصنف أو سعر البيع غير صالح.');
     }
@@ -200,7 +256,8 @@ class ProductRepository {
   }
 
   /// إعادة تفعيل صنف مؤرشف دون تغيير بياناته أو سجلاته السابقة.
-  Future<int> restore(int id) {
+  Future<int> restore(int id) async {
+    await _requireManager(_database);
     return _database.update(
       'products',
       {'is_active': 1},
@@ -210,7 +267,8 @@ class ProductRepository {
   }
 
   /// تعطيل الصنف بدل حذفه نهائيًا للحفاظ على سلامة سجل العمليات المستقبلية.
-  Future<int> archive(int id) {
+  Future<int> archive(int id) async {
+    await _requireManager(_database);
     return _database.update(
       'products',
       {'is_active': 0},
