@@ -633,6 +633,67 @@ void main() {
     expect(await suppliers.purchaseHistory(userId: managerId, supplierId: supplierId + 1), isEmpty);
   });
 
+  test('يبحث سجل المشتريات برقم الفاتورة أو المورد ويصفي حسب التاريخ', () async {
+    final productId = await products.add(const GroceryProduct(
+      name: 'سكر', purchasePrice: 100, sellingPrice: 150, stockQuantity: 0,
+    ));
+    final firstSupplier = await suppliers.addSupplier(userId: managerId, name: 'مورد السكر');
+    final secondSupplier = await suppliers.addSupplier(userId: managerId, name: 'مورد الأرز');
+    final first = await suppliers.createPurchase(
+      paymentChannel: 'تحويل بنكي',
+      userId: managerId,
+      supplierId: firstSupplier,
+      lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كجم', quantity: 1, unitCost: 100)],
+      discount: 0,
+      paidAmount: 0,
+    );
+    final second = await suppliers.createPurchase(
+      paymentChannel: 'تحويل بنكي',
+      userId: managerId,
+      supplierId: secondSupplier,
+      lines: [PurchaseLine(productId: productId, productName: 'سكر', unit: 'كجم', quantity: 1, unitCost: 100)],
+      discount: 0,
+      paidAmount: 0,
+    );
+    await database.update(
+      'purchases',
+      {'created_at': '2026-11-03T12:00:00.000Z'},
+      where: 'id = ?',
+      whereArgs: [first.id],
+    );
+    await database.update(
+      'purchases',
+      {'created_at': '2026-11-02T12:00:00.000Z'},
+      where: 'id = ?',
+      whereArgs: [second.id],
+    );
+
+    expect(
+      (await suppliers.purchaseHistory(userId: managerId, query: first.invoiceNumber)).map((p) => p.id),
+      [first.id],
+    );
+    expect(
+      (await suppliers.purchaseHistory(userId: managerId, query: 'مورد الأرز')).map((p) => p.id),
+      [second.id],
+    );
+    expect(
+      (await suppliers.purchaseHistory(
+        userId: managerId,
+        fromDate: DateTime(2026, 11, 3),
+        toDate: DateTime(2026, 11, 3),
+      )).map((p) => p.id),
+      [first.id],
+    );
+    expect(
+      await suppliers.purchaseHistory(
+        userId: managerId,
+        fromDate: DateTime(2026, 11, 4),
+        toDate: DateTime(2026, 11, 3),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('يرفض حد سجل مشتريات غير صالح', () async {
     await expectLater(suppliers.purchaseHistory(userId: managerId, limit: 0), throwsArgumentError);
     await expectLater(suppliers.purchaseHistory(userId: managerId, limit: 1001), throwsArgumentError);
