@@ -272,7 +272,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       try {
         final opening = int.tryParse(openingBalance.text.trim());
         if (opening == null || opening < 0) throw ArgumentError('أدخل رصيدًا افتتاحيًا صحيحًا.');
-        await _repository!.addCustomer(name: name.text, phone: phone.text, openingBalance: opening);
+        await _repository!.addCustomer(name: name.text, userId: widget.userId, phone: phone.text, openingBalance: opening);
         await _load();
       } catch (error) {
         _message('تعذر إضافة الزبون: $error');
