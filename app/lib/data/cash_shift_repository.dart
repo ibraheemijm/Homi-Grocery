@@ -182,6 +182,17 @@ class CashShiftRepository {
     final now = DateTime.now().toUtc().toIso8601String();
 
     return _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username', 'role'],
+        where: 'id = ? AND is_active = 1',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty ||
+          !const {'manager', 'cashier'}.contains(users.single['role'])) {
+        throw const CashShiftException('الحساب غير نشط أو غير مصرح له بإغلاق الوردية.');
+      }
       final rows = await txn.rawQuery(
         '$_selectShift WHERE s.id = ? AND s.status = ? LIMIT 1',
         [shiftId, 'open'],
