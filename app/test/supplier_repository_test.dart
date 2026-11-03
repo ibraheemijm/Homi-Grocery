@@ -991,6 +991,14 @@ void main() {
     final balance = (await suppliers.balances(userId: managerId)).single;
     expect(balance.balance, -50);
     expect(balance.credit, 50);
+    final audit = await database.query(
+      'auth_audit_log',
+      where: "action = ?",
+      whereArgs: ['supplier_opening_balance_updated:$supplierId:0:-50'],
+    );
+    expect(audit, hasLength(1));
+    expect(audit.single['user_id'], managerId);
+    expect(audit.single['username_snapshot'], 'test_manager');
   });
 
   test('يعرض الرصيد الافتتاحي للمورد كبند مستقل في كشف الحساب', () async {
