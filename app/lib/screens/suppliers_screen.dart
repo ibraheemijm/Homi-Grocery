@@ -906,6 +906,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         onPressed: () => setDialogState(() {
                           fromDate = null;
                           toDate = null;
+                          displayedPurchases = purchases;
                           searchController.clear();
                         }),
                         child: const Text('مسح الفلاتر'),
