@@ -114,13 +114,17 @@ void main() {
 
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
+      // افتح قاعدة الاختبار قبل تركيب الشاشة حتى لا يبقى الاختبار معلقًا على تهيئة التخزين.
+      await GroceryDatabase.open();
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(body: SalesScreen(userId: 1)),
         ),
       );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
 
       expect(find.text('اختيار الأصناف'), findsOneWidget);
       expect(find.text('عرض الفاتورة'), findsOneWidget);
