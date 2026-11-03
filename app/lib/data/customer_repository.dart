@@ -205,16 +205,44 @@ class CustomerRepository implements CustomerDataSource {
     });
   }
 
-  // تعديل الرصيد الافتتاحي للمدير فقط، دون إنشاء حركة خزينة.
+  // تعديل الرصيد الافتتاحي للمدير فقط مع تسجيل القيمتين داخل المعاملة نفسها.
   @override
   Future<void> setOpeningBalance({required int customerId, required int amount, required int userId}) async {
     if (amount < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
-    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
-    if (users.isEmpty || users.single['is_active'] != 1 || users.single['role'] != 'manager') {
-      throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير فقط.');
-    }
-    final changed = await _database.update('customers', {'opening_balance': amount}, where: 'id = ?', whereArgs: [customerId]);
-    if (changed == 0) throw StateError('الزبون غير موجود.');
+    await _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير النشط فقط.');
+      }
+      final customers = await txn.query(
+        'customers',
+        columns: ['opening_balance'],
+        where: 'id = ?',
+        whereArgs: [customerId],
+        limit: 1,
+      );
+      if (customers.isEmpty) throw StateError('الزبون غير موجود.');
+      final previous = (customers.single['opening_balance'] as num).toInt();
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'customers',
+        {'opening_balance': amount},
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+      await txn.insert('auth_audit_log', {
+        'user_id': userId,
+        'username_snapshot': users.single['username'],
+        'action': 'customer_opening_balance_updated:$customerId:$previous:$amount',
+        'created_at': now,
+      });
+    });
   }
 
   // تسجيل تحصيل مع التحقق من الرصيد داخل معاملة لمنع تجاوز المبلغ المستحق.
