@@ -7,12 +7,24 @@ import 'package:homi_grocery/data/grocery_database.dart';
 void main() {
   late Directory directory;
   late Database database;
+  late int managerId;
   setUp(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     directory = await Directory.systemTemp.createTemp('homi-backup-test-');
     database = await databaseFactoryFfi.openDatabase('${directory.path}/source.db', options: OpenDatabaseOptions(version: 11));
     await GroceryDatabase.createSchema(database);
+    await GroceryDatabase.createAuthSchema(database);
+    managerId = await database.insert('users', {
+      'username': 'test-manager',
+      'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash',
+      'password_salt': 'test-salt',
+      'password_iterations': 100000,
+      'role': 'manager',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
     await GroceryDatabase.createSalesSchema(database);
     await GroceryDatabase.createCustomersSchema(database);
     await GroceryDatabase.createStockMovementsSchema(database);
@@ -43,6 +55,7 @@ void main() {
 
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       resolveBackupDirectory: () async => backupsDir,
     );
     final backups = await repository.listBackups();
@@ -60,6 +73,7 @@ void main() {
 
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       resolveBackupDirectory: () async => backupsDir,
     );
     await expectLater(
@@ -75,7 +89,9 @@ void main() {
   test('يفحص نسخة SQLite سليمة ويقرأ بياناتها', () async {
     final path = '${directory.path}/backup.db';
     await database.execute("VACUUM INTO '$path'");
-    await BackupRepository(database).validateBackup(path);
+    await BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path);
     final copy = await databaseFactoryFfi.openDatabase(path);
     final rows = await copy.query('products');
     expect(rows.single['name'], 'سكر');
@@ -92,7 +108,9 @@ void main() {
     await GroceryDatabase.createSchema(legacy);
     await legacy.close();
 
-    await BackupRepository(database).validateBackup(path);
+    await BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path);
   });
 
   test('يقبل نسخة قديمة مدعومة قبل إضافة سجل الخزينة', () async {
@@ -111,7 +129,9 @@ void main() {
     await legacy.execute('PRAGMA user_version = 7');
     await legacy.close();
 
-    await BackupRepository(database).validateBackup(path);
+    await BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path);
   });
 
 
@@ -128,7 +148,9 @@ void main() {
     await copy.close();
 
     await expectLater(
-      BackupRepository(database).validateBackup(path),
+      BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path),
       throwsA(isA<FormatException>()),
     );
   });
@@ -144,7 +166,9 @@ void main() {
     await copy.close();
 
     await expectLater(
-      BackupRepository(database).validateBackup(path),
+      BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path),
       throwsA(isA<FormatException>()),
     );
   });
@@ -169,6 +193,7 @@ void main() {
     final targetPath = database.path;
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         if (database.isOpen) await database.close();
       },
@@ -230,6 +255,7 @@ void main() {
     final targetPath = database.path;
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         if (database.isOpen) await database.close();
       },
@@ -286,6 +312,7 @@ void main() {
     var openAttempts = 0;
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         if (database.isOpen) await database.close();
       },
@@ -324,6 +351,7 @@ void main() {
     var openAttempts = 0;
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         closeAttempts++;
         if (database.isOpen) await database.close();
@@ -367,6 +395,7 @@ void main() {
     var openAttempts = 0;
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         if (database.isOpen) await database.close();
       },
@@ -410,7 +439,9 @@ void main() {
     await database.update('products', {'name': 'طحين'});
 
     await expectLater(
-      BackupRepository(database).restoreBackup(invalid.path),
+      BackupRepository(
+      database,
+      managerUserId: managerId).restoreBackup(invalid.path),
       throwsA(isA<FormatException>()),
     );
 
@@ -428,6 +459,7 @@ void main() {
 
     final repository = BackupRepository(
       database,
+      managerUserId: managerId,
       closeForMaintenance: () async {
         closeAttempts++;
         if (database.isOpen) await database.close();
@@ -475,7 +507,9 @@ void main() {
     await database.execute("VACUUM INTO '$path'");
 
     await expectLater(
-      BackupRepository(database).validateBackup(path),
+      BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(path),
       throwsA(isA<FormatException>()),
     );
   });
@@ -483,6 +517,8 @@ void main() {
   test('يرفض ملفًا غير صالح كنسخة احتياطية', () async {
     final invalid = File('${directory.path}/invalid.db');
     await invalid.writeAsString('not a sqlite database');
-    await expectLater(BackupRepository(database).validateBackup(invalid.path), throwsA(isA<FormatException>()));
+    await expectLater(BackupRepository(
+      database,
+      managerUserId: managerId).validateBackup(invalid.path), throwsA(isA<FormatException>()));
   });
 }
