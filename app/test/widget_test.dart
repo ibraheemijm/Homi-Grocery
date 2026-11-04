@@ -114,15 +114,15 @@ void main() {
 
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
-      // افتح قاعدة الاختبار قبل تركيب الشاشة حتى لا يبقى الاختبار معلقًا على تهيئة التخزين.
-      await GroceryDatabase.open();
+      // عمليات SQLite غير متزامنة؛ شغّلها خارج fake async الخاص باختبار الواجهة.
+      await tester.runAsync(() => GroceryDatabase.open());
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(body: SalesScreen(userId: 1)),
         ),
       );
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 150)),
+        () => Future<void>.delayed(const Duration(seconds: 2)),
       );
       await tester.pump();
 
