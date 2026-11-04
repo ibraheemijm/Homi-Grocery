@@ -157,6 +157,7 @@ void main() {
       await _waitForSqliteStartup(tester);
 
       expect(find.text('اختيار الأصناف'), findsOneWidget);
+      expect(find.byTooltip('مسح الباركود بالكاميرا'), findsOneWidget);
       expect(find.text('عرض الفاتورة'), findsOneWidget);
       expect(find.text('0 صنف في الفاتورة'), findsOneWidget);
 
