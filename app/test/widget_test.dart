@@ -13,6 +13,7 @@ import 'package:homi_grocery/data/customer_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
+import 'package:homi_grocery/screens/authentication_gate.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 late Directory _testSupportDirectory;
@@ -127,6 +128,20 @@ void main() {
         .setMockMethodCallHandler(_pathProviderChannel, null);
     if (await _testSupportDirectory.exists()) {
       await _testSupportDirectory.delete(recursive: true);
+    }
+  });
+
+  testWidgets('تعرض شاشة بدء Android هوية Homi Grocery', (tester) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(const MaterialApp(home: AndroidStartupScreen()));
+      expect(find.text('Homi Grocery'), findsOneWidget);
+      expect(find.text('إدارة متجرك بسهولة'), findsOneWidget);
+      expect(find.text('جارٍ تجهيز بيانات المتجر...'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
     }
   });
 
