@@ -173,10 +173,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardStats();
+    _loadDashboardData();
     _loadCashierPermissions();
-    _loadRecentInvoices();
-    _loadHomePreferences();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _clockNow = DateTime.now());
     });
@@ -186,6 +184,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _clockTimer?.cancel();
     super.dispose();
+  }
+
+  // تحميل بيانات اللوحة بالتتابع لتجنب فتح SQLite وتنفيذ استعلاماتها بالتزامن.
+  Future<void> _loadDashboardData() async {
+    await _loadDashboardStats();
+    await _loadRecentInvoices();
+    await _loadHomePreferences();
   }
   // طلب تأكيد قبل إنهاء جلسة المستخدم الحالي.
   Future<void> _confirmLogout() async {
@@ -335,10 +340,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 shiftId: widget.shiftId,
                                 cashierMode: !widget.user.isManager,
                                 cashierPermissions: _cashierPermissions,
-                                onDataChanged: () {
-                                  _loadDashboardStats();
-                                  _loadRecentInvoices();
-                                },
+                                onDataChanged: _loadDashboardData,
                               )
                             : _selectedIndex == 2
                                 ? InvoicesScreen(userId: widget.user.id)
@@ -382,7 +384,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _showMoreMenu(context);
                       } else {
                         setState(() => _selectedIndex = index == 2 ? 3 : index);
-                        if (index == 0) { _loadDashboardStats(); _loadRecentInvoices(); _loadHomePreferences(); }
+                        if (index == 0) { _loadDashboardData(); }
                       }
                     },
                     destinations: const [
@@ -708,13 +710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final theme = Theme.of(context);
     final isDark = widget.isDark;
     return RefreshIndicator(
-      onRefresh: () async {
-        await Future.wait([
-          _loadDashboardStats(),
-          _loadRecentInvoices(),
-          _loadHomePreferences(),
-        ]);
-      },
+      onRefresh: _loadDashboardData,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
