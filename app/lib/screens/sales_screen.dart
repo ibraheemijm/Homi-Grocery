@@ -9,6 +9,7 @@ import '../data/customer_repository.dart';
 import '../data/product_repository.dart';
 import '../data/sale_repository.dart';
 import '../widgets/manager_approval_dialog.dart';
+import 'barcode_scanner_screen.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({this.onDataChanged, required this.userId, this.shiftId, this.cashierMode = false, this.cashierPermissions = const {}, super.key});
@@ -202,6 +203,38 @@ class _SalesScreenState extends State<SalesScreen> {
       if (!mounted) return;
       setState(() => _error = 'تعذر البحث عن الأصناف: $error');
     }
+  }
+
+  // مسح الباركود بالكاميرا متاح في واجهة Android فقط.
+  Future<void> _scanBarcode() async {
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    if (!mounted || barcode == null || barcode.trim().isEmpty) return;
+
+    final value = barcode.trim();
+    _search.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    await _searchProducts(value);
+    if (!mounted) return;
+
+    final exactIndex = _matches.indexWhere(
+      (product) => product.barcode?.trim() == value,
+    );
+    if (exactIndex < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد صنف مرتبط بهذا الباركود.')),
+      );
+      return;
+    }
+
+    _addProduct(_matches[exactIndex]);
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('أُضيف الصنف إلى الفاتورة.')),
+    );
   }
 
   int get _subtotal => _cart.fold<int>(0, (sum, line) => sum + line.lineTotal);
@@ -500,16 +533,36 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _search,
-                onChanged: _searchProducts,
-                decoration: InputDecoration(
-                  hintText: 'اسم الصنف أو الباركود',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _search,
+                      onChanged: _searchProducts,
+                      decoration: InputDecoration(
+                        hintText: 'اسم الصنف أو الباركود',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'مسح الباركود بالكاميرا',
+                      onPressed: _scanBarcode,
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(50, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 8),
               if (compact)
