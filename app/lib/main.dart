@@ -527,7 +527,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       onTap: () {
                         setState(() => _selectedIndex = index);
-                        if (index == 0) { _loadDashboardStats(); _loadRecentInvoices(); _loadHomePreferences(); }
+                        if (index == 0) { _loadDashboardData(); }
                       },
                     ),
                   ),
