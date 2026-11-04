@@ -1,4 +1,5 @@
 // بوابة الدخول: تمنع فتح بيانات المتجر قبل إنشاء المدير أو تسجيل الدخول.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -263,9 +264,11 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       }
     }
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return defaultTargetPlatform == TargetPlatform.android
+          ? const AndroidStartupScreen()
+          : const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
     }
     if (_error != null) {
       return _GateError(message: _error!, onRetry: _initialize);
@@ -296,6 +299,85 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       },
     );
   }
+}
+
+// شاشة بدء خفيفة تحمل هوية التطبيق أثناء تهيئة قاعدة البيانات على Android.
+class AndroidStartupScreen extends StatelessWidget {
+  const AndroidStartupScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [Color(0xFF173D32), Color(0xFF102B24)],
+              ),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 92,
+                    height: 92,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: const Color(0xFFC7A35A),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.storefront_rounded,
+                      size: 48,
+                      color: Color(0xFFF7F4EA),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Homi Grocery',
+                    style: TextStyle(
+                      color: Color(0xFFF7F4EA),
+                      fontSize: 27,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'إدارة متجرك بسهولة',
+                    style: TextStyle(
+                      color: Color(0xFFDCE9DF),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 34),
+                  const SizedBox(
+                    width: 25,
+                    height: 25,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFFC7A35A),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'جارٍ تجهيز بيانات المتجر...',
+                    style: TextStyle(
+                      color: Color(0xFFE5E9E4),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _GateError extends StatelessWidget {
@@ -559,50 +641,186 @@ class _AuthScaffold extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Directionality(
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final theme = Theme.of(context);
+      final dark = theme.brightness == Brightness.dark;
+      return Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          body: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
+          backgroundColor: const Color(0xFF173D32),
+          body: Stack(
+            children: [
+              Positioned(
+                top: -95,
+                left: -75,
+                child: Container(
+                  width: 240,
+                  height: 240,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFC7A35A).withValues(alpha: 0.10),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: -120,
+                right: -90,
+                child: Container(
+                  width: 280,
+                  height: 280,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const CircleAvatar(
-                            radius: 30,
-                            child: Icon(Icons.storefront_rounded, size: 30),
+                          Container(
+                            width: 76,
+                            height: 76,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(25),
+                              border: Border.all(
+                                color: const Color(0xFFC7A35A),
+                                width: 1.4,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.storefront_rounded,
+                              color: Color(0xFFF7F4EA),
+                              size: 40,
+                            ),
                           ),
-                          const SizedBox(height: 20),
-                          Text(
+                          const SizedBox(height: 16),
+                          const Text(
                             'Homi Grocery',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style: TextStyle(
+                              color: Color(0xFFF7F4EA),
+                              fontSize: 27,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            title,
+                          const SizedBox(height: 7),
+                          const Text(
+                            'إدارة متجرك بسهولة',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.titleLarge,
+                            style: TextStyle(
+                              color: Color(0xFFDCE9DF),
+                              fontSize: 13,
+                            ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            subtitle,
+                          const SizedBox(height: 28),
+                          Card(
+                            color: dark
+                                ? const Color(0xFF1B2B25).withValues(alpha: 0.97)
+                                : const Color(0xFFF7F4EA).withValues(alpha: 0.98),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              side: BorderSide(
+                                color: const Color(0xFFC7A35A).withValues(alpha: 0.42),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(22),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    title,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.headlineSmall?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: dark ? Colors.white : const Color(0xFF173D32),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    subtitle,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 24),
+                                  child,
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'يعمل دون إنترنت • بياناتك محفوظة محليًا',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            style: TextStyle(
+                              color: Color(0xFFDCE9DF),
+                              fontSize: 11,
+                            ),
                           ),
-                          const SizedBox(height: 24),
-                          child,
                         ],
                       ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const CircleAvatar(
+                          radius: 30,
+                          child: Icon(Icons.storefront_rounded, size: 30),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Homi Grocery',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          subtitle,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 24),
+                        child,
+                      ],
                     ),
                   ),
                 ),
@@ -610,5 +828,7 @@ class _AuthScaffold extends StatelessWidget {
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
