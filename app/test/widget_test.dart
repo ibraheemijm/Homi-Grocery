@@ -85,6 +85,20 @@ void main() {
       }
       return null;
     });
+
+    // حساب مدير ثابت للاختبارات التي تقرأ صلاحيات اللوحة والتقارير.
+    final database = await GroceryDatabase.open();
+    await database.insert('users', {
+      'id': 1,
+      'username': 'widget_test_manager',
+      'display_name': 'مدير الاختبار',
+      'password_hash': 'test-hash',
+      'password_salt': 'dGVzdA==',
+      'password_iterations': 100000,
+      'role': 'manager',
+      'is_active': 1,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
   });
 
   tearDownAll(() async {
