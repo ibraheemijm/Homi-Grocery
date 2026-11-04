@@ -53,6 +53,15 @@ class _TestDashboardAppState extends State<_TestDashboardApp> {
 
 Widget _dashboardApp() => const _TestDashboardApp();
 
+// اختبارات الواجهة تستخدم fakeAsync، بينما SQLite FFI يحتاج حلقة أحداث حقيقية.
+// نمنح عمليات التهيئة غير المتزامنة وقتًا حقيقيًا لإكمالها قبل إنهاء الاختبار.
+Future<void> _waitForSqliteStartup(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  });
+  await tester.pump();
+}
+
 class _CollectionOnlyCustomerSource implements CustomerDataSource {
   @override
   Future<List<CustomerBalance>> balances({
@@ -113,6 +122,7 @@ void main() {
   testWidgets('تظهر اللوحة الرئيسية باللغة العربية على شاشة الهاتف',
       (tester) async {
     await tester.pumpWidget(_dashboardApp());
+    await _waitForSqliteStartup(tester);
 
     expect(find.text('الرئيسية'), findsWidgets);
     expect(find.text('مبيعات اليوم'), findsOneWidget);
@@ -133,12 +143,7 @@ void main() {
           home: Scaffold(body: SalesScreen(userId: 1)),
         ),
       );
-      // انتظر انتهاء تهيئة شاشة البيع نفسها بدل الاعتماد على تأخير زمني ثابت.
-      await tester.pumpAndSettle(
-        const Duration(milliseconds: 100),
-        EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 5),
-      );
+      await _waitForSqliteStartup(tester);
 
       expect(find.text('اختيار الأصناف'), findsOneWidget);
       expect(find.text('عرض الفاتورة'), findsOneWidget);
@@ -163,7 +168,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       await tester.pumpWidget(_dashboardApp());
-      await tester.pump();
+      await _waitForSqliteStartup(tester);
 
       expect(find.byType(RefreshIndicator), findsOneWidget);
       expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
@@ -188,7 +193,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(_dashboardApp());
-    await tester.pump();
+    await _waitForSqliteStartup(tester);
 
     await tester.tap(find.byTooltip('المظهر الداكن'));
     await tester.pump();
@@ -213,7 +218,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(_dashboardApp());
-    await tester.pump(const Duration(milliseconds: 100));
+    await _waitForSqliteStartup(tester);
 
     await tester.tap(find.text('مبيعات اليوم'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -230,7 +235,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(_dashboardApp());
-    await tester.pump();
+    await _waitForSqliteStartup(tester);
 
     // نحدد تسمية «المزيد» داخل شريط التنقل السفلي نفسه، لا أي عنصر مشابه في محتوى الصفحة.
     final moreDestination = find.descendant(
