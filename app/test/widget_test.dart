@@ -47,6 +47,17 @@ class _TestDashboardAppState extends State<_TestDashboardApp> {
           ),
           shiftId: 1,
           onLogout: () {},
+          // اختبارات هذه اللوحة تختبر التنقل فقط؛ اختبارات المستودعات تغطي SQLite منفصلة.
+          reportsScreenBuilder: (_) => const Scaffold(body: Text('التقارير')),
+          backupScreenBuilder: (_) => const Scaffold(
+            body: Column(
+              children: [
+                Text('النسخ الاحتياطي والاستعادة'),
+                Text('إنشاء نسخة احتياطية الآن'),
+                Text('اختيار نسخة واستعادتها'),
+              ],
+            ),
+          ),
         ),
       );
 }
