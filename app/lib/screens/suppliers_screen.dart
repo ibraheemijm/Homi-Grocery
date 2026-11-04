@@ -1,4 +1,5 @@
 // واجهة الموردين والمشتريات والمدفوعات.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../data/grocery_database.dart';
@@ -855,6 +856,10 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
+            // توسيع نافذة السجل على الهاتف مع إبقاء حوار الكمبيوتر كما هو.
+            insetPadding: defaultTargetPlatform == TargetPlatform.android
+                ? const EdgeInsets.symmetric(horizontal: 8, vertical: 16)
+                : const EdgeInsets.all(40),
             title: const Text('سجل فواتير الشراء'),
             content: SizedBox(
               width: 640,
@@ -949,7 +954,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   const SizedBox(height: 8),
                   if (filtering) const LinearProgressIndicator(),
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 420),
+                    constraints: BoxConstraints(
+                      maxHeight: defaultTargetPlatform == TargetPlatform.android
+                          ? MediaQuery.sizeOf(context).height * 0.62
+                          : 420,
+                    ),
                     child: displayedPurchases.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.all(20),
@@ -965,6 +974,82 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                               final dateLabel = date == null
                                   ? purchase.createdAt
                                   : '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                              // بطاقات أوضح على الهاتف، مع الإبقاء على صفوف الكمبيوتر.
+                              if (defaultTargetPlatform == TargetPlatform.android) {
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => _showPurchaseDetails(purchase),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(10),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context).colorScheme.primaryContainer,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Icon(
+                                                  Icons.receipt_long_rounded,
+                                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      purchase.invoiceNumber,
+                                                      style: const TextStyle(fontWeight: FontWeight.w800),
+                                                    ),
+                                                    Text(purchase.supplierName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                    Text(dateLabel, style: Theme.of(context).textTheme.bodySmall),
+                                                  ],
+                                                ),
+                                              ),
+                                              const Icon(Icons.chevron_left_rounded),
+                                            ],
+                                          ),
+                                          const Divider(height: 20),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              const Text('الإجمالي'),
+                                              Text(
+                                                '${purchase.total} ج.س',
+                                                style: const TextStyle(fontWeight: FontWeight.w800),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Wrap(
+                                            spacing: 12,
+                                            runSpacing: 4,
+                                            children: [
+                                              Text('المدفوع: ${purchase.paidAmount} ج.س'),
+                                              Text(
+                                                'المتبقي: ${purchase.remainingAmount} ج.س',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: purchase.remainingAmount > 0
+                                                      ? Theme.of(context).colorScheme.error
+                                                      : Theme.of(context).colorScheme.primary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
                               return ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: const CircleAvatar(child: Icon(Icons.receipt_long_rounded)),
