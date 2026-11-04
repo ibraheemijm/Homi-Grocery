@@ -12,11 +12,26 @@ class GroceryDatabase {
   static const int _version = 24;
   static int get schemaVersion => _version;
   static Database? _instance;
+  static Future<Database>? _opening;
 
-  /// فتح قاعدة البيانات مرة واحدة وإعادة استعمال الاتصال نفسه.
+  /// فتح قاعدة البيانات مرة واحدة، مع مشاركة عملية الفتح إذا طلبتها عدة شاشات معًا.
   static Future<Database> open() async {
-    if (_instance != null) return _instance!;
+    final current = _instance;
+    if (current != null) return current;
 
+    final pending = _opening;
+    if (pending != null) return pending;
+
+    final opening = _openDatabase();
+    _opening = opening;
+    try {
+      return await opening;
+    } finally {
+      if (identical(_opening, opening)) _opening = null;
+    }
+  }
+
+  static Future<Database> _openDatabase() async {
     // Linux يحتاج إلى مشغل SQLite المبني على FFI، بينما Android يستخدم sqflite.
     if (Platform.isLinux || Platform.isWindows) {
       sqfliteFfiInit();
@@ -27,7 +42,7 @@ class GroceryDatabase {
     await directory.create(recursive: true);
     final databasePath = p.join(directory.path, 'homi_grocery.db');
 
-    _instance = await openDatabase(
+    final database = await openDatabase(
       databasePath,
       version: _version,
       onConfigure: (db) async {
@@ -143,7 +158,8 @@ class GroceryDatabase {
         await db.insert('app_metadata', {'key': 'schema_version', 'value': _version.toString()}, conflictAlgorithm: ConflictAlgorithm.replace);
       },
     );
-    return _instance!;
+    _instance = database;
+    return database;
   }
 
   /// إغلاق الاتصال قبل استعادة ملف قاعدة البيانات ثم السماح بفتحه مجددًا.
