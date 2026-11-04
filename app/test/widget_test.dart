@@ -128,17 +128,16 @@ void main() {
 
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
-      // عمليات SQLite غير متزامنة؛ شغّلها خارج fake async الخاص باختبار الواجهة.
-      await tester.runAsync(() => GroceryDatabase.open());
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(body: SalesScreen(userId: 1)),
         ),
       );
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(seconds: 2)),
+      // انتظر انتهاء تهيئة شاشة البيع نفسها بدل الاعتماد على تأخير زمني ثابت.
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        timeout: const Duration(seconds: 5),
       );
-      await tester.pump();
 
       expect(find.text('اختيار الأصناف'), findsOneWidget);
       expect(find.text('عرض الفاتورة'), findsOneWidget);
