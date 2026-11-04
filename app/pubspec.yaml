@@ -21,7 +21,7 @@ dependencies:
   # تجزئة كلمات المرور محليًا باستخدام HMAC-SHA256.
   crypto: ^3.0.6
   # قارئ باركود بالكاميرا على Android.
-  mobile_scanner: ^7.5.0
+  mobile_scanner: ^6.0.11
 
 dev_dependencies:
   flutter_test:
