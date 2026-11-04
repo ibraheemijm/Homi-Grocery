@@ -141,6 +141,8 @@ class DashboardScreen extends StatefulWidget {
     required this.user,
     required this.shiftId,
     required this.onLogout,
+    this.reportsScreenBuilder,
+    this.backupScreenBuilder,
     super.key,
   });
 
@@ -149,6 +151,9 @@ class DashboardScreen extends StatefulWidget {
   final AuthUser user;
   final int shiftId;
   final VoidCallback onLogout;
+  // تسمح ببناء شاشات بديلة في اختبارات التنقل دون تشغيل قواعد بياناتها.
+  final Widget Function(int userId)? reportsScreenBuilder;
+  final Widget Function(int managerUserId)? backupScreenBuilder;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -353,7 +358,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         : _selectedIndex == 6
                                             ? CashboxScreen(userId: widget.user.id, isManager: widget.user.isManager, shiftId: widget.shiftId)
                                             : _selectedIndex == 7
-                                                ? ReportsScreen(userId: widget.user.id)
+                                                ? (widget.reportsScreenBuilder?.call(widget.user.id) ?? ReportsScreen(userId: widget.user.id))
                                                 : _selectedIndex == 8
                                                     ? SettingsScreen(canManageSystemSettings: widget.user.isManager)
                                                     : _selectedIndex == 9
@@ -361,7 +366,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         : _selectedIndex == 10
                                             ? NotificationsScreen(userId: widget.user.id, isManager: widget.user.isManager)
                                             : _selectedIndex == 11 && widget.user.isManager
-                                                ? BackupScreen(managerUserId: widget.user.id)
+                                                ? (widget.backupScreenBuilder?.call(widget.user.id) ?? BackupScreen(managerUserId: widget.user.id))
                                                 : _selectedIndex == 12 && widget.user.isManager
                                                     ? CashierManagementScreen(manager: widget.user)
                                                     : _buildPlaceholder(context, _navigationItems[_selectedIndex]),
