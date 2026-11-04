@@ -136,7 +136,8 @@ void main() {
       // انتظر انتهاء تهيئة شاشة البيع نفسها بدل الاعتماد على تأخير زمني ثابت.
       await tester.pumpAndSettle(
         const Duration(milliseconds: 100),
-        timeout: const Duration(seconds: 5),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 5),
       );
 
       expect(find.text('اختيار الأصناف'), findsOneWidget);
