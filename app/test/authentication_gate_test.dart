@@ -11,7 +11,8 @@ import 'package:homi_grocery/screens/authentication_gate.dart';
 Future<void> _pumpGate(WidgetTester tester) async {
   await tester.pump();
   await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    // يترك وقتًا كافيًا لعمليات SQLite المتتابعة بعد إغلاق وردية وتبديل الحساب.
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
   });
   await tester.pump(const Duration(milliseconds: 400));
 }
@@ -133,6 +134,11 @@ void main() {
     await tester.tap(find.text('دخول'));
     await _pumpGate(tester);
 
+    expect(
+      find.text('فتح الوردية'),
+      findsOneWidget,
+      reason: 'تعذر الانتقال إلى فتح وردية المدير. محتوى الشاشة: ${tester.widgetList<Text>(find.byType(Text)).map((widget) => widget.data).join(' | ')}',
+    );
     await tester.enterText(find.byType(TextField).last, '0');
     await tester.tap(find.text('فتح الوردية'));
     await _pumpGate(tester);
