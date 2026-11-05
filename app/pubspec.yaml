@@ -22,6 +22,9 @@ dependencies:
   crypto: ^3.0.6
   # قارئ باركود بالكاميرا على Android.
   mobile_scanner: ^6.0.11
+  # المصادقة الحيوية والتخزين المشفر لبيانات الدخول على Android.
+  local_auth: ^2.3.0
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:
