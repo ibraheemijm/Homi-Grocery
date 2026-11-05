@@ -227,17 +227,19 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     if (credentials == null) {
       throw const AuthException('لم يكتمل التحقق بالبصمة. استخدم كلمة المرور للدخول.');
     }
+    late AuthUser user;
     try {
-      final user = await _repository!.login(
+      user = await _repository!.login(
         username: credentials.username,
         password: credentials.password,
       );
-      await _activateUser(user);
     } catch (_) {
+      // امسح بيانات الدخول فقط إذا أصبحت غير صالحة، لا عند تعذر فتح الوردية.
       await biometric.clearCredentials();
       if (mounted) setState(() => _biometricReady = false);
       rethrow;
     }
+    await _activateUser(user);
   }
 
   Future<void> _logout() async {
