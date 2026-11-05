@@ -503,13 +503,14 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       _message('لا يوجد منتج مسجل بهذا الباركود. يمكنك إنشاء منتج جديد ومسح الباركود في نافذته.');
       return;
     }
-    controller.text = product.name;
+    final selectedProduct = product;
+    controller.text = selectedProduct.name;
     refresh(() {
-      draft.productId = product!.id!;
-      draft.productName = product.name;
+      draft.productId = selectedProduct.id!;
+      draft.productName = selectedProduct.name;
       draft.fieldVersion++;
-      draft.cost.text = product.purchasePrice.toString();
-      draft.sellingPrice.text = product.sellingPrice.toString();
+      draft.cost.text = selectedProduct.purchasePrice.toString();
+      draft.sellingPrice.text = selectedProduct.sellingPrice.toString();
       _updatePercentageFromSellingPrice(draft);
     });
     FocusScope.of(context).unfocus();
