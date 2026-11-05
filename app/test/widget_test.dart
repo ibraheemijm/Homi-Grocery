@@ -16,6 +16,7 @@ import 'package:homi_grocery/screens/sales_screen.dart';
 import 'package:homi_grocery/screens/suppliers_screen.dart';
 import 'package:homi_grocery/screens/products_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
+import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
@@ -628,6 +629,73 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+
+  testWidgets('إلغاء نافذة دفع البيع بعد إدخال المبلغ لا يسبب خطأ دورة حياة',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await ProductRepository(database, userId: 1).add(
+          const GroceryProduct(
+            name: 'اختبار صنف إغلاق البيع',
+            unit: 'حبة',
+            purchasePrice: 50,
+            sellingPrice: 100,
+            stockQuantity: 10,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SalesScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final product = find.text('اختبار صنف إغلاق البيع');
+      expect(product, findsOneWidget);
+      await tester.ensureVisible(product);
+      await tester.tap(product);
+      await tester.pump();
+
+      final showCart = find.text('عرض الفاتورة');
+      await tester.ensureVisible(showCart);
+      await tester.tap(showCart);
+      await tester.pump(const Duration(milliseconds: 350));
+
+      final checkout = find.text('إتمام البيع');
+      await tester.ensureVisible(checkout);
+      await tester.tap(checkout);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('تأكيد الدفع'), findsOneWidget);
+
+      final amountField = find.byWidgetPredicate((widget) =>
+          widget is TextField &&
+          widget.decoration?.labelText == 'المبلغ النقدي المستلم');
+      expect(amountField, findsOneWidget);
+      await tester.enterText(amountField, '100');
+      final backButton = find.text('رجوع');
+      await tester.ensureVisible(backButton);
+      await tester.tap(backButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('تأكيد الدفع'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
     }
   });
 
