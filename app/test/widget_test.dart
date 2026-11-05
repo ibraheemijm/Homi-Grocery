@@ -10,6 +10,7 @@ import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/customer_repository.dart';
+import 'package:homi_grocery/data/cashbox_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
@@ -869,19 +870,25 @@ void main() {
         ),
       );
       await tester.runAsync(() async {
-        // انتظر اكتمال تهيئة قاعدة البيانات والتحميل الذي بدأته الشاشة نفسها.
+        // نفّذ استعلامات المستودع نفسها التي تعتمد عليها الشاشة خارج fakeAsync.
         final database = await GroceryDatabase.open();
-        await database.query('cash_transactions', limit: 1);
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        final repository = CashboxRepository(database);
+        await repository.summary(userId: 1);
+        await repository.recent(userId: 1);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
       });
+      // امنح FutureBuilder فرصة لبناء محتوى الخزينة بعد اكتمال استعلامات SQLite.
       await tester.pump();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
-      // لا يبدأ التمرير إلا بعد ظهور قائمة الخزينة فعليًا وانتهاء FutureBuilder.
-      expect(find.byType(ListView), findsOneWidget);
-      await tester.ensureVisible(find.text('حركات اليوم'));
-      await tester.pumpAndSettle();
+      expect(find.text('ملخص اليوم'), findsOneWidget);
+      // مرّر قائمة الخزينة نفسها حتى يظهر العنوان ومرشح الدفع على الهاتف.
+      final movementsHeading = find.text('حركات اليوم');
+      expect(movementsHeading, findsOneWidget);
+      await tester.ensureVisible(movementsHeading);
+      await tester.pump();
       expect(find.text('حركات اليوم'), findsOneWidget);
       expect(find.text('فرز حسب الطريقة'), findsOneWidget);
       expect(tester.takeException(), isNull);
