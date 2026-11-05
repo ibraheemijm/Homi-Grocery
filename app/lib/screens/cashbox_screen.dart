@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 
 import '../data/cashbox_repository.dart';
 import '../data/grocery_database.dart';
@@ -68,7 +69,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
     Future<List<Map<String, Object?>>> load() => repo.pendingCustomerOverpayments(userId: widget.userId);
     var rows = await load();
     if (!mounted) return;
-    await showDialog<void>(
+    await showDialogAndWaitForExit<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, refresh) => AlertDialog(
@@ -102,7 +103,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
   Future<void> _refundOverpayment(SaleRepository repo, Map<String, Object?> row) async {
     final amountController = TextEditingController(text: '${row['outstanding_amount']}');
     String method = 'نقدي';
-    final amount = await showDialog<int>(
+    final amount = await showDialogAndWaitForExit<int>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(builder: (context, refresh) => AlertDialog(
         title: Text('رد زيادة فاتورة ${row['invoice_number']}'),
@@ -185,7 +186,7 @@ class _CashboxScreenState extends State<CashboxScreen> {
     final noteController = TextEditingController();
     String paymentMethod = 'نقدي';
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
+    final saved = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
