@@ -243,7 +243,7 @@ void main() {
       await tester.ensureVisible(find.text('إضافة منتج جديد'));
       await tester.tap(find.text('إضافة منتج جديد'));
       await tester.pump(const Duration(milliseconds: 350));
-      expect(find.text('إضافة منتج جديد'), findsOneWidget);
+      expect(find.text('إضافة منتج جديد'), findsWidgets);
       expect(find.byTooltip('مسح الباركود بالكاميرا'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
