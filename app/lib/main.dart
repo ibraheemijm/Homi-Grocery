@@ -331,7 +331,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, constraints) {
           // عند عرض 900 بكسل أو أكثر نستخدم قائمة جانبية للكمبيوتر.
           final isDesktop = constraints.maxWidth >= 900;
-          return Scaffold(
+          return PopScope<Object?>(
+            canPop: defaultTargetPlatform != TargetPlatform.android,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop || defaultTargetPlatform != TargetPlatform.android) return;
+              if (_selectedIndex != 0) {
+                setState(() => _selectedIndex = 0);
+              } else {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text('أنت في الصفحة الرئيسية. استخدم زر الشاشة الرئيسية لمغادرة التطبيق دون تسجيل الخروج.'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+              }
+            },
+            child: Scaffold(
             body: SafeArea(
               child: Row(
                 children: [
@@ -411,6 +428,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
+            ),
           );
         },
       ),
