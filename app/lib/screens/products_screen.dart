@@ -73,114 +73,416 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('الأصناف والمخزون', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 5),
-                Text('إدارة الأصناف والأسعار والكميات المحفوظة محليًا', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ])),
-              FilledButton.icon(onPressed: _repository == null ? null : () => _edit(), icon: const Icon(Icons.add_rounded), label: const Text('إضافة صنف')),
-            ]),
-            const SizedBox(height: 14),
-            Wrap(spacing: 8, children: [
-              ChoiceChip(
-                label: const Text('الأصناف النشطة'),
-                selected: !_showArchived,
-                onSelected: (_) {
-                  setState(() => _showArchived = false);
-                  _load();
-                },
-              ),
-              ChoiceChip(
-                label: const Text('الأصناف المؤرشفة'),
-                selected: _showArchived,
-                onSelected: (_) {
-                  setState(() => _showArchived = true);
-                  _load();
-                },
-              ),
-            ]),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _search,
-              onChanged: (_) => _load(),
-              decoration: InputDecoration(
-                hintText: 'ابحث باسم الصنف أو الباركود',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: IconButton(onPressed: () { _search.clear(); _load(); }, icon: const Icon(Icons.close_rounded)),
-                filled: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 14),
-            if (_error != null)
-              Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.error_outline_rounded, size: 40),
-                Text(_error!, textAlign: TextAlign.center),
-                OutlinedButton(onPressed: _initialize, child: const Text('إعادة المحاولة')),
-              ])))
-            else if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (_products.isEmpty)
-              Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.inventory_2_outlined, size: 62, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(height: 12),
-                Text(_search.text.isEmpty ? 'لا توجد أصناف مسجلة بعد' : 'لا توجد نتائج مطابقة', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                const Text('أضف الأصناف لتبدأ في تنظيم الأسعار والكميات.', textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton.icon(onPressed: () => _edit(), icon: const Icon(Icons.add_rounded), label: const Text('إضافة أول صنف')),
-              ])))
-            else
-              Expanded(child: ListView.separated(
-                itemCount: _products.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final item = _products[index];
-                  final low = item.stockQuantity <= item.minimumQuantity;
-                  final barcodeText = item.barcode == null ? '' : ' • باركود: ${item.barcode}';
-                  return Card(child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: low ? const Color(0xFFF3DEDA) : const Color(0xFFDCE9DF),
-                      backgroundImage: item.imagePath != null && File(item.imagePath!).existsSync()
-                          ? FileImage(File(item.imagePath!))
-                          : null,
-                      child: item.imagePath != null && File(item.imagePath!).existsSync()
-                          ? null
-                          : Icon(low ? Icons.warning_amber_rounded : Icons.inventory_2_rounded, color: const Color(0xFF173D32)),
-                    ),
-                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\nالمخزون: ${_quantity(item.stockQuantity)} ${item.unit}$barcodeText'),
-                    isThreeLine: true,
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') _edit(item);
-                        if (value == 'archive') _archive(item);
-                        if (value == 'restore') _restore(item);
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(value: 'edit', child: Text('تعديل الصنف')),
-                        if (item.isActive)
-                          const PopupMenuItem(value: 'archive', child: Text('أرشفة الصنف'))
-                        else
-                          const PopupMenuItem(value: 'restore', child: Text('إعادة تفعيل الصنف')),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final androidPhone =
+                defaultTargetPlatform == TargetPlatform.android &&
+                    constraints.maxWidth < 600;
+            return Padding(
+              padding: EdgeInsets.all(androidPhone ? 14 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'الأصناف والمخزون',
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              androidPhone
+                                  ? 'الأسعار والكميات وحالة المخزون'
+                                  : 'إدارة الأصناف والأسعار والكميات المحفوظة محليًا',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (androidPhone)
+                        IconButton.filled(
+                          tooltip: 'إضافة صنف',
+                          onPressed: _repository == null ? null : () => _edit(),
+                          icon: const Icon(Icons.add_rounded),
+                        )
+                      else
+                        FilledButton.icon(
+                          onPressed: _repository == null ? null : () => _edit(),
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('إضافة صنف'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('الأصناف النشطة'),
+                          selected: !_showArchived,
+                          onSelected: (_) {
+                            setState(() => _showArchived = false);
+                            _load();
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('الأصناف المؤرشفة'),
+                          selected: _showArchived,
+                          onSelected: (_) {
+                            setState(() => _showArchived = true);
+                            _load();
+                          },
+                        ),
                       ],
                     ),
-                  ));
-                },
-              )),
-            if (!_loading && _error == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(
-                  _showArchived ? 'عدد الأصناف المؤرشفة: ${_products.length}' : 'عدد الأصناف النشطة: ${_products.length}',
-                  style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => _load(),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث باسم الصنف أو الباركود',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (androidPhone)
+                            IconButton(
+                              tooltip: 'مسح الباركود للبحث',
+                              onPressed: () async {
+                                await _scanBarcodeInto(_search);
+                                if (mounted) _load();
+                              },
+                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                            ),
+                          IconButton(
+                            tooltip: 'مسح البحث',
+                            onPressed: () {
+                              _search.clear();
+                              _load();
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_error != null)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, size: 40),
+                            Text(_error!, textAlign: TextAlign.center),
+                            OutlinedButton(
+                              onPressed: _initialize,
+                              child: const Text('إعادة المحاولة'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_loading)
+                    const Expanded(
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_products.isEmpty)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              size: 62,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _search.text.isEmpty
+                                  ? (_showArchived
+                                      ? 'لا توجد أصناف مؤرشفة'
+                                      : 'لا توجد أصناف مسجلة بعد')
+                                  : 'لا توجد نتائج مطابقة',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'أضف الأصناف لتبدأ في تنظيم الأسعار والكميات.',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: () => _edit(),
+                              icon: const Icon(Icons.add_rounded),
+                              label: const Text('إضافة أول صنف'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        padding: EdgeInsets.only(
+                          bottom: androidPhone ? 8 : 0,
+                        ),
+                        itemCount: _products.length,
+                        separatorBuilder: (context, index) =>
+                            SizedBox(height: androidPhone ? 10 : 8),
+                        itemBuilder: (context, index) {
+                          final item = _products[index];
+                          return androidPhone
+                              ? _buildAndroidProductCard(item, theme)
+                              : _buildDesktopProductCard(item);
+                        },
+                      ),
+                    ),
+                  if (!_loading && _error == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        _showArchived
+                            ? 'عدد الأصناف المؤرشفة: ${_products.length}'
+                            : 'عدد الأصناف النشطة: ${_products.length}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // بطاقة الهاتف تفصل السعر والكمية حتى يمكن قراءتها دون تمدد صف القائمة.
+  Widget _buildAndroidProductCard(GroceryProduct item, ThemeData theme) {
+    final low = item.stockQuantity <= item.minimumQuantity;
+    final hasImage =
+        item.imagePath != null && File(item.imagePath!).existsSync();
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: theme.dividerColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: low
+                      ? const Color(0xFFF3DEDA)
+                      : const Color(0xFFDCE9DF),
+                  backgroundImage:
+                      hasImage ? FileImage(File(item.imagePath!)) : null,
+                  child: hasImage
+                      ? null
+                      : Icon(
+                          low
+                              ? Icons.warning_amber_rounded
+                              : Icons.inventory_2_rounded,
+                          color: const Color(0xFF173D32),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'خيارات الصنف',
+                  onSelected: (value) {
+                    if (value == 'edit') _edit(item);
+                    if (value == 'archive') _archive(item);
+                    if (value == 'restore') _restore(item);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Text('تعديل الصنف'),
+                    ),
+                    if (item.isActive)
+                      const PopupMenuItem(
+                        value: 'archive',
+                        child: Text('أرشفة الصنف'),
+                      )
+                    else
+                      const PopupMenuItem(
+                        value: 'restore',
+                        child: Text('إعادة تفعيل الصنف'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _productValue(
+                    'سعر الشراء',
+                    '${item.purchasePrice} ج.س',
+                    theme,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _productValue(
+                    'سعر البيع',
+                    '${item.sellingPrice} ج.س',
+                    theme,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            Row(
+              children: [
+                Icon(
+                  low ? Icons.warning_amber_rounded : Icons.inventory_2_outlined,
+                  size: 17,
+                  color: low ? theme.colorScheme.error : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'المخزون: ${_quantity(item.stockQuantity)} ${item.unit}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: low ? theme.colorScheme.error : null,
+                    ),
+                  ),
+                ),
+                if (low)
+                  const Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('منخفض'),
+                    padding: EdgeInsets.zero,
+                  ),
+              ],
+            ),
+            if (item.barcode != null && item.barcode!.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(
+                'الباركود: ${item.barcode}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-          ]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _productValue(String label, String value, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // يظل عرض سطح المكتب كما هو لتجنب تغيير تجربة Linux وWindows.
+  Widget _buildDesktopProductCard(GroceryProduct item) {
+    final low = item.stockQuantity <= item.minimumQuantity;
+    final hasImage =
+        item.imagePath != null && File(item.imagePath!).existsSync();
+    final barcodeText = item.barcode == null ? '' : ' • باركود: ${item.barcode}';
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: low
+              ? const Color(0xFFF3DEDA)
+              : const Color(0xFFDCE9DF),
+          backgroundImage: hasImage ? FileImage(File(item.imagePath!)) : null,
+          child: hasImage
+              ? null
+              : Icon(
+                  low
+                      ? Icons.warning_amber_rounded
+                      : Icons.inventory_2_rounded,
+                  color: const Color(0xFF173D32),
+                ),
+        ),
+        title: Text(
+          item.name,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          'شراء: ${item.purchasePrice} ج.س • بيع: ${item.sellingPrice} ج.س\\n'
+          'المخزون: ${_quantity(item.stockQuantity)} ${item.unit}$barcodeText',
+        ),
+        isThreeLine: true,
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'edit') _edit(item);
+            if (value == 'archive') _archive(item);
+            if (value == 'restore') _restore(item);
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'edit', child: Text('تعديل الصنف')),
+            if (item.isActive)
+              const PopupMenuItem(value: 'archive', child: Text('أرشفة الصنف'))
+            else
+              const PopupMenuItem(value: 'restore', child: Text('إعادة تفعيل الصنف')),
+          ],
         ),
       ),
     );
