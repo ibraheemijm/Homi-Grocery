@@ -816,32 +816,115 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         if (!mounted) return;
         await showDialog<void>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('فواتير الشراء المتاحة للمرتجعات'),
-            content: SizedBox(
-              width: 560,
-              child: purchases.isEmpty
-                  ? const Padding(padding: EdgeInsets.all(20), child: Text('لا توجد فواتير شراء مسجلة بعد.', textAlign: TextAlign.center))
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: purchases.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final purchase = purchases[index];
-                        return ListTile(
-                          title: Text(purchase.invoiceNumber),
-                          subtitle: Text('${purchase.supplierName} • ${purchase.createdAt}'),
-                          trailing: const Icon(Icons.assignment_return_outlined),
-                          onTap: () {
-                            Navigator.pop(dialogContext);
-                            _createSupplierReturnForPurchase(purchaseId: purchase.id, invoiceNumber: purchase.invoiceNumber);
+          builder: (dialogContext) {
+            final androidPhone =
+                defaultTargetPlatform == TargetPlatform.android &&
+                    MediaQuery.sizeOf(dialogContext).width < 600;
+            return AlertDialog(
+              // واجهة الهاتف تعرض الفواتير كبطاقات قابلة للمس دون تغيير صلاحية المرتجعات.
+              insetPadding: androidPhone
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 20)
+                  : const EdgeInsets.all(40),
+              title: const Text('فواتير الشراء المتاحة للمرتجعات'),
+              content: SizedBox(
+                width: androidPhone ? double.maxFinite : 560,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: androidPhone
+                        ? MediaQuery.sizeOf(dialogContext).height * 0.62
+                        : 420,
+                  ),
+                  child: purchases.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'لا توجد فواتير شراء مسجلة بعد.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: purchases.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final purchase = purchases[index];
+                            final subtitle =
+                                '${purchase.supplierName} • ${purchase.createdAt}';
+                            final onTap = () {
+                              Navigator.pop(dialogContext);
+                              _createSupplierReturnForPurchase(
+                                purchaseId: purchase.id,
+                                invoiceNumber: purchase.invoiceNumber,
+                              );
+                            };
+                            if (!androidPhone) {
+                              return ListTile(
+                                title: Text(purchase.invoiceNumber),
+                                subtitle: Text(subtitle),
+                                trailing: const Icon(Icons.assignment_return_outlined),
+                                onTap: onTap,
+                              );
+                            }
+                            return Card(
+                              margin: EdgeInsets.zero,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: onTap,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme.primaryContainer,
+                                        child: Icon(
+                                          Icons.assignment_return_outlined,
+                                          color: Theme.of(context)
+                                              .colorScheme.onPrimaryContainer,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              purchase.invoiceNumber,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              subtitle,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme.bodySmall,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.chevron_left_rounded),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
                           },
-                        );
-                      },
-                    ),
-            ),
-            actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
-          ),
+                        ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('إغلاق'),
+                ),
+              ],
+            );
+          },
         );
         return;
       }
