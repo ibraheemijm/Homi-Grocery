@@ -433,7 +433,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.65),
+        color: theme.colorScheme.surface.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
