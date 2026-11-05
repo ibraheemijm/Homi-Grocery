@@ -233,12 +233,13 @@ void main() {
       await _waitForSqliteStartup(tester);
 
       await tester.tap(find.text('فاتورة شراء'));
-      await tester.pumpAndSettle();
+      // ننتظر انتقال الحوار بمدة محددة؛ pumpAndSettle قد ينتظر مؤشرات التحميل المستمرة.
+      await tester.pump(const Duration(milliseconds: 350));
       expect(find.byTooltip('مسح باركود الصنف'), findsOneWidget);
 
       await tester.ensureVisible(find.text('إضافة منتج جديد'));
       await tester.tap(find.text('إضافة منتج جديد'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('إضافة منتج جديد'), findsOneWidget);
       expect(find.byTooltip('مسح الباركود بالكاميرا'), findsOneWidget);
       expect(tester.takeException(), isNull);
