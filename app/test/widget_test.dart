@@ -535,4 +535,87 @@ void main() {
     expect(find.byTooltip('تسجيل تحصيل'), findsOneWidget);
   });
 
+
+
+  testWidgets('إغلاق فاتورة الشراء بعد الكتابة لا يترك عناصر واجهة معلقة',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await SupplierRepository(database).addSupplier(
+          userId: 1,
+          name: 'مورد اختبار إغلاق الفاتورة',
+        );
+      });
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SuppliersScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      await tester.tap(find.text('فاتورة شراء'));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('فاتورة شراء جديدة'), findsOneWidget);
+
+      final productField = find.byType(TextField).first;
+      await tester.tap(productField);
+      await tester.enterText(productField, 'اختبار إغلاق سريع');
+      // نغلق أثناء استمرار التفاعل مع الحقل، دون انتظار استقرار لوحة المفاتيح.
+      await tester.tap(find.text('إلغاء'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('فاتورة شراء جديدة'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('زر الرجوع يغلق فاتورة الشراء بعد الكتابة دون خطأ دورة حياة',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await SupplierRepository(database).addSupplier(
+          userId: 1,
+          name: 'مورد اختبار زر الرجوع',
+        );
+      });
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SuppliersScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      await tester.tap(find.text('فاتورة شراء'));
+      await tester.pump(const Duration(milliseconds: 350));
+      final productField = find.byType(TextField).first;
+      await tester.tap(productField);
+      await tester.enterText(productField, 'اختبار رجوع سريع');
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.text('فاتورة شراء جديدة'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
 }
