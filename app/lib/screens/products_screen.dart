@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../data/grocery_database.dart';
@@ -210,7 +211,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final minimum = TextEditingController(text: '${old?.minimumQuantity ?? 0}');
     String? imagePath = old?.imagePath;
 
-    final result = await showDialog<GroceryProduct>(
+    final result = await showDialogAndWaitForExit<GroceryProduct>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, refreshDialog) => AlertDialog(
@@ -300,7 +301,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   // الأرشفة تحافظ على سجل الصنف بدل حذفه نهائيًا.
   Future<void> _archive(GroceryProduct item) async {
-    final ok = await showDialog<bool>(
+    final ok = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('أرشفة الصنف؟'),
