@@ -575,7 +575,12 @@ void main() {
       await tester.ensureVisible(productField);
       await tester.tap(productField);
       await tester.enterText(productField, 'اختبار إغلاق سريع');
-      // نغلق أثناء استمرار التفاعل مع الحقل، دون انتظار استقرار لوحة المفاتيح.
+      // نحاكي لوحة مفاتيح Android ظاهرة بدل الاكتفاء بإدخال النص برمجيًا.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      // نغلق أثناء استمرار التفاعل مع الحقل والكيبورد ظاهر.
       final cancelButton = find.text('إلغاء');
       await tester.ensureVisible(cancelButton);
       await tester.tap(cancelButton);
@@ -621,6 +626,11 @@ void main() {
       await tester.ensureVisible(productField);
       await tester.tap(productField);
       await tester.enterText(productField, 'اختبار رجوع سريع');
+      // نحاكي بقاء لوحة المفاتيح ظاهرة عند ضغط زر الرجوع.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
       await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -686,6 +696,11 @@ void main() {
           widget.decoration?.labelText == 'المبلغ النقدي المستلم');
       expect(amountField, findsOneWidget);
       await tester.enterText(amountField, '100');
+      // اختبار إغلاق نافذة الدفع مع بقاء مساحة لوحة المفاتيح ظاهرة.
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
       final backButton = find.text('رجوع');
       await tester.ensureVisible(backButton);
       await tester.tap(backButton);
