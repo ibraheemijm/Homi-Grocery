@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 
 import 'data/dashboard_repository.dart';
+import 'data/android_diagnostic_log.dart';
 import 'data/grocery_database.dart';
 import 'data/font_preferences.dart';
 import 'data/auth_repository.dart';
@@ -28,6 +29,7 @@ import 'screens/backup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AndroidDiagnosticLog.initialize();
   try {
     await FontPreferences.load();
   } catch (_) {
