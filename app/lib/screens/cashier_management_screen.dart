@@ -1,6 +1,7 @@
 // إدارة حسابات الكاشير متاحة للمدير فقط.
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 
 import '../data/auth_repository.dart';
 import '../data/grocery_database.dart';
@@ -75,7 +76,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     final confirmation = TextEditingController();
     String? dialogError;
 
-    final values = await showDialog<Map<String, String>>(
+    final values = await showDialogAndWaitForExit<Map<String, String>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -177,7 +178,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     final confirmation = TextEditingController();
     String? dialogError;
 
-    final newPassword = await showDialog<String>(
+    final newPassword = await showDialogAndWaitForExit<String>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -277,7 +278,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
         ),
     };
     String? dialogError;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -429,7 +430,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
 
   Future<void> _changeStatus(CashierAccount account, bool isActive) async {
     final action = isActive ? 'تفعيل' : 'إيقاف';
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('$action حساب الكاشير؟'),
