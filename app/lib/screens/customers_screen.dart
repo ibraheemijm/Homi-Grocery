@@ -1,4 +1,5 @@
 // شاشة الزبائن والديون: عرض الأرصدة وتسجيل التحصيلات من قاعدة البيانات.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import '../widgets/dialog_lifecycle.dart';
 
@@ -71,6 +72,138 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final phone = defaultTargetPlatform == TargetPlatform.android &&
+            constraints.maxWidth < 600;
+        return phone ? _buildAndroidPhone(context) : _buildDesktopLayout(context);
+      },
+    );
+  }
+
+  // تخطيط هاتف Android: قائمة مستقلة وبطاقات عمودية تمنع تزاحم بيانات الزبون وأزراره.
+  Widget _buildAndroidPhone(BuildContext context) {
+    final theme = Theme.of(context);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(onPressed: _initialize, child: const Text('إعادة المحاولة')),
+                    ]),
+                  ))
+                : Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('الزبائن والديون', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                          Text('متابعة الأرصدة والتحصيلات', style: theme.textTheme.bodySmall),
+                        ])),
+                        if (_canAddCustomer)
+                          IconButton.filled(
+                            tooltip: 'إضافة زبون',
+                            onPressed: _addCustomer,
+                            icon: const Icon(Icons.person_add_alt_1_rounded),
+                          ),
+                      ]),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _search,
+                        onChanged: (_) => _load(),
+                        decoration: InputDecoration(
+                          hintText: 'ابحث باسم الزبون',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _search.text.isEmpty ? null : IconButton(
+                            tooltip: 'مسح البحث',
+                            onPressed: () { _search.clear(); _load(); },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                          filled: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: _customers.isEmpty
+                            ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.people_outline_rounded, size: 52),
+                                SizedBox(height: 10),
+                                Text('لا يوجد زبائن مطابقون للبحث.'),
+                                SizedBox(height: 5),
+                                Text('يمكن إضافة زبون هنا أو تسجيل اسمه عند إنشاء فاتورة.', textAlign: TextAlign.center),
+                              ]))
+                            : ListView.separated(
+                                itemCount: _customers.length,
+                                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                                itemBuilder: (context, index) => _buildAndroidCustomerCard(_customers[index], theme),
+                              ),
+                      ),
+                      if (_customers.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('عدد الزبائن: ${_customers.length}', style: theme.textTheme.bodySmall),
+                        ),
+                    ]),
+                  ),
+      ),
+    );
+  }
+
+  Widget _buildAndroidCustomerCard(CustomerBalance customer, ThemeData theme) {
+    final debt = customer.balance > 0;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            CircleAvatar(child: Text(customer.name.isEmpty ? '?' : customer.name.characters.first)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(customer.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${customer.balance} ج.س', style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: debt ? Colors.red.shade700 : theme.colorScheme.primary,
+              )),
+              Text(debt ? 'الرصيد المستحق' : 'لا توجد ديون', style: theme.textTheme.labelSmall),
+            ]),
+          ]),
+          if (_canViewLedger) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 7, runSpacing: 4, children: [
+              Chip(avatar: const Icon(Icons.receipt_long_outlined, size: 16),
+                label: Text('الفواتير: ${customer.salesCount}'), visualDensity: VisualDensity.compact),
+              Chip(avatar: const Icon(Icons.account_balance_wallet_outlined, size: 16),
+                label: Text('افتتاحي: ${customer.openingBalance} ج.س'), visualDensity: VisualDensity.compact),
+            ]),
+          ],
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (_canViewLedger)
+              OutlinedButton.icon(onPressed: () => _showLedger(customer),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18), label: const Text('كشف الحساب')),
+            if (_canCollect)
+              OutlinedButton.icon(onPressed: debt ? () => _collect(customer) : null,
+                icon: const Icon(Icons.payments_outlined, size: 18), label: const Text('تسجيل تحصيل')),
+            if (_isManager)
+              OutlinedButton.icon(onPressed: () => _editOpeningBalance(customer),
+                icon: const Icon(Icons.edit_note_rounded, size: 18), label: const Text('الرصيد الافتتاحي')),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context) {
     final theme = Theme.of(context);
     return Directionality(
       textDirection: TextDirection.rtl,
