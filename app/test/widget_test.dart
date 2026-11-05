@@ -215,6 +215,45 @@ void main() {
     }
   });
 
+  testWidgets('يفتح الكاشير سجل فواتير المرتجعات بتخطيط Android مناسب',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SuppliersScreen(
+              userId: 1,
+              cashierPermissions: {'supplier_returns'},
+            ),
+          ),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      expect(find.text('سجل المشتريات'), findsOneWidget);
+      await tester.tap(find.text('سجل المشتريات'));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      });
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('فواتير الشراء المتاحة للمرتجعات'),
+        findsOneWidget,
+      );
+      expect(find.text('لا توجد فواتير شراء مسجلة بعد.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('تعرض لوحة المدير على Android تحديث السحب ومحتوى الهاتف',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
