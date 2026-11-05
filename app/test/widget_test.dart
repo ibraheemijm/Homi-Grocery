@@ -759,4 +759,54 @@ void main() {
     }
   });
 
+
+  testWidgets('تضيف بطاقة الصنف إلى فاتورة Android وتحدّث الملخص الثابت',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await ProductRepository(database, userId: 1).add(
+          const GroceryProduct(
+            name: 'اختبار إضافة صنف إلى بيع Android',
+            unit: 'حبة',
+            purchasePrice: 40,
+            sellingPrice: 100,
+            stockQuantity: 12,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SalesScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      final product = find.text('اختبار إضافة صنف إلى بيع Android');
+      expect(product, findsOneWidget);
+      await tester.ensureVisible(product);
+      await tester.tap(product);
+      await tester.pump();
+
+      expect(find.text('1 صنف في الفاتورة'), findsOneWidget);
+      expect(find.text('100 ج.س'), findsOneWidget);
+
+      await tester.tap(find.text('عرض الفاتورة'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('الفاتورة الحالية'), findsOneWidget);
+      expect(find.text('اختبار إضافة صنف إلى بيع Android'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
 }
