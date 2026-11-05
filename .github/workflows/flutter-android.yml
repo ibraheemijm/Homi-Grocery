@@ -52,7 +52,7 @@ jobs:
               "import io.flutter.embedding.android.FlutterFragmentActivity",
           )
           source = re.sub(
-              r"class MainActivity\\s*:\\s*FlutterActivity\\(\\)",
+              r"class MainActivity\s*:\s*FlutterActivity\(\)",
               "class MainActivity : FlutterFragmentActivity()",
               source,
           )
@@ -67,8 +67,8 @@ jobs:
               position = xml.find(">") + 1
               xml = (
                   xml[:position]
-                  + '\\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" />'
-                  + '\\n    <uses-permission android:name="android.permission.USE_FINGERPRINT" />'
+                  + "\n    <uses-permission android:name=\"android.permission.USE_BIOMETRIC\" />"
+                  + "\n    <uses-permission android:name=\"android.permission.USE_FINGERPRINT\" />"
                   + xml[position:]
               )
               manifest.write_text(xml)
@@ -76,8 +76,8 @@ jobs:
           # الحد الأدنى المطلوب من local_auth على Android.
           for gradle in Path("android/app").glob("build.gradle*"):
               source = gradle.read_text()
-              source = re.sub(r"minSdk\\s*=\\s*flutter.minSdkVersion", "minSdk = 23", source)
-              source = re.sub(r"minSdkVersion\\s+flutter.minSdkVersion", "minSdkVersion 23", source)
+              source = re.sub(r"minSdk\s*=\s*flutter.minSdkVersion", "minSdk = 23", source)
+              source = re.sub(r"minSdkVersion\s+flutter.minSdkVersion", "minSdkVersion 23", source)
               gradle.write_text(source)
           PY
       - name: Analyze
