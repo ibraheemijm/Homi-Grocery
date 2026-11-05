@@ -749,7 +749,7 @@ void main() {
 
       expect(find.text('صنف اختبار بطاقة Android'), findsOneWidget);
       expect(find.text('سعر الشراء'), findsNWidgets(2));
-      expect(find.text('سعر البيع'), findsOneWidget);
+      expect(find.text('سعر البيع'), findsNWidgets(2));
       expect(find.text('المخزون: 8 حبة'), findsOneWidget);
       expect(find.text('الباركود: 6291234567890'), findsOneWidget);
       expect(find.byTooltip('مسح الباركود للبحث'), findsOneWidget);
