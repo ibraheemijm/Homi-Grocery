@@ -141,7 +141,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ]))
                             : ListView.separated(
                                 itemCount: _customers.length,
-                                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                                separatorBuilder: (context, index) => const SizedBox(height: 10),
                                 itemBuilder: (context, index) => _buildAndroidCustomerCard(_customers[index], theme),
                               ),
                       ),
