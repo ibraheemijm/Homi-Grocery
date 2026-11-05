@@ -516,6 +516,38 @@ void main() {
     expect(find.text('التقارير'), findsNothing);
     expect(find.byTooltip('تسجيل الخروج وتسليم الوردية'), findsOneWidget);
   });
+  testWidgets('تظهر شاشة الزبائن كبطاقات مناسبة لهاتف Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: CustomersScreen(
+            userId: 7,
+            repository: _CollectionOnlyCustomerSource(),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('الزبائن والديون'), findsOneWidget);
+      expect(find.text('عميل اختبار التحصيل'), findsOneWidget);
+      expect(find.text('400 ج.س'), findsOneWidget);
+      expect(find.text('الفواتير: 1'), findsOneWidget);
+      expect(find.text('كشف الحساب'), findsOneWidget);
+      expect(find.text('تسجيل تحصيل'), findsOneWidget);
+      expect(find.text('الرصيد الافتتاحي'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
   testWidgets('يخفي تفاصيل دفتر الزبون عن الكاشير المصرح له بالتحصيل فقط',
       (tester) async {
     final repository = _CollectionOnlyCustomerSource();
