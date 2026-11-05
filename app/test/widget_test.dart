@@ -714,4 +714,49 @@ void main() {
     }
   });
 
+
+  testWidgets('واجهة الأصناف على Android تعرض بطاقة المخزون وأداة مسح الباركود',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await ProductRepository(database, userId: 1).add(
+          const GroceryProduct(
+            name: 'صنف اختبار بطاقة Android',
+            barcode: '6291234567890',
+            unit: 'حبة',
+            purchasePrice: 50,
+            sellingPrice: 100,
+            stockQuantity: 8,
+            minimumQuantity: 3,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ProductsScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      expect(find.text('صنف اختبار بطاقة Android'), findsOneWidget);
+      expect(find.text('سعر الشراء'), findsOneWidget);
+      expect(find.text('سعر البيع'), findsOneWidget);
+      expect(find.text('المخزون: 8 حبة'), findsOneWidget);
+      expect(find.text('الباركود: 6291234567890'), findsOneWidget);
+      expect(find.byTooltip('مسح الباركود للبحث'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
 }
