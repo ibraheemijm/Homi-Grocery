@@ -13,6 +13,7 @@ import 'package:homi_grocery/data/customer_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
+import 'package:homi_grocery/screens/suppliers_screen.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
@@ -179,6 +180,36 @@ void main() {
       await tester.tap(find.text('عرض الفاتورة'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('الفاتورة الحالية'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('يفتح سجل المشتريات بتخطيط مناسب على Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SuppliersScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      expect(find.text('سجل المشتريات'), findsOneWidget);
+      await tester.tap(find.text('سجل المشتريات'));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('سجل فواتير الشراء'), findsOneWidget);
+      expect(find.text('لا توجد فواتير مطابقة لمعايير البحث.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
