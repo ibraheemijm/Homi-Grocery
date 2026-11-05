@@ -15,6 +15,7 @@ import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
 import 'package:homi_grocery/screens/suppliers_screen.dart';
 import 'package:homi_grocery/screens/products_screen.dart';
+import 'package:homi_grocery/screens/stock_movements_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
@@ -844,6 +845,47 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('الفاتورة الحالية'), findsOneWidget);
       expect(find.text('اختبار إضافة صنف إلى بيع Android'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
+
+  testWidgets('تتكيف شاشة حركات المخزون مع عرض هاتف Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await ProductRepository(database, userId: 1).add(
+          const GroceryProduct(
+            name: 'صنف اختبار حركات Android',
+            unit: 'حبة',
+            purchasePrice: 30,
+            sellingPrice: 60,
+            stockQuantity: 7,
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: StockMovementsScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.pump();
+
+      expect(find.text('حركات المخزون'), findsOneWidget);
+      expect(find.text('سجل موثق للإضافات والتسويات والمرتجعات والمبيعات'), findsOneWidget);
+      expect(find.text('تسجيل حركة جديدة'), findsOneWidget);
+      expect(find.text('تصفية سجل الحركات حسب الصنف'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
