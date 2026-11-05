@@ -25,6 +25,8 @@ dependencies:
   # المصادقة الحيوية والتخزين المشفر لبيانات الدخول على Android.
   local_auth: ^2.3.0
   flutter_secure_storage: ^9.2.4
+  # مشاركة ملف سجل الأخطاء التشخيصي من Android دون توصيل الهاتف بالكمبيوتر.
+  share_plus: ^10.1.4
 
 dev_dependencies:
   flutter_test:
