@@ -13,6 +13,8 @@ class AndroidBiometricLogin {
 
   static const _usernameKey = 'biometric_login_username';
   static const _passwordKey = 'biometric_login_password';
+  // علامة غير حساسة لفحص التفعيل دون فك تشفير بيانات الحساب قبل البصمة.
+  static const _enabledKey = 'biometric_login_enabled';
 
   bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
@@ -27,15 +29,11 @@ class AndroidBiometricLogin {
     }
   }
 
+  // نقرأ علامة التفعيل فقط؛ لا نلمس اسم المستخدم أو كلمة المرور قبل البصمة.
   Future<bool> get hasSavedCredentials async {
     if (!_isAndroid) return false;
     try {
-      final username = await _storage.read(key: _usernameKey);
-      final password = await _storage.read(key: _passwordKey);
-      return username != null &&
-          username.isNotEmpty &&
-          password != null &&
-          password.isNotEmpty;
+      return await _storage.read(key: _enabledKey) == 'true';
     } catch (_) {
       return false;
     }
@@ -46,8 +44,12 @@ class AndroidBiometricLogin {
     required String password,
   }) async {
     if (!_isAndroid) return;
+
+    // لا تعتبر بيانات الدخول جاهزة حتى يكتمل حفظ الحقلين.
+    await _storage.write(key: _enabledKey, value: 'false');
     await _storage.write(key: _usernameKey, value: username.trim());
     await _storage.write(key: _passwordKey, value: password);
+    await _storage.write(key: _enabledKey, value: 'true');
   }
 
   Future<bool> enableWithBiometrics({
@@ -55,20 +57,27 @@ class AndroidBiometricLogin {
     required String password,
   }) async {
     if (!await isAvailable) return false;
-    final authenticated = await _authentication.authenticate(
-      localizedReason: 'فعّل الدخول بالبصمة لهذا الحساب على هذا الجهاز',
-      options: const AuthenticationOptions(
-        biometricOnly: true,
-        stickyAuth: true,
-      ),
-    );
-    if (!authenticated) return false;
-    await saveCredentials(username: username, password: password);
-    return true;
+    try {
+      final authenticated = await _authentication.authenticate(
+        localizedReason: 'فعّل الدخول بالبصمة لهذا الحساب على هذا الجهاز',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+      if (!authenticated) return false;
+      await saveCredentials(username: username, password: password);
+      return true;
+    } catch (_) {
+      // فشل إعداد البصمة لا يمنع إكمال تسجيل الدخول بكلمة المرور.
+      return false;
+    }
   }
 
   Future<void> clearCredentials() async {
     if (!_isAndroid) return;
+    // أوقف الدخول الحيوي أولًا حتى لا تُستخدم بيانات جزئية أثناء المسح.
+    await _storage.delete(key: _enabledKey);
     await _storage.delete(key: _usernameKey);
     await _storage.delete(key: _passwordKey);
   }
@@ -88,12 +97,14 @@ class AndroidBiometricLogin {
     );
     if (!authenticated) return null;
 
+    // هذه أول نقطة تُقرأ فيها بيانات الحساب، بعد نجاح البصمة.
     final username = await _storage.read(key: _usernameKey);
     final password = await _storage.read(key: _passwordKey);
     if (username == null ||
         username.isEmpty ||
         password == null ||
         password.isEmpty) {
+      await clearCredentials();
       return null;
     }
     return (username: username, password: password);
