@@ -630,7 +630,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             final removed = drafts.removeAt(index);
                             refresh(() {});
                             // نؤخر إتلاف Controllers حتى تُزال حقول الصنف من شجرة الواجهة.
-                            WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
+                            if (defaultTargetPlatform == TargetPlatform.android) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
+                            } else {
+                              removed.dispose();
+                            }
                           },
                           icon: const Icon(Icons.delete_outline_rounded),
                         ),
