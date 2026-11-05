@@ -238,10 +238,14 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         username: credentials.username,
         password: credentials.password,
       );
-    } catch (_) {
-      // امسح بيانات الدخول فقط إذا أصبحت غير صالحة، لا عند تعذر فتح الوردية.
-      await biometric.clearCredentials();
-      if (mounted) setState(() => _biometricReady = false);
+    } catch (error) {
+      // لا تمسح بيانات الدخول عند قفل الحساب مؤقتًا أو تعذر قاعدة البيانات.
+      // تُمسح فقط إذا رفض مستودع المصادقة بيانات الاعتماد نفسها أو كان الحساب غير نشط.
+      if (error is AuthException &&
+          error.message == 'اسم المستخدم أو كلمة المرور غير صحيحة.') {
+        await biometric.clearCredentials();
+        if (mounted) setState(() => _biometricReady = false);
+      }
       rethrow;
     }
     await _activateUser(user);
