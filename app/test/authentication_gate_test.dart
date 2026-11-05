@@ -1,5 +1,4 @@
 // يختبر تدفق تسجيل الخروج ثم الدخول بحساب آخر مع قاعدة SQLite معزولة.
-import 'package:flutter/foundation.dart' show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -72,14 +71,11 @@ void main() {
 
   testWidgets('يمسح جلسة الكاشير ويفتح جلسة المدير دون نقل حالة الحساب السابق',
       (tester) async {
-    // هذا اختبار لتبديل الجلسات، وليس لاختبار إضافات Android؛ اعزل قنوات البصمة والتخزين الآمن.
-    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-
     await tester.pumpWidget(
       MaterialApp(
         home: AuthenticationGate(
           databaseProvider: () async => database,
+          useBiometrics: false,
           authRepositoryProvider: (database) => _GateTestAuthRepository(
             database,
             users: {manager.username: manager, cashier.username: cashier},
