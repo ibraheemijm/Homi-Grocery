@@ -1,5 +1,6 @@
 // شاشة الزبائن والديون: عرض الأرصدة وتسجيل التحصيلات من قاعدة البيانات.
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 
 import '../data/customer_repository.dart';
 import '../data/grocery_database.dart';
@@ -178,7 +179,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     try {
       final entries = await _repository!.ledger(customer.id, userId: widget.userId);
       if (!mounted) return;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text('كشف حساب ${customer.name}'),
@@ -251,7 +252,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final name = TextEditingController();
     final phone = TextEditingController();
     final openingBalance = TextEditingController(text: '0');
-    final result = await showDialog<bool>(
+    final result = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('إضافة زبون'),
@@ -286,7 +287,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Future<void> _editOpeningBalance(CustomerBalance customer) async {
     if (!_isManager) return;
     final amount = TextEditingController(text: customer.openingBalance.toString());
-    final result = await showDialog<bool>(
+    final result = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('الرصيد الافتتاحي — ${customer.name}'),
@@ -327,7 +328,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final amountController = TextEditingController();
     final noteController = TextEditingController();
     String paymentMethod = 'نقدي';
-    final result = await showDialog<Map<String, Object?>>(
+    final result = await showDialogAndWaitForExit<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, refresh) => AlertDialog(
