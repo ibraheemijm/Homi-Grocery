@@ -850,7 +850,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             final purchase = purchases[index];
                             final subtitle =
                                 '${purchase.supplierName} • ${purchase.createdAt}';
-                            final onTap = () {
+                            void onTap() {
                               Navigator.pop(dialogContext);
                               _createSupplierReturnForPurchase(
                                 purchaseId: purchase.id,
