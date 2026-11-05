@@ -1,5 +1,6 @@
 // شاشة متابعة حركات المخزون وتسجيل الإضافات والتسويات والمرتجعات.
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
@@ -72,7 +73,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
     final quantity = TextEditingController();
     final note = TextEditingController();
 
-    final result = await showDialog<bool>(
+    final result = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
