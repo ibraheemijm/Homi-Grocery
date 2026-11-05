@@ -856,7 +856,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 purchaseId: purchase.id,
                                 invoiceNumber: purchase.invoiceNumber,
                               );
-                            };
+                            }
                             if (!androidPhone) {
                               return ListTile(
                                 title: Text(purchase.invoiceNumber),
