@@ -811,7 +811,7 @@ void main() {
       await tester.tap(find.text('عرض الفاتورة'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('الفاتورة الحالية'), findsOneWidget);
-      expect(find.text('اختبار إضافة صنف إلى بيع Android'), findsOneWidget);
+      expect(find.text('اختبار إضافة صنف إلى بيع Android'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
