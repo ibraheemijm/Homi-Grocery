@@ -202,7 +202,7 @@ void main() {
         ),
       );
       await _waitForSqliteStartup(tester);
-      await tester.tap(find.text('إضافة صنف'));
+      await tester.tap(find.byTooltip('إضافة صنف'));
       await tester.pumpAndSettle();
 
       expect(find.text('إضافة صنف جديد'), findsOneWidget);
@@ -748,7 +748,7 @@ void main() {
       await _waitForSqliteStartup(tester);
 
       expect(find.text('صنف اختبار بطاقة Android'), findsOneWidget);
-      expect(find.text('سعر الشراء'), findsOneWidget);
+      expect(find.text('سعر الشراء'), findsNWidgets(2));
       expect(find.text('سعر البيع'), findsOneWidget);
       expect(find.text('المخزون: 8 حبة'), findsOneWidget);
       expect(find.text('الباركود: 6291234567890'), findsOneWidget);
