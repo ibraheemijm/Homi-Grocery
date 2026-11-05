@@ -220,11 +220,14 @@ void main() {
 
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
-      final database = await GroceryDatabase.open();
-      await SupplierRepository(database).addSupplier(
-        userId: 1,
-        name: 'مورد اختبار باركود Android',
-      );
+      // عمليات SQLite FFI تحتاج حلقة أحداث حقيقية خارج fakeAsync الخاص باختبارات الواجهات.
+      await tester.runAsync(() async {
+        final database = await GroceryDatabase.open();
+        await SupplierRepository(database).addSupplier(
+          userId: 1,
+          name: 'مورد اختبار باركود Android',
+        );
+      });
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(body: SuppliersScreen(userId: 1)),
