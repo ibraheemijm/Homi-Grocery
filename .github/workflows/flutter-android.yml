@@ -65,14 +65,14 @@ jobs:
           xml = manifest.read_text()
           if "android.permission.USE_BIOMETRIC" not in xml:
               # يجب إدراج الصلاحيات داخل عنصر manifest وليس قبل العنصر بعد تصريح XML.
-              manifest_tag = re.search(r"<manifest\\b[^>]*>", xml, flags=re.S)
+              manifest_tag = re.search(r"<manifest\b[^>]*>", xml, flags=re.S)
               if manifest_tag is None:
                   raise SystemExit("Could not locate the manifest root element")
               position = manifest_tag.end()
               xml = (
                   xml[:position]
-                  + "\\n    <uses-permission android:name=\\\"android.permission.USE_BIOMETRIC\\\" />"
-                  + "\\n    <uses-permission android:name=\\\"android.permission.USE_FINGERPRINT\\\" />"
+                  + "\n    <uses-permission android:name=\"android.permission.USE_BIOMETRIC\" />"
+                  + "\n    <uses-permission android:name=\"android.permission.USE_FINGERPRINT\" />"
                   + xml[position:]
               )
               manifest.write_text(xml)
