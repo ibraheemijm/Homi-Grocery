@@ -869,20 +869,19 @@ void main() {
         ),
       );
       await tester.runAsync(() async {
-        // انتظر استعلامي ملخص الخزينة والحركات على حلقة الأحداث الحقيقية.
+        // انتظر اكتمال تهيئة قاعدة البيانات والتحميل الذي بدأته الشاشة نفسها.
         final database = await GroceryDatabase.open();
         await database.query('cash_transactions', limit: 1);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
       });
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
-      // قسم الحركات أسفل بطاقات الملخص؛ مرّر القائمة لإظهاره قبل فحصه.
-      await tester.scrollUntilVisible(
-        find.text('حركات اليوم'),
-        400,
-        scrollable: find.byType(Scrollable).first,
-      );
+      // لا يبدأ التمرير إلا بعد ظهور قائمة الخزينة فعليًا وانتهاء FutureBuilder.
+      expect(find.byType(ListView), findsOneWidget);
+      await tester.ensureVisible(find.text('حركات اليوم'));
+      await tester.pumpAndSettle();
       expect(find.text('حركات اليوم'), findsOneWidget);
       expect(find.text('فرز حسب الطريقة'), findsOneWidget);
       expect(tester.takeException(), isNull);
