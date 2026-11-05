@@ -6,6 +6,7 @@ import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
 import '../data/purchase_pricing.dart';
 import '../data/supplier_repository.dart';
+import 'barcode_scanner_screen.dart';
 
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({required this.userId, this.shiftId, this.cashierPermissions, super.key});
@@ -376,7 +377,17 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   TextField(
                     controller: barcode,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'الباركود (اختياري)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: 'الباركود (اختياري)',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: defaultTargetPlatform == TargetPlatform.android
+                          ? IconButton(
+                              tooltip: 'مسح الباركود بالكاميرا',
+                              onPressed: () => _scanBarcodeInto(barcode),
+                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                            )
+                          : null,
+                    ),
                   ),
                 ],
               ),
@@ -467,6 +478,54 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       purchasePrice.dispose();
       barcode.dispose();
     }
+  }
+
+  // مسح باركود منتج موجود واختياره مباشرة في سطر فاتورة الشراء.
+  Future<void> _scanPurchaseProduct(
+    _PurchaseDraftLine draft,
+    TextEditingController controller,
+    StateSetter refresh,
+  ) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    if (!mounted || value == null || value.trim().isEmpty) return;
+    final barcode = value.trim();
+    GroceryProduct? product;
+    for (final item in _products) {
+      if (item.barcode?.trim() == barcode) {
+        product = item;
+        break;
+      }
+    }
+    if (product == null) {
+      _message('لا يوجد منتج مسجل بهذا الباركود. يمكنك إنشاء منتج جديد ومسح الباركود في نافذته.');
+      return;
+    }
+    controller.text = product.name;
+    refresh(() {
+      draft.productId = product!.id!;
+      draft.productName = product.name;
+      draft.fieldVersion++;
+      draft.cost.text = product.purchasePrice.toString();
+      draft.sellingPrice.text = product.sellingPrice.toString();
+      _updatePercentageFromSellingPrice(draft);
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  // قراءة باركود المنتج الجديد داخل نافذة فاتورة الشراء.
+  Future<void> _scanBarcodeInto(TextEditingController controller) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    if (!mounted || value == null || value.trim().isEmpty) return;
+    controller.value = TextEditingValue(
+      text: value.trim(),
+      selection: TextSelection.collapsed(offset: value.trim().length),
+    );
   }
 
   Future<void> _createPurchase() async {
@@ -566,15 +625,30 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             labelText: 'الصنف',
                             hintText: 'اكتب اسم الصنف أو افتح القائمة',
                             border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              tooltip: 'عرض جميع الأصناف',
-                              onPressed: () {
-                                controller.clear();
-                                draft.productName = '';
-                                draft.productId = -1;
-                                focusNode.requestFocus();
-                              },
-                              icon: const Icon(Icons.arrow_drop_down_rounded),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'عرض جميع الأصناف',
+                                  onPressed: () {
+                                    controller.clear();
+                                    draft.productName = '';
+                                    draft.productId = -1;
+                                    focusNode.requestFocus();
+                                  },
+                                  icon: const Icon(Icons.arrow_drop_down_rounded),
+                                ),
+                                if (defaultTargetPlatform == TargetPlatform.android)
+                                  IconButton(
+                                    tooltip: 'مسح باركود الصنف',
+                                    onPressed: () => _scanPurchaseProduct(
+                                      draft,
+                                      controller,
+                                      refresh,
+                                    ),
+                                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                                  ),
+                              ],
                             ),
                           ),
                         );
