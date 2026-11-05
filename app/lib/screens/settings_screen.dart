@@ -1,9 +1,11 @@
 // إعدادات اسم البقالة والتحية والساعة، محفوظة محليًا في بيانات التطبيق.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/grocery_database.dart';
 import '../data/font_preferences.dart';
+import '../data/android_diagnostic_log.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.canManageSystemSettings = false});
@@ -30,6 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   DateTime _savedSystemStartDate = DateTime(DateTime.now().year, 1, 1);
   bool _loading = true;
   bool _saving = false;
+  bool _sharingDiagnostics = false;
   String? _message;
 
   @override
@@ -127,6 +130,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _message = 'تعذر استيراد الخط: $error');
     } finally {
       if (mounted) setState(() => _importingFont = false);
+    }
+  }
+
+  Future<void> _shareDiagnostics() async {
+    setState(() => _sharingDiagnostics = true);
+    try {
+      final shared = await AndroidDiagnosticLog.shareLogs();
+      if (mounted) {
+        setState(() => _message = shared
+            ? 'اختر التطبيق الذي تريد إرسال ملف التشخيص من خلاله.'
+            : 'لا توجد أخطاء مسجلة حتى الآن. أعد ظهور المشكلة ثم شارك السجل.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _message = 'تعذرت مشاركة سجل التشخيص: $error');
+    } finally {
+      if (mounted) setState(() => _sharingDiagnostics = false);
     }
   }
 
@@ -463,6 +482,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                  if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text('تشخيص أخطاء التطبيق',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'يحفظ التطبيق تفاصيل أخطاء Flutter محليًا. إذا ظهرت الشاشة الحمراء، ارجع إلى هنا واضغط مشاركة سجل التشخيص لإرسال الملف. قد يتضمن الملف تفاصيل تقنية عن الخطأ.',
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _sharingDiagnostics ? null : _shareDiagnostics,
+                              icon: _sharingDiagnostics
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.share_outlined),
+                              label: Text(_sharingDiagnostics ? 'جارٍ تجهيز السجل…' : 'مشاركة سجل التشخيص'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   if (_message != null) ...[
                     const SizedBox(height: 10),
                     Text(_message!, textAlign: TextAlign.center),
