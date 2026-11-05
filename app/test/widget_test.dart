@@ -797,7 +797,16 @@ void main() {
       await tester.pump();
 
       expect(find.text('1 صنف في الفاتورة'), findsOneWidget);
-      expect(find.text('100 ج.س'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text &&
+              widget.data == '100 ج.س' &&
+              widget.style?.fontSize == 16 &&
+              widget.style?.fontWeight == FontWeight.w900,
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('عرض الفاتورة'));
       await tester.pump(const Duration(milliseconds: 300));
