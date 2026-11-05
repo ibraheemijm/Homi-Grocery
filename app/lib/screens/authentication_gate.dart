@@ -22,12 +22,15 @@ class AuthenticationGate extends StatefulWidget {
     required this.authenticatedBuilder,
     this.databaseProvider,
     this.authRepositoryProvider,
+    this.useBiometrics = true,
     super.key,
   });
 
   final AuthenticatedBuilder authenticatedBuilder;
   final GroceryDatabaseProvider? databaseProvider;
   final AuthRepositoryProvider? authRepositoryProvider;
+  // يتيح تعطيل تكامل الجهاز في الاختبارات التي لا تختبر الدخول الحيوي.
+  final bool useBiometrics;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -59,6 +62,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       final needsSetup = !(await repository.hasAccounts());
       final biometric = AndroidBiometricLogin.instance;
       final biometricReady =
+          widget.useBiometrics &&
           defaultTargetPlatform == TargetPlatform.android &&
           await biometric.isAvailable &&
           await biometric.hasSavedCredentials;
@@ -182,7 +186,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   // تسجيل الدخول بكلمة المرور، مع عرض تفعيل البصمة اختياريًا على Android.
   Future<void> _loginWithPassword(String username, String password) async {
     final user = await _repository!.login(username: username, password: password);
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (widget.useBiometrics &&
+        defaultTargetPlatform == TargetPlatform.android) {
       final biometric = AndroidBiometricLogin.instance;
       if (await biometric.hasSavedCredentials) {
         // تحديث بيانات الدخول المشفرة إذا غيّر المستخدم كلمة مروره.
