@@ -262,6 +262,9 @@ void main() {
       await tester.pumpWidget(_dashboardApp());
       await _waitForSqliteStartup(tester);
 
+      // ضغطة الرجوع الأولى تغلق لوحة المفاتيح، والثانية تغلق نافذة الفاتورة.
+      await tester.binding.handlePopRoute();
+      await tester.pump();
       await tester.binding.handlePopRoute();
       await tester.pump();
 
@@ -564,11 +567,17 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('فاتورة شراء جديدة'), findsOneWidget);
 
-      final productField = find.byType(TextField).first;
+      final productField = find.byWidgetPredicate((widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText == 'اكتب اسم الصنف أو افتح القائمة');
+      expect(productField, findsOneWidget);
+      await tester.ensureVisible(productField);
       await tester.tap(productField);
       await tester.enterText(productField, 'اختبار إغلاق سريع');
       // نغلق أثناء استمرار التفاعل مع الحقل، دون انتظار استقرار لوحة المفاتيح.
-      await tester.tap(find.text('إلغاء'));
+      final cancelButton = find.text('إلغاء');
+      await tester.ensureVisible(cancelButton);
+      await tester.tap(cancelButton);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
@@ -604,7 +613,11 @@ void main() {
 
       await tester.tap(find.text('فاتورة شراء'));
       await tester.pump(const Duration(milliseconds: 350));
-      final productField = find.byType(TextField).first;
+      final productField = find.byWidgetPredicate((widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText == 'اكتب اسم الصنف أو افتح القائمة');
+      expect(productField, findsOneWidget);
+      await tester.ensureVisible(productField);
       await tester.tap(productField);
       await tester.enterText(productField, 'اختبار رجوع سريع');
       await tester.binding.handlePopRoute();
