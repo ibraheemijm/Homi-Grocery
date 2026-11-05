@@ -877,6 +877,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
+      // قسم الحركات أسفل بطاقات الملخص؛ مرّر القائمة لإظهاره قبل فحصه.
+      await tester.scrollUntilVisible(
+        find.text('حركات اليوم'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('حركات اليوم'), findsOneWidget);
       expect(find.text('فرز حسب الطريقة'), findsOneWidget);
       expect(tester.takeException(), isNull);
