@@ -1,6 +1,7 @@
 // واجهة الموردين والمشتريات والمدفوعات.
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
@@ -211,7 +212,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     try {
       final entries = await _repository!.ledger(supplier.id, userId: widget.userId);
       if (!mounted) return;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text('كشف حساب المورد — ${supplier.name}'),
@@ -257,7 +258,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     final phone = TextEditingController();
     final note = TextEditingController();
     final openingBalance = TextEditingController(text: '0');
-    final result = await showDialog<bool>(
+    final result = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('إضافة مورد'),
@@ -291,7 +292,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   Future<void> _editOpeningBalance(SupplierBalance supplier) async {
     if (!_isManager) return;
     final amount = TextEditingController(text: supplier.openingBalance.toString());
-    final result = await showDialog<bool>(
+    final result = await showDialogAndWaitForExit<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('الرصيد الافتتاحي — ${supplier.name}'),
@@ -381,7 +382,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     final purchasePrice = TextEditingController();
     final barcode = TextEditingController();
     try {
-      final details = await showDialog<Map<String, String>>(
+      final details = await showDialogAndWaitForExit<Map<String, String>>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
@@ -588,7 +589,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       return sum + (quantity * cost).round();
     });
 
-    final saved = await showDialog<bool>(
+    final saved = await showDialogAndWaitForExit<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
@@ -625,7 +626,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       if (drafts.length > 1)
                         IconButton(
                           tooltip: 'حذف الصنف',
-                          onPressed: () => refresh(() => drafts.removeAt(index).dispose()),
+                          onPressed: () {
+                            final removed = drafts.removeAt(index);
+                            refresh(() {});
+                            // نؤخر إتلاف Controllers حتى تُزال حقول الصنف من شجرة الواجهة.
+                            WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
+                          },
                           icon: const Icon(Icons.delete_outline_rounded),
                         ),
                     ]),
@@ -926,7 +932,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       if (!_canViewSupplierData) {
         final purchases = await _repository!.purchaseHistoryForReturns(userId: widget.userId);
         if (!mounted) return;
-        await showDialog<void>(
+        await showDialogAndWaitForExit<void>(
           context: context,
           builder: (dialogContext) {
             final androidPhone =
@@ -1047,7 +1053,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       DateTime? toDate;
       var displayedPurchases = purchases;
       var filtering = false;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
@@ -1277,7 +1283,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     try {
       final items = await _repository!.purchaseItems(purchase.id, userId: widget.userId);
       if (!mounted) return;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text('تفاصيل ${purchase.invoiceNumber}'),
@@ -1339,7 +1345,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       for (final row in rows) {
         controllers[row['id'] as int] = TextEditingController(text: '0');
       }
-      final quantities = await showDialog<Map<int, double>>(
+      final quantities = await showDialogAndWaitForExit<Map<int, double>>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text('مرتجع $invoiceNumber'),
@@ -1428,7 +1434,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     try {
       final pending = await _repository!.pendingSupplierReturnRefunds(userId: widget.userId);
       if (!mounted) return;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('استردادات الموردين المستحقة'),
@@ -1468,7 +1474,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
     final amount = TextEditingController(text: '0');
     String method = 'نقدي';
-    final result = await showDialog<Map<String, Object?>>(
+    final result = await showDialogAndWaitForExit<Map<String, Object?>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, refresh) => AlertDialog(
@@ -1540,7 +1546,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     final amount = TextEditingController();
     final note = TextEditingController();
     String paymentMethod = 'نقدي';
-    final result = await showDialog<Map<String, Object?>>(
+    final result = await showDialogAndWaitForExit<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, refresh) => AlertDialog(
