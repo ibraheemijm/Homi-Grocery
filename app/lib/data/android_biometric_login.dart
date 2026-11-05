@@ -50,6 +50,23 @@ class AndroidBiometricLogin {
     await _storage.write(key: _passwordKey, value: password);
   }
 
+  Future<bool> enableWithBiometrics({
+    required String username,
+    required String password,
+  }) async {
+    if (!await isAvailable) return false;
+    final authenticated = await _authentication.authenticate(
+      localizedReason: 'فعّل الدخول بالبصمة لهذا الحساب على هذا الجهاز',
+      options: const AuthenticationOptions(
+        biometricOnly: true,
+        stickyAuth: true,
+      ),
+    );
+    if (!authenticated) return false;
+    await saveCredentials(username: username, password: password);
+    return true;
+  }
+
   Future<void> clearCredentials() async {
     if (!_isAndroid) return;
     await _storage.delete(key: _usernameKey);
