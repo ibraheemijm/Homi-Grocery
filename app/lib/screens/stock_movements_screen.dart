@@ -1,4 +1,5 @@
 // شاشة متابعة حركات المخزون وتسجيل الإضافات والتسويات والمرتجعات.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import '../widgets/dialog_lifecycle.dart';
 
@@ -181,6 +182,9 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isAndroidPhone =
+        defaultTargetPlatform == TargetPlatform.android &&
+        MediaQuery.sizeOf(context).width < 600;
     GroceryProduct? selected;
     for (final product in _products) {
       if (product.id == _selectedProductId) {
@@ -192,20 +196,34 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
       textDirection: TextDirection.rtl,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isAndroidPhone ? 12 : 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('حركات المخزون', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 5),
-                Text('سجل موثق للإضافات والتسويات والمرتجعات والمبيعات', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ])),
+            if (isAndroidPhone) ...[
+              Text('حركات المخزون', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                'سجل موثق للإضافات والتسويات والمرتجعات والمبيعات',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: _loading || _products.isEmpty ? null : _addMovement,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('حركة جديدة'),
+                label: const Text('تسجيل حركة جديدة'),
               ),
-            ]),
+            ] else
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('حركات المخزون', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Text('سجل موثق للإضافات والتسويات والمرتجعات والمبيعات', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                ])),
+                FilledButton.icon(
+                  onPressed: _loading || _products.isEmpty ? null : _addMovement,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('حركة جديدة'),
+                ),
+              ]),
             const SizedBox(height: 18),
             if (_products.isNotEmpty)
               DropdownButtonFormField<int>(
@@ -239,7 +257,7 @@ class _StockMovementsScreenState extends State<StockMovementsScreen> {
             if (selected != null) ...[
               const SizedBox(height: 12),
               Card(child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(isAndroidPhone ? 12 : 16),
                 child: Row(children: [
                   const CircleAvatar(child: Icon(Icons.inventory_2_rounded)),
                   const SizedBox(width: 12),
