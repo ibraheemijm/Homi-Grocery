@@ -16,6 +16,7 @@ import 'package:homi_grocery/screens/sales_screen.dart';
 import 'package:homi_grocery/screens/suppliers_screen.dart';
 import 'package:homi_grocery/screens/products_screen.dart';
 import 'package:homi_grocery/screens/stock_movements_screen.dart';
+import 'package:homi_grocery/screens/cashbox_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
@@ -851,6 +852,33 @@ void main() {
     }
   });
 
+
+  testWidgets('تتكيف شاشة الخزينة مع عرض هاتف Android دون تجاوز مرشح الحركات',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: CashboxScreen(userId: 1, isManager: true),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.pump();
+
+      expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
+      expect(find.text('حركات اليوم'), findsOneWidget);
+      expect(find.text('فرز حسب الطريقة'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
 
   testWidgets('تتكيف شاشة حركات المخزون مع عرض هاتف Android', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
