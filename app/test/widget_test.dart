@@ -14,6 +14,8 @@ import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
 import 'package:homi_grocery/screens/suppliers_screen.dart';
+import 'package:homi_grocery/screens/products_screen.dart';
+import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
@@ -180,6 +182,91 @@ void main() {
       await tester.tap(find.text('عرض الفاتورة'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('الفاتورة الحالية'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('يظهر زر مسح الباركود عند إضافة صنف على Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ProductsScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.tap(find.text('إضافة صنف'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('إضافة صنف جديد'), findsOneWidget);
+      expect(find.byTooltip('مسح الباركود بالكاميرا'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('تتيح فاتورة الشراء مسح باركود المنتج على Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final database = await GroceryDatabase.open();
+      await SupplierRepository(database).addSupplier(
+        userId: 1,
+        name: 'مورد اختبار باركود Android',
+      );
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SuppliersScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+
+      await tester.tap(find.text('فاتورة شراء'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('مسح باركود الصنف'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('إضافة منتج جديد'));
+      await tester.tap(find.text('إضافة منتج جديد'));
+      await tester.pumpAndSettle();
+      expect(find.text('إضافة منتج جديد'), findsOneWidget);
+      expect(find.byTooltip('مسح الباركود بالكاميرا'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('لا يغلق زر الرجوع جلسة المدير على Android', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(_dashboardApp());
+      await _waitForSqliteStartup(tester);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(find.text('مرحبًا، مدير الاختبار'), findsOneWidget);
+      expect(
+        find.textContaining('استخدم زر الشاشة الرئيسية لمغادرة التطبيق'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
