@@ -1,12 +1,14 @@
 // شاشة إدارة الأصناف والمخزون، متصلة بقاعدة SQLite المحلية.
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
+import 'barcode_scanner_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({required this.userId, super.key});
@@ -183,6 +185,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  // فتح قارئ الباركود على Android وإرجاع القيمة إلى الحقل المطلوب.
+  Future<void> _scanBarcodeInto(TextEditingController controller) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    if (!mounted || value == null || value.trim().isEmpty) return;
+    controller.value = TextEditingValue(
+      text: value.trim(),
+      selection: TextSelection.collapsed(offset: value.trim().length),
+    );
+  }
+
   // نافذة واحدة لإضافة صنف أو تعديل صنف قائم.
   Future<void> _edit([GroceryProduct? old]) async {
     final key = GlobalKey<FormState>();
@@ -204,7 +219,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           key: key,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             _field(name, 'اسم الصنف', required: true),
-            _field(barcode, 'الباركود (اختياري)'),
+            _field(barcode, 'الباركود (اختياري)', barcode: true),
             Row(children: [Expanded(child: _field(buy, 'سعر الشراء', numeric: true)), const SizedBox(width: 8), Expanded(child: _field(sell, 'سعر البيع', numeric: true))]),
             Row(children: [Expanded(child: _field(stock, 'الكمية الحالية', decimal: true)), const SizedBox(width: 8), Expanded(child: _field(minimum, 'حد التنبيه', decimal: true, nonNegative: true))]),
             _field(unit, 'وحدة القياس', required: true),
@@ -322,13 +337,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   // إنشاء حقل إدخال مع تحقق مناسب للأرقام والنصوص.
-  Widget _field(TextEditingController controller, String label, {bool required = false, bool numeric = false, bool decimal = false, bool nonNegative = false}) {
+  Widget _field(TextEditingController controller, String label, {bool required = false, bool numeric = false, bool decimal = false, bool nonNegative = false, bool barcode = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
         controller: controller,
         keyboardType: numeric || decimal ? const TextInputType.numberWithOptions(decimal: true, signed: true) : TextInputType.text,
-        decoration: InputDecoration(labelText: label, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          suffixIcon: barcode && defaultTargetPlatform == TargetPlatform.android
+              ? IconButton(
+                  tooltip: 'مسح الباركود بالكاميرا',
+                  onPressed: () => _scanBarcodeInto(controller),
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                )
+              : null,
+        ),
         validator: (value) {
           final text = value?.trim() ?? '';
           if (required && text.isEmpty) return 'هذا الحقل مطلوب';
