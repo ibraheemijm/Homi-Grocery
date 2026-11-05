@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 /// يعرض حوارًا وينتظر انتهاء حركة إغلاقه قبل إعادة التحكم إلى المستدعي.
@@ -12,6 +13,17 @@ Future<T?> showDialogAndWaitForExit<T>({
   bool useSafeArea = true,
   bool useRootNavigator = true,
 }) async {
+  // نحافظ على سلوك الحوارات في Linux وWindows كما كان؛ الانتظار الإضافي خاص بـ Android.
+  if (defaultTargetPlatform != TargetPlatform.android) {
+    return showDialog<T>(
+      context: context,
+      builder: builder,
+      barrierDismissible: barrierDismissible,
+      useSafeArea: useSafeArea,
+      useRootNavigator: useRootNavigator,
+    );
+  }
+
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
   final route = DialogRoute<T>(
     context: context,
