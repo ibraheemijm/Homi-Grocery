@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/auth_repository.dart';
+import '../data/android_biometric_login.dart';
 import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
 
@@ -41,6 +42,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   CashShift? _shift;
   bool _needsSetup = false;
   bool _loading = true;
+  bool _biometricReady = false;
   String? _error;
 
   @override
@@ -55,10 +57,16 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       final repository =
           widget.authRepositoryProvider?.call(database) ?? AuthRepository(database);
       final needsSetup = !(await repository.hasAccounts());
+      final biometric = AndroidBiometricLogin.instance;
+      final biometricReady =
+          defaultTargetPlatform == TargetPlatform.android &&
+          await biometric.isAvailable &&
+          await biometric.hasSavedCredentials;
       if (!mounted) return;
       setState(() {
         _repository = repository;
         _needsSetup = needsSetup;
+        _biometricReady = biometricReady;
         _loading = false;
         _error = null;
       });
@@ -169,6 +177,67 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       ),
     );
     return result;
+  }
+
+  // تسجيل الدخول بكلمة المرور، مع عرض تفعيل البصمة اختياريًا على Android.
+  Future<void> _loginWithPassword(String username, String password) async {
+    final user = await _repository!.login(username: username, password: password);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final biometric = AndroidBiometricLogin.instance;
+      if (await biometric.hasSavedCredentials) {
+        // تحديث بيانات الدخول المشفرة إذا غيّر المستخدم كلمة مروره.
+        await biometric.saveCredentials(username: username, password: password);
+      } else if (await biometric.isAvailable && mounted) {
+        final enable = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تفعيل الدخول بالبصمة؟'),
+            content: const Text(
+              'يمكنك فتح Homi Grocery لاحقًا ببصمة الإصبع بدل كتابة اسم المستخدم وكلمة المرور. '
+              'ستُحفظ بيانات الدخول مشفرة على هذا الجهاز فقط.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('ليس الآن'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('تفعيل البصمة'),
+              ),
+            ],
+          ),
+        );
+        if (enable == true && mounted) {
+          final enabled = await biometric.enableWithBiometrics(
+            username: username,
+            password: password,
+          );
+          if (enabled && mounted) setState(() => _biometricReady = true);
+        }
+      }
+    }
+    await _activateUser(user);
+  }
+
+  // لا يُستعاد الحساب إلا بعد نجاح التحقق الحيوي ثم إعادة التحقق من كلمة المرور محليًا.
+  Future<void> _loginWithBiometrics() async {
+    final biometric = AndroidBiometricLogin.instance;
+    final credentials = await biometric.authenticate();
+    if (credentials == null) {
+      throw const AuthException('لم يكتمل التحقق بالبصمة. استخدم كلمة المرور للدخول.');
+    }
+    try {
+      final user = await _repository!.login(
+        username: credentials.username,
+        password: credentials.password,
+      );
+      await _activateUser(user);
+    } catch (_) {
+      await biometric.clearCredentials();
+      if (mounted) setState(() => _biometricReady = false);
+      rethrow;
+    }
   }
 
   Future<void> _logout() async {
@@ -289,14 +358,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       );
     }
     return _LoginScreen(
-      onLogin: (username, password) async {
-        final user = await repository.login(
-          username: username,
-          password: password,
-        );
-        await _activateUser(user);
-        return user;
-      },
+      onLogin: _loginWithPassword,
+      onBiometricLogin: _biometricReady ? _loginWithBiometrics : null,
     );
   }
 }
@@ -541,9 +604,10 @@ class _CreateManagerScreenState extends State<_CreateManagerScreen> {
 }
 
 class _LoginScreen extends StatefulWidget {
-  const _LoginScreen({required this.onLogin});
+  const _LoginScreen({required this.onLogin, this.onBiometricLogin});
 
-  final Future<AuthUser> Function(String username, String password) onLogin;
+  final Future<void> Function(String username, String password) onLogin;
+  final Future<void> Function()? onBiometricLogin;
 
   @override
   State<_LoginScreen> createState() => _LoginScreenState();
@@ -624,6 +688,28 @@ class _LoginScreenState extends State<_LoginScreen> {
                     )
                   : const Text('دخول'),
             ),
+            if (widget.onBiometricLogin != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _working
+                    ? null
+                    : () async {
+                        setState(() {
+                          _working = true;
+                          _error = null;
+                        });
+                        try {
+                          await widget.onBiometricLogin!();
+                        } catch (error) {
+                          if (mounted) setState(() => _error = error.toString());
+                        } finally {
+                          if (mounted) setState(() => _working = false);
+                        }
+                      },
+                icon: const Icon(Icons.fingerprint_rounded),
+                label: const Text('الدخول بالبصمة'),
+              ),
+            ],
           ],
         ),
       );
