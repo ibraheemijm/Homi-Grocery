@@ -1,4 +1,5 @@
 // إدارة حسابات الكاشير متاحة للمدير فقط.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../data/auth_repository.dart';
@@ -810,7 +811,24 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
         final desktop = constraints.maxWidth >= 900;
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: Scaffold(
+          child: PopScope<Object?>(
+            canPop: defaultTargetPlatform != TargetPlatform.android,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop || defaultTargetPlatform != TargetPlatform.android) return;
+              if (_selectedIndex != 0) {
+                setState(() => _selectedIndex = 0);
+              } else {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text('أنت في قسم المبيعات. استخدم زر الشاشة الرئيسية لمغادرة التطبيق دون تسجيل الخروج.'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+              }
+            },
+            child: Scaffold(
             appBar: AppBar(
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -852,6 +870,7 @@ class _CashierWorkspaceScreenState extends State<CashierWorkspaceScreen> {
                   ),
                 Expanded(child: _selectedScreen()),
               ],
+            ),
             ),
           ),
         );
