@@ -1,10 +1,8 @@
 // تسجيل أخطاء Flutter على Android محليًا لمساعدة التشخيص دون الحاجة إلى USB.
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
