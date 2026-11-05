@@ -323,7 +323,12 @@ class _CashboxScreenState extends State<CashboxScreen> {
           return RefreshIndicator(
             onRefresh: () async => setState(_reload),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+              padding: EdgeInsets.fromLTRB(
+                defaultTargetPlatform == TargetPlatform.android ? 12 : 16,
+                8,
+                defaultTargetPlatform == TargetPlatform.android ? 12 : 16,
+                96,
+              ),
               children: [
                 Text('ملخص اليوم', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
@@ -377,15 +382,19 @@ class _CashboxScreenState extends State<CashboxScreen> {
                   );
                 }),
                 const SizedBox(height: 24),
-                Row(children: [
-                  Expanded(child: Text('حركات اليوم', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold))),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 160,
+                LayoutBuilder(builder: (context, constraints) {
+                  final compactAndroid =
+                      defaultTargetPlatform == TargetPlatform.android &&
+                      constraints.maxWidth < 600;
+                  final filter = SizedBox(
+                    width: compactAndroid ? double.infinity : 180,
                     child: DropdownButtonFormField<String>(
                       initialValue: _paymentFilter,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'فرز حسب الطريقة', isDense: true),
+                      decoration: const InputDecoration(
+                        labelText: 'فرز حسب الطريقة',
+                        isDense: true,
+                      ),
                       items: const [
                         DropdownMenuItem(value: 'الكل', child: Text('كل الطرق')),
                         DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
@@ -400,8 +409,31 @@ class _CashboxScreenState extends State<CashboxScreen> {
                         }
                       },
                     ),
-                  ),
-                ]),
+                  );
+                  final heading = Text(
+                    'حركات اليوم',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                  if (compactAndroid) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        heading,
+                        const SizedBox(height: 8),
+                        filter,
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: heading),
+                      const SizedBox(width: 12),
+                      filter,
+                    ],
+                  );
+                }),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text('${data.movements.length} حركة معروضة', style: theme.textTheme.bodySmall),
