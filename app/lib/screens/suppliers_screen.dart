@@ -132,35 +132,72 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             ]),
                           ))
                         else
-                          ..._suppliers.map((supplier) => Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(children: [
-                                const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
-                                const SizedBox(width: 12),
-                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                  Text(supplier.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 4),
-                                  if (_canViewSupplierData)
-                                    Text('فواتير الشراء: ${supplier.purchaseCount} • رصيد الفواتير: ${supplier.totalDebt} ج.س • افتتاحي: ${supplier.openingBalance} ج.س')
-                                  else
-                                    const Text('بيانات المورد الأساسية'),
-                                ])),
-                                if (_canViewSupplierData) ...[
-                                  const SizedBox(width: 8),
-                                  IconButton(tooltip: 'كشف حساب المورد', onPressed: () => _showSupplierLedger(supplier), icon: const Icon(Icons.receipt_long_outlined)),
-                                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                    Text(supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س', style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary)),
-                                    Text(supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن', style: theme.textTheme.labelSmall),
-                                  ]),
+                          ..._suppliers.map((supplier) => LayoutBuilder(
+                            builder: (context, constraints) {
+                              final compact = constraints.maxWidth < 480;
+                              final identity = Row(
+                                children: [
+                                  const CircleAvatar(child: Icon(Icons.local_shipping_outlined)),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(supplier.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                        const SizedBox(height: 4),
+                                        if (_canViewSupplierData)
+                                          Text('فواتير الشراء: ${supplier.purchaseCount} • رصيد الفواتير: ${supplier.totalDebt} ج.س • افتتاحي: ${supplier.openingBalance} ج.س')
+                                        else
+                                          const Text('بيانات المورد الأساسية'),
+                                      ],
+                                    ),
+                                  ),
                                 ],
-                                if (_isManager)
-                                  IconButton(tooltip: 'تعديل الرصيد الافتتاحي', onPressed: () => _editOpeningBalance(supplier), icon: const Icon(Icons.edit_note_rounded)),
-                                if (_canPaySupplier)
-                                  IconButton(tooltip: 'تسجيل دفعة', onPressed: _canViewSupplierData && supplier.balance <= 0 ? null : () => _recordPayment(supplier), icon: const Icon(Icons.payments_outlined)),
-                              ]),
-                            ),
+                              );
+                              final actions = Wrap(
+                                spacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                alignment: compact ? WrapAlignment.end : WrapAlignment.start,
+                                children: [
+                                  if (_canViewSupplierData) ...[
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(supplier.balance < 0 ? '${supplier.credit} ج.س' : '${supplier.balance} ج.س', style: TextStyle(fontWeight: FontWeight.w900, color: supplier.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary)),
+                                        Text(supplier.balance > 0 ? 'مستحق للمورد' : supplier.balance < 0 ? 'رصيد دائن لنا' : 'الرصيد متوازن', style: theme.textTheme.labelSmall),
+                                      ],
+                                    ),
+                                    IconButton(tooltip: 'كشف حساب المورد', onPressed: () => _showSupplierLedger(supplier), icon: const Icon(Icons.receipt_long_outlined)),
+                                  ],
+                                  if (_isManager)
+                                    IconButton(tooltip: 'تعديل الرصيد الافتتاحي', onPressed: () => _editOpeningBalance(supplier), icon: const Icon(Icons.edit_note_rounded)),
+                                  if (_canPaySupplier)
+                                    IconButton(tooltip: 'تسجيل دفعة', onPressed: _canViewSupplierData && supplier.balance <= 0 ? null : () => _recordPayment(supplier), icon: const Icon(Icons.payments_outlined)),
+                                ],
+                              );
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: compact
+                                      ? Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            identity,
+                                            const SizedBox(height: 8),
+                                            actions,
+                                          ],
+                                        )
+                                      : Row(
+                                          children: [
+                                            Expanded(child: identity),
+                                            const SizedBox(width: 12),
+                                            actions,
+                                          ],
+                                        ),
+                                ),
+                              );
+                            },
                           )),
                       ]),
                     ),
