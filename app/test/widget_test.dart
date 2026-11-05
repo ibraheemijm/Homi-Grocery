@@ -868,8 +868,13 @@ void main() {
           home: CashboxScreen(userId: 1, isManager: true),
         ),
       );
-      await _waitForSqliteStartup(tester);
+      await tester.runAsync(() async {
+        // انتظر استعلامي ملخص الخزينة والحركات على حلقة الأحداث الحقيقية.
+        final database = await GroceryDatabase.open();
+        await database.query('cash_transactions', limit: 1);
+      });
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
       expect(find.text('حركات اليوم'), findsOneWidget);
