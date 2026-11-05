@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
 import '../data/grocery_database.dart';
 import '../data/customer_repository.dart';
 import '../data/product_repository.dart';
@@ -104,7 +105,7 @@ class _SalesScreenState extends State<SalesScreen> {
     if (matches.isEmpty) return name;
 
     _customerNickname.clear();
-    final resolved = await showDialog<String>(
+    final resolved = await showDialogAndWaitForExit<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('اسم مشابه في دفتر الحسابات'),
@@ -264,7 +265,7 @@ class _SalesScreenState extends State<SalesScreen> {
     final controller = TextEditingController(
       text: _quantity(_cart[index].quantity),
     );
-    final value = await showDialog<double>(
+    final value = await showDialogAndWaitForExit<double>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('كمية ${_cart[index].product.name}'),
@@ -925,7 +926,7 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       }
 
-      result = await showDialog<Map<String, Object?>>(
+      result = await showDialogAndWaitForExit<Map<String, Object?>>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, refreshDialog) {
@@ -1139,7 +1140,7 @@ class _SalesScreenState extends State<SalesScreen> {
           throw StateError('لا توجد وردية نشطة لهذا الكاشير.');
         }
         if (!context.mounted) return;
-        final credentials = await showDialog<ManagerApprovalCredentials>(
+        final credentials = await showDialogAndWaitForExit<ManagerApprovalCredentials>(
           context: context,
           barrierDismissible: false,
           builder: (_) => ManagerApprovalDialog(discountAmount: _discount),
@@ -1215,7 +1216,7 @@ class _SalesScreenState extends State<SalesScreen> {
       }
 
       if (!mounted) return;
-      await showDialog<void>(
+      await showDialogAndWaitForExit<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('تم حفظ الفاتورة'),
@@ -1250,7 +1251,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<Map<String, Object?>?> _showOverpaymentRefundDialog(SaleRecord sale) async {
     final amountController = TextEditingController(text: '${sale.overpaymentAmount}');
     var paymentMethod = widget.shiftId == null ? 'تحويل بنكي' : 'نقدي';
-    final result = await showDialog<Map<String, Object?>>(
+    final result = await showDialogAndWaitForExit<Map<String, Object?>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, refreshDialog) => AlertDialog(
@@ -1342,7 +1343,7 @@ class _SalesScreenState extends State<SalesScreen> {
       };
       final noteController = TextEditingController();
       if (!mounted) return;
-      final quantities = await showDialog<Map<int, double>>(
+      final quantities = await showDialogAndWaitForExit<Map<int, double>>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, refreshDialog) => AlertDialog(
@@ -1442,7 +1443,7 @@ class _SalesScreenState extends State<SalesScreen> {
       } on ManagerApprovalRequiredException catch (approvalRequest) {
         if (!widget.cashierMode || widget.shiftId == null) rethrow;
         if (!mounted) return;
-        final credentials = await showDialog<ManagerApprovalCredentials>(
+        final credentials = await showDialogAndWaitForExit<ManagerApprovalCredentials>(
           context: context,
           barrierDismissible: false,
           builder: (_) => ManagerApprovalDialog(
@@ -1505,7 +1506,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
       final amountController = TextEditingController(text: available.toString());
       String paymentMethod = 'نقدي';
-      final amount = await showDialog<int>(
+      final amount = await showDialogAndWaitForExit<int>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, refreshDialog) => AlertDialog(
