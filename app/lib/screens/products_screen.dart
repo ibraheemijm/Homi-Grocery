@@ -122,30 +122,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+                  if (androidPhone)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _activeProductsChip(),
+                          const SizedBox(width: 8),
+                          _archivedProductsChip(),
+                        ],
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
                       children: [
-                        ChoiceChip(
-                          label: const Text('الأصناف النشطة'),
-                          selected: !_showArchived,
-                          onSelected: (_) {
-                            setState(() => _showArchived = false);
-                            _load();
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('الأصناف المؤرشفة'),
-                          selected: _showArchived,
-                          onSelected: (_) {
-                            setState(() => _showArchived = true);
-                            _load();
-                          },
-                        ),
+                        _activeProductsChip(),
+                        _archivedProductsChip(),
                       ],
                     ),
-                  ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _search,
@@ -153,28 +148,35 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     decoration: InputDecoration(
                       hintText: 'ابحث باسم الصنف أو الباركود',
                       prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (androidPhone)
-                            IconButton(
-                              tooltip: 'مسح الباركود للبحث',
-                              onPressed: () async {
-                                await _scanBarcodeInto(_search);
-                                if (mounted) _load();
+                      suffixIcon: androidPhone
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'مسح الباركود للبحث',
+                                  onPressed: () async {
+                                    await _scanBarcodeInto(_search);
+                                    if (mounted) _load();
+                                  },
+                                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                                ),
+                                IconButton(
+                                  tooltip: 'مسح البحث',
+                                  onPressed: () {
+                                    _search.clear();
+                                    _load();
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              ],
+                            )
+                          : IconButton(
+                              onPressed: () {
+                                _search.clear();
+                                _load();
                               },
-                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                              icon: const Icon(Icons.close_rounded),
                             ),
-                          IconButton(
-                            tooltip: 'مسح البحث',
-                            onPressed: () {
-                              _search.clear();
-                              _load();
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -275,6 +277,24 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ),
     );
   }
+
+  Widget _activeProductsChip() => ChoiceChip(
+        label: const Text('الأصناف النشطة'),
+        selected: !_showArchived,
+        onSelected: (_) {
+          setState(() => _showArchived = false);
+          _load();
+        },
+      );
+
+  Widget _archivedProductsChip() => ChoiceChip(
+        label: const Text('الأصناف المؤرشفة'),
+        selected: _showArchived,
+        onSelected: (_) {
+          setState(() => _showArchived = true);
+          _load();
+        },
+      );
 
   // بطاقة الهاتف تفصل السعر والكمية حتى يمكن قراءتها دون تمدد صف القائمة.
   Widget _buildAndroidProductCard(GroceryProduct item, ThemeData theme) {
@@ -413,7 +433,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: theme.colorScheme.surface.withOpacity(0.65),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
