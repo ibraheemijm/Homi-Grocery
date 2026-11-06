@@ -886,12 +886,15 @@ void main() {
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
       expect(find.text('ملخص اليوم'), findsOneWidget);
-      // مرّر قائمة الخزينة نفسها حتى يظهر العنوان ومرشح الدفع على الهاتف.
+      // ListView يبني العناصر البعيدة عند الاقتراب منها؛ مرّر القائمة
+      // حتى يُنشأ عنوان الحركات بدل البحث عنه قبل دخوله نطاق البناء.
       final movementsHeading = find.text('حركات اليوم');
+      await tester.scrollUntilVisible(
+        movementsHeading,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(movementsHeading, findsOneWidget);
-      await tester.ensureVisible(movementsHeading);
-      await tester.pump();
-      expect(find.text('حركات اليوم'), findsOneWidget);
       expect(find.text('فرز حسب الطريقة'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
