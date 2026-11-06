@@ -308,6 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<String>(
                             initialValue: _salesViewMode,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'طريقة عرض الأصناف في شاشة البيع',
                               border: OutlineInputBorder(),
@@ -344,6 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Text('الساعة الرقمية', style: TextStyle(fontWeight: FontWeight.w700)),
                           DropdownButtonFormField<bool>(
                             initialValue: _clock24,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'نظام الوقت',
                               border: OutlineInputBorder(),
@@ -518,12 +520,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _saving ? null : _save,
                     icon: _saving
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.save_rounded),
-                    label: Text(_saving ? 'جارٍ الحفظ…' : 'حفظ الإعدادات'),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
