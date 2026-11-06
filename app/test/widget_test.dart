@@ -984,7 +984,16 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(cashMovementHeading, findsOneWidget);
-      expect(find.text('صافي حركة الخزينة'), findsOneWidget);
+
+      // عنوان القسم وبطاقاته عناصر منفصلة في القائمة؛ تأكد من بناء البطاقة
+      // المطلوبة قبل فحصها، لا يكفي ظهور عنوان القسم وحده.
+      final netTreasuryMovement = find.text('صافي حركة الخزينة');
+      await tester.scrollUntilVisible(
+        netTreasuryMovement,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(netTreasuryMovement, findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
