@@ -520,3 +520,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _saving ? null : _save,
                     icon: _saving
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.save_rounded),
+                    label: Text(_saving ? 'جارٍ الحفظ…' : 'حفظ الإعدادات'),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
