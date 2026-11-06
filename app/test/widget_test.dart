@@ -21,6 +21,7 @@ import 'package:homi_grocery/screens/reports_screen.dart';
 import 'package:homi_grocery/screens/invoices_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
+import 'package:homi_grocery/data/font_preferences.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 import 'package:homi_grocery/screens/settings_screen.dart';
 
@@ -1104,13 +1105,19 @@ void main() {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
+      // حمّل تفضيلات الخطوط مسبقًا خارج fake-async؛ تهيئة FontLoader
+      // وSQLite عمليات منصة غير متزامنة وقد لا تكتمل بمجرد الانتظار الثابت.
+      await tester.runAsync(() async {
+        await FontPreferences.load();
+        await GroceryDatabase.open();
+      });
       await tester.pumpWidget(
         const MaterialApp(
           home: SettingsScreen(canManageSystemSettings: true),
         ),
       );
       await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await Future<void>.delayed(const Duration(milliseconds: 250));
       });
       await tester.pump();
 
