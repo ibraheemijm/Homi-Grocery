@@ -868,14 +868,20 @@ void main() {
           home: CashboxScreen(userId: 1, isManager: true),
         ),
       );
-      // انتظر FutureBuilder الذي تستخدمه الشاشة نفسها، لا استعلامات مستقلة موازية.
+      // احصر البحث داخل شاشة الخزينة حتى لا نلتقط FutureBuilder تابعًا
+      // لـ MaterialApp أو لأي عنصر أب خارج الشاشة.
+      final cashboxLoaderFinder = find.descendant(
+        of: find.byType(CashboxScreen),
+        matching: find.byWidgetPredicate((widget) => widget is FutureBuilder),
+      );
+      expect(cashboxLoaderFinder, findsOneWidget);
       final dataLoader = tester.widget<FutureBuilder<dynamic>>(
-        find.byWidgetPredicate((widget) => widget is FutureBuilder),
+        cashboxLoaderFinder,
       );
       await tester.runAsync(() async {
         await dataLoader.future;
       });
-      // أعد بناء FutureBuilder بعد اكتمال تحميل بيانات الشاشة الفعلية.
+      // أعد بناء الشاشة بعد اكتمال FutureBuilder الخاص بالخزينة.
       await tester.pump();
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
