@@ -18,6 +18,7 @@ import 'package:homi_grocery/screens/products_screen.dart';
 import 'package:homi_grocery/screens/stock_movements_screen.dart';
 import 'package:homi_grocery/screens/cashbox_screen.dart';
 import 'package:homi_grocery/screens/reports_screen.dart';
+import 'package:homi_grocery/screens/invoices_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
@@ -994,6 +995,53 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(netTreasuryMovement, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
+
+  testWidgets('تتكيف شاشة سجل الفواتير مع عرض هاتف Android صغير', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final database = await GroceryDatabase.open();
+    final invoiceNumber = 'INV-MOBILE-${DateTime.now().microsecondsSinceEpoch}';
+    await database.insert('sales', {
+      'invoice_number': invoiceNumber,
+      'customer_name': 'زبون اختبار الهاتف',
+      'subtotal': 1250,
+      'discount': 0,
+      'total': 1250,
+      'paid_amount': 1250,
+      'overpayment_amount': 0,
+      'payment_method': 'نقدي',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: InvoicesScreen(userId: 1),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.text('الفواتير'), findsOneWidget);
+      expect(find.text('ابحث برقم الفاتورة أو اسم الزبون'), findsOneWidget);
+      expect(find.text(invoiceNumber), findsOneWidget);
+      expect(find.textContaining('زبون اختبار الهاتف'), findsOneWidget);
+      expect(find.text('طباعة A4'), findsOneWidget);
+      expect(find.text('طباعة حراري'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
