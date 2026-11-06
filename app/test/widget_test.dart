@@ -1116,11 +1116,18 @@ void main() {
           home: SettingsScreen(canManageSystemSettings: true),
         ),
       );
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-      });
-      await tester.pump();
+      // انتظر انتهاء تحميل الشاشة فعليًا؛ مدة ثابتة لا تضمن اكتمال
+      // FontPreferences وقراءة app_metadata من SQLite على CI.
+      var loading = true;
+      for (var attempt = 0; attempt < 30 && loading; attempt++) {
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
+        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
+      }
 
+      expect(loading, isFalse, reason: 'يجب أن تنتهي شاشة الإعدادات من التحميل');
       expect(find.text('إعدادات البرنامج'), findsOneWidget);
       expect(find.text('بيانات البقالة'), findsOneWidget);
       expect(find.text('التاريخ المحاسبي'), findsOneWidget);
