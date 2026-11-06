@@ -429,6 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 14),
                           DropdownButtonFormField<String>(
                             initialValue: _uiFont,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'خط واجهة البرنامج',
                               border: OutlineInputBorder(),
@@ -450,6 +451,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             initialValue: _documentFont,
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'خط الفواتير وPDF',
                               border: OutlineInputBorder(),
