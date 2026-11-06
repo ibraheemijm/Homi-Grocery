@@ -24,6 +24,8 @@ import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/data/font_preferences.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
 import 'package:homi_grocery/screens/settings_screen.dart';
+import 'package:homi_grocery/screens/notifications_screen.dart';
+import 'package:homi_grocery/data/notification_repository.dart';
 
 const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 late Directory _testSupportDirectory;
@@ -1156,5 +1158,59 @@ void main() {
     }
   });
 
+
+
+  testWidgets('تتكيف شاشة الإشعارات وسجل الموافقات مع عرض هاتف Android صغير',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const notificationTitle = 'إشعار اختبار شاشة الهاتف';
+    const approvalSummary = 'طلب اختبار طويل للتأكد من التفاف النص وعرض حالة الموافقة دون تجاوز أفقي';
+    await tester.runAsync(() async {
+      final database = await GroceryDatabase.open();
+      await NotificationRepository(database).add(
+        type: 'general',
+        title: notificationTitle,
+        body: 'رسالة اختبار طويلة نسبيًا للتحقق من عرض تفاصيل الإشعار على شاشة صغيرة.',
+      );
+      await DeliveryApprovalRepository(database).requestInitialEnable(
+        summary: approvalSummary,
+        dataScope: 'بيانات تجريبية لاختبار العرض على الهاتف',
+      );
+    });
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: NotificationsScreen(userId: 1, isManager: true),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.pump();
+
+      expect(find.text('الإشعارات وسجل الموافقات'), findsOneWidget);
+      expect(find.text('الإشعارات المحلية'), findsOneWidget);
+      expect(find.text(notificationTitle), findsOneWidget);
+      expect(find.text('سجل موافقات الدليفري'), findsOneWidget);
+
+      final approval = find.text(approvalSummary);
+      await tester.scrollUntilVisible(
+        approval,
+        220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(approval, findsOneWidget);
+      expect(find.text('موافقة'), findsOneWidget);
+      expect(find.text('رفض'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
 
 }
