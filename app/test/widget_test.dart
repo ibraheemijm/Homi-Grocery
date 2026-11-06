@@ -966,7 +966,16 @@ void main() {
 
       expect(find.text('التقارير'), findsOneWidget);
       expect(find.text('نوع الفترة'), findsOneWidget);
-      expect(find.text('التقرير اليومي'), findsOneWidget);
+
+      // القائمة الرئيسية تبني العناصر البعيدة عند الاقتراب منها؛ مرّر
+      // إلى التقرير اليومي قبل فحص العنوان، ثم تابع إلى حركة الخزينة.
+      final dailyHeading = find.text('التقرير اليومي');
+      await tester.scrollUntilVisible(
+        dailyHeading,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(dailyHeading, findsOneWidget);
 
       final cashMovementHeading = find.text('حركة الخزينة');
       await tester.scrollUntilVisible(
