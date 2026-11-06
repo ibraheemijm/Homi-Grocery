@@ -1002,6 +1002,48 @@ void main() {
   });
 
 
+  testWidgets('تتكيف شاشة الموردين مع عرض هاتف Android صغير', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final supplierName = 'مورد اختبار الهاتف ${DateTime.now().microsecondsSinceEpoch}';
+    await tester.runAsync(() async {
+      final database = await GroceryDatabase.open();
+      await SupplierRepository(database).addSupplier(
+        userId: 1,
+        name: supplierName,
+        openingBalance: 2500,
+      );
+    });
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SuppliersScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.text('الموردون والمشتريات'), findsOneWidget);
+      expect(find.text('إضافة مورد'), findsOneWidget);
+      expect(find.text('سجل المشتريات'), findsOneWidget);
+      expect(find.text('فاتورة شراء'), findsOneWidget);
+      expect(find.text(supplierName), findsOneWidget);
+      expect(find.textContaining('2500 ج.س'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
   testWidgets('تتكيف شاشة سجل الفواتير مع عرض هاتف Android صغير', (tester) async {
     tester.view.physicalSize = const Size(320, 720);
     tester.view.devicePixelRatio = 1;
