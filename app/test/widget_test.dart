@@ -10,7 +10,6 @@ import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/customer_repository.dart';
-import 'package:homi_grocery/data/cashbox_repository.dart';
 import 'package:homi_grocery/screens/cashier_management_screen.dart';
 import 'package:homi_grocery/screens/customers_screen.dart';
 import 'package:homi_grocery/screens/sales_screen.dart';
@@ -869,18 +868,15 @@ void main() {
           home: CashboxScreen(userId: 1, isManager: true),
         ),
       );
+      // انتظر FutureBuilder الذي تستخدمه الشاشة نفسها، لا استعلامات مستقلة موازية.
+      final dataLoader = tester.widget<FutureBuilder<dynamic>>(
+        find.byWidgetPredicate((widget) => widget is FutureBuilder),
+      );
       await tester.runAsync(() async {
-        // نفّذ استعلامات المستودع نفسها التي تعتمد عليها الشاشة خارج fakeAsync.
-        final database = await GroceryDatabase.open();
-        final repository = CashboxRepository(database);
-        await repository.summary(userId: 1);
-        await repository.recent(userId: 1);
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await dataLoader.future;
       });
-      // امنح FutureBuilder فرصة لبناء محتوى الخزينة بعد اكتمال استعلامات SQLite.
+      // أعد بناء FutureBuilder بعد اكتمال تحميل بيانات الشاشة الفعلية.
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('الخزينة والتقرير اليومي'), findsOneWidget);
       expect(find.text('ملخص اليوم'), findsOneWidget);
