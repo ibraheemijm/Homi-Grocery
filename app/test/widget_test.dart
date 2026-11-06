@@ -17,6 +17,7 @@ import 'package:homi_grocery/screens/suppliers_screen.dart';
 import 'package:homi_grocery/screens/products_screen.dart';
 import 'package:homi_grocery/screens/stock_movements_screen.dart';
 import 'package:homi_grocery/screens/cashbox_screen.dart';
+import 'package:homi_grocery/screens/reports_screen.dart';
 import 'package:homi_grocery/data/supplier_repository.dart';
 import 'package:homi_grocery/data/product_repository.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
@@ -936,6 +937,45 @@ void main() {
       expect(find.text('سجل موثق للإضافات والتسويات والمرتجعات والمبيعات'), findsOneWidget);
       expect(find.text('تسجيل حركة جديدة'), findsOneWidget);
       expect(find.text('تصفية سجل الحركات حسب الصنف'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
+
+  testWidgets('تتكيف شاشة التقارير مع عرض هاتف Android صغير دون تجاوز أفقي', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: ReportsScreen(userId: 1)),
+        ),
+      );
+      await _waitForSqliteStartup(tester);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      });
+      await tester.pump();
+
+      expect(find.text('التقارير'), findsOneWidget);
+      expect(find.text('نوع الفترة'), findsOneWidget);
+      expect(find.text('التقرير اليومي'), findsOneWidget);
+
+      final cashMovementHeading = find.text('حركة الخزينة');
+      await tester.scrollUntilVisible(
+        cashMovementHeading,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(cashMovementHeading, findsOneWidget);
+      expect(find.text('صافي حركة الخزينة'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
