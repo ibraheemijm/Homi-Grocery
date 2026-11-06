@@ -1008,18 +1008,21 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final database = await GroceryDatabase.open();
     final invoiceNumber = 'INV-MOBILE-${DateTime.now().microsecondsSinceEpoch}';
-    await database.insert('sales', {
-      'invoice_number': invoiceNumber,
-      'customer_name': 'زبون اختبار الهاتف',
-      'subtotal': 1250,
-      'discount': 0,
-      'total': 1250,
-      'paid_amount': 1250,
-      'overpayment_amount': 0,
-      'payment_method': 'نقدي',
-      'created_at': DateTime.now().toUtc().toIso8601String(),
+    // افتح SQLite خارج fake-async حتى لا ينتظر الاختبار عملية المنصة إلى انتهاء المهلة.
+    await tester.runAsync(() async {
+      final database = await GroceryDatabase.open();
+      await database.insert('sales', {
+        'invoice_number': invoiceNumber,
+        'customer_name': 'زبون اختبار الهاتف',
+        'subtotal': 1250,
+        'discount': 0,
+        'total': 1250,
+        'paid_amount': 1250,
+        'overpayment_amount': 0,
+        'payment_method': 'نقدي',
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
     });
 
     final previousPlatform = debugDefaultTargetPlatformOverride;
