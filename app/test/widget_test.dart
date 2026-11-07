@@ -1173,6 +1173,9 @@ void main() {
     late final Database database;
     await tester.runAsync(() async {
       database = await GroceryDatabase.open();
+      // عزل هذا الاختبار عن الإشعارات وطلبات الموافقة التي أنشأتها اختبارات سابقة.
+      await database.delete('local_notifications');
+      await database.delete('delivery_publication_approvals');
       await NotificationRepository(database).add(
         type: 'general',
         title: notificationTitle,
