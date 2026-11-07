@@ -37,7 +37,65 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(onDetect: _handleDetection),
+          MobileScanner(
+            onDetect: _handleDetection,
+            // إظهار حالة تهيئة الكاميرا أو سبب فشلها بدل ترك مساحة سوداء بلا تفسير.
+            placeholderBuilder: (context, child) => const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFFC7A35A)),
+                    SizedBox(height: 16),
+                    Text(
+                      'جارٍ تشغيل الكاميرا...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            errorBuilder: (context, error, child) => ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.camera_alt_outlined,
+                        color: Color(0xFFC7A35A),
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'تعذر تشغيل الكاميرا',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        error.errorDetails?.message ?? error.errorCode.message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'تحقق من السماح للتطبيق باستخدام الكاميرا من إعدادات Android.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           IgnorePointer(
             child: Center(
               child: Container(
