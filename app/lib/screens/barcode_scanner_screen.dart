@@ -2,8 +2,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../data/android_diagnostic_log.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+import '../data/android_diagnostic_log.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
   const BarcodeScannerScreen({super.key});
@@ -75,13 +76,13 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
             errorBuilder: (context, error, child) {
               _recordScannerError(error);
               return ColoredBox(
-              color: Colors.black,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                color: Colors.black,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       const Icon(
                         Icons.camera_alt_outlined,
                         color: Color(0xFFC7A35A),
@@ -108,10 +109,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white70),
                       ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
               );
             },
           ),
