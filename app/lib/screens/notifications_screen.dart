@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../data/grocery_database.dart';
 import '../data/notification_repository.dart';
@@ -8,11 +9,14 @@ class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
     required this.userId,
     required this.isManager,
+    this.database,
     super.key,
   });
 
   final int userId;
   final bool isManager;
+  // يسمح بحقن قاعدة بيانات الاختبار نفسها دون تغيير سلوك التطبيق الفعلي.
+  final Database? database;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -32,8 +36,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _data = _load();
   }
 
+  Future<Database> _openDatabase() async =>
+      widget.database ?? await GroceryDatabase.open();
+
   Future<_NotificationData> _load() async {
-    final db = await GroceryDatabase.open();
+    final db = await _openDatabase();
     final notifications = NotificationRepository(db);
     final approvals = DeliveryApprovalRepository(db);
     return _NotificationData(
@@ -44,13 +51,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAllRead() async {
-    final db = await GroceryDatabase.open();
+    final db = await _openDatabase();
     await NotificationRepository(db).markAllRead();
     if (mounted) setState(_reload);
   }
 
   Future<void> _markRead(int id) async {
-    final db = await GroceryDatabase.open();
+    final db = await _openDatabase();
     await NotificationRepository(db).markRead(id);
     if (mounted) setState(_reload);
   }
@@ -93,7 +100,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     setState(() => _busy = true);
     try {
-      final db = await GroceryDatabase.open();
+      final db = await _openDatabase();
       await DeliveryApprovalRepository(db).decide(
         managerUserId: widget.userId,
         id: approval.id,
@@ -127,7 +134,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     setState(() => _busy = true);
     try {
-      final db = await GroceryDatabase.open();
+      final db = await _openDatabase();
       await DeliveryApprovalRepository(db).revokeInitialApproval(
         managerUserId: widget.userId,
       );
