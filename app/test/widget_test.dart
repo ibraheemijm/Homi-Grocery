@@ -1216,7 +1216,15 @@ void main() {
       expect(loading, isFalse, reason: 'يجب أن تنتهي شاشة الإشعارات من التحميل');
       expect(find.text('الإشعارات وسجل الموافقات'), findsOneWidget);
       expect(find.text('الإشعارات المحلية'), findsOneWidget);
-      expect(find.text(notificationTitle), findsOneWidget);
+
+      // عناصر ListView البعيدة قد لا تُبنى قبل تمرير القائمة إليها.
+      final notification = find.text(notificationTitle);
+      await tester.scrollUntilVisible(
+        notification,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(notification, findsOneWidget);
       expect(find.text('سجل موافقات الدليفري'), findsOneWidget);
 
       final approval = find.text(approvalSummary);
