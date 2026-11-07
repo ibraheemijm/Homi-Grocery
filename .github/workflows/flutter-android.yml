@@ -60,22 +60,56 @@ jobs:
               raise SystemExit("Could not configure MainActivity for biometric authentication")
           activity.write_text(source)
 
-          # صلاحيات واجهة Android للمصادقة الحيوية فقط.
+          # التصريح صراحةً بالكاميرا والمصادقة الحيوية في Manifest الخاص بالتطبيق.
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
-          if "android.permission.USE_BIOMETRIC" not in xml:
-              # يجب إدراج الصلاحيات داخل عنصر manifest وليس قبل العنصر بعد تصريح XML.
-              manifest_tag = re.search(r"<manifest\b[^>]*>", xml, flags=re.S)
-              if manifest_tag is None:
-                  raise SystemExit("Could not locate the manifest root element")
+          manifest_tag = re.search(r"<manifest\\b[^>]*>", xml, flags=re.S)
+          if manifest_tag is None:
+              raise SystemExit("Could not locate the manifest root element")
+          permissions = [
+              "android.permission.CAMERA",
+              "android.permission.USE_BIOMETRIC",
+              "android.permission.USE_FINGERPRINT",
+          ]
+          missing_permissions = [
+              permission for permission in permissions
+              if f'android:name="{permission}"' not in xml
+          ]
+          if missing_permissions:
               position = manifest_tag.end()
-              xml = (
-                  xml[:position]
-                  + "\n    <uses-permission android:name=\"android.permission.USE_BIOMETRIC\" />"
-                  + "\n    <uses-permission android:name=\"android.permission.USE_FINGERPRINT\" />"
-                  + xml[position:]
+              permission_xml = "".join(
+                  f'\\n    <uses-permission android:name="{permission}" />'
+                  for permission in missing_permissions
               )
-              manifest.write_text(xml)
+              xml = xml[:position] + permission_xml + xml[position:]
+
+          # الكاميرا اختيارية على مستوى الجهاز؛ يفحص التطبيق توفرها عند فتح الماسح.
+          if "android.hardware.camera" not in xml:
+              closing_tag = re.search(r"</manifest>", xml)
+              if closing_tag is None:
+                  raise SystemExit("Could not locate the manifest closing element")
+              xml = (
+                  xml[:closing_tag.start()]
+                  + '\\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\\n'
+                  + xml[closing_tag.start():]
+              )
+
+          # ضمان تسريع عرض معاينة الكاميرا داخل نشاط Flutter.
+          activity_tag = re.search(r"<activity\\b[^>]*>", xml, flags=re.S)
+          if activity_tag is None:
+              raise SystemExit("Could not locate the Android activity element")
+          activity_xml = activity_tag.group(0)
+          if "android:hardwareAccelerated" not in activity_xml:
+              activity_xml = activity_xml[:-1] + ' android:hardwareAccelerated="true">'
+              xml = xml[:activity_tag.start()] + activity_xml + xml[activity_tag.end():]
+          elif 'android:hardwareAccelerated="false"' in activity_xml:
+              activity_xml = activity_xml.replace(
+                  'android:hardwareAccelerated="false"',
+                  'android:hardwareAccelerated="true"',
+              )
+              xml = xml[:activity_tag.start()] + activity_xml + xml[activity_tag.end():]
+
+          manifest.write_text(xml)
 
           # الحد الأدنى المطلوب من local_auth على Android.
           for gradle in Path("android/app").glob("build.gradle*"):
