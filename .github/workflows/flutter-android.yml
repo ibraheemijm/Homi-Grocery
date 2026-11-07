@@ -63,7 +63,7 @@ jobs:
           # التصريح صراحةً بالكاميرا والمصادقة الحيوية في Manifest الخاص بالتطبيق.
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
-          manifest_tag = re.search(r"<manifest\\b[^>]*>", xml, flags=re.S)
+          manifest_tag = re.search(r"<manifest\b[^>]*>", xml, flags=re.S)
           if manifest_tag is None:
               raise SystemExit("Could not locate the manifest root element")
           permissions = [
@@ -78,7 +78,7 @@ jobs:
           if missing_permissions:
               position = manifest_tag.end()
               permission_xml = "".join(
-                  f'\\n    <uses-permission android:name="{permission}" />'
+                  f'\n    <uses-permission android:name="{permission}" />'
                   for permission in missing_permissions
               )
               xml = xml[:position] + permission_xml + xml[position:]
@@ -90,12 +90,12 @@ jobs:
                   raise SystemExit("Could not locate the manifest closing element")
               xml = (
                   xml[:closing_tag.start()]
-                  + '\\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\\n'
+                  + '\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\\n'
                   + xml[closing_tag.start():]
               )
 
           # ضمان تسريع عرض معاينة الكاميرا داخل نشاط Flutter.
-          activity_tag = re.search(r"<activity\\b[^>]*>", xml, flags=re.S)
+          activity_tag = re.search(r"<activity\b[^>]*>", xml, flags=re.S)
           if activity_tag is None:
               raise SystemExit("Could not locate the Android activity element")
           activity_xml = activity_tag.group(0)
@@ -110,6 +110,11 @@ jobs:
               xml = xml[:activity_tag.start()] + activity_xml + xml[activity_tag.end():]
 
           manifest.write_text(xml)
+
+          # تحقق من أن التصاريح أُدرجت فعلًا قبل متابعة البناء.
+          for permission in permissions:
+              if f'android:name="{permission}"' not in xml:
+                  raise SystemExit(f"Missing Android permission: {permission}")
 
           # الحد الأدنى المطلوب من local_auth على Android.
           for gradle in Path("android/app").glob("build.gradle*"):
