@@ -1194,7 +1194,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: NotificationsScreen(userId: 1, isManager: true, database: database),
         ),
       );
