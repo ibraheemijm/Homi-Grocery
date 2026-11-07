@@ -1191,8 +1191,19 @@ void main() {
         ),
       );
       await _waitForSqliteStartup(tester);
-      await tester.pump();
 
+      // انتظر اكتمال استعلامات الإشعارات والموافقات بدل افتراض أن
+      // مهلة واحدة تكفي على جميع بيئات CI.
+      var loading = true;
+      for (var attempt = 0; attempt < 30 && loading; attempt++) {
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
+        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
+      }
+
+      expect(loading, isFalse, reason: 'يجب أن تنتهي شاشة الإشعارات من التحميل');
       expect(find.text('الإشعارات وسجل الموافقات'), findsOneWidget);
       expect(find.text('الإشعارات المحلية'), findsOneWidget);
       expect(find.text(notificationTitle), findsOneWidget);
