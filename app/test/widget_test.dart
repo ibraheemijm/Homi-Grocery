@@ -1194,13 +1194,19 @@ void main() {
 
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    void expectNoLayoutError(String stage) {
+      final exception = tester.takeException();
+      expect(exception, isNull, reason: 'خطأ تخطيط في مرحلة: $stage');
+    }
     try {
       await tester.pumpWidget(
         MaterialApp(
           home: NotificationsScreen(userId: 1, isManager: true, database: database),
         ),
       );
+      expectNoLayoutError('بناء الشاشة الأولي');
       await _waitForSqliteStartup(tester);
+      expectNoLayoutError('بدء تحميل قاعدة البيانات');
 
       // انتظر اكتمال استعلامات الإشعارات والموافقات بدل افتراض أن
       // مهلة واحدة تكفي على جميع بيئات CI.
@@ -1214,6 +1220,7 @@ void main() {
       }
 
       expect(loading, isFalse, reason: 'يجب أن تنتهي شاشة الإشعارات من التحميل');
+      expectNoLayoutError('اكتمال تحميل البيانات');
       expect(find.text('الإشعارات وسجل الموافقات'), findsOneWidget);
       expect(find.text('الإشعارات المحلية'), findsOneWidget);
 
@@ -1225,6 +1232,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(notification, findsOneWidget);
+      expectNoLayoutError('عرض بطاقة الإشعار');
 
       final approvalsHeading = find.text('سجل موافقات الدليفري');
       await tester.scrollUntilVisible(
@@ -1233,6 +1241,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(approvalsHeading, findsOneWidget);
+      expectNoLayoutError('عرض عنوان سجل الموافقات');
 
       final approval = find.text(approvalSummary);
       await tester.scrollUntilVisible(
@@ -1243,7 +1252,7 @@ void main() {
       expect(approval, findsOneWidget);
       expect(find.text('موافقة'), findsOneWidget);
       expect(find.text('رفض'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expectNoLayoutError('عرض بطاقة طلب الموافقة وأزرارها');
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
     }
