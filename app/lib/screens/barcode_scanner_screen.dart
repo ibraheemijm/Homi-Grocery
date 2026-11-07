@@ -1,5 +1,8 @@
 // شاشة مسح الباركود بالكاميرا، تُفتح من نقطة البيع على Android فقط.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../data/android_diagnostic_log.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
@@ -11,6 +14,19 @@ class BarcodeScannerScreen extends StatefulWidget {
 
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   bool _barcodeHandled = false;
+  bool _scannerErrorRecorded = false;
+
+  void _recordScannerError(MobileScannerException error) {
+    if (_scannerErrorRecorded) return;
+    _scannerErrorRecorded = true;
+
+    // أخطاء MobileScanner قد تأتي من طبقة Android/CameraX ولا تمر عبر معالج Flutter العام.
+    unawaited(AndroidDiagnosticLog.record(
+      error,
+      StackTrace.current,
+      source: 'MobileScanner / Android camera startup',
+    ));
+  }
 
   void _handleDetection(BarcodeCapture capture) {
     if (_barcodeHandled) return;
@@ -56,7 +72,9 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                 ),
               ),
             ),
-            errorBuilder: (context, error, child) => ColoredBox(
+            errorBuilder: (context, error, child) {
+              _recordScannerError(error);
+              return ColoredBox(
               color: Colors.black,
               child: Center(
                 child: Padding(
@@ -94,7 +112,8 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                   ),
                 ),
               ),
-            ),
+              );
+            },
           ),
           IgnorePointer(
             child: Center(
