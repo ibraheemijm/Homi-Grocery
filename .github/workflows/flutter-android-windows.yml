@@ -1,0 +1,42 @@
+name: Flutter Windows checks
+
+on:
+  # تشغيل Windows يدويًا فقط؛ تعديلات Android لا تطلق بناء Windows تلقائيًا.
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows desktop
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate Windows platform
+        run: flutter create --platforms=windows .
+      - name: Analyze
+        run: flutter analyze
+      - name: Run tests
+        run: flutter test
+      - name: Build Windows desktop
+        run: flutter build windows --release
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: homi-grocery-windows-x64
+          path: app/build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
