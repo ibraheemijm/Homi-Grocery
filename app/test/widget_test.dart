@@ -1287,8 +1287,23 @@ void main() {
 
       expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل التقارير اليومية والفترية');
       expect(find.text('التقارير'), findsOneWidget);
-      expect(find.text('التقرير اليومي'), findsOneWidget);
-      expect(find.text('حركة الخزينة'), findsOneWidget);
+
+      // التقرير اليومي وحركة الخزينة أسفل ملخص الفترة؛ نمرر القائمة إليهما قبل فحصهما.
+      final dailyHeading = find.text('التقرير اليومي');
+      await tester.scrollUntilVisible(
+        dailyHeading,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(dailyHeading, findsOneWidget);
+
+      final cashboxHeading = find.text('حركة الخزينة');
+      await tester.scrollUntilVisible(
+        cashboxHeading,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(cashboxHeading, findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = null;
@@ -1337,9 +1352,23 @@ void main() {
       }
 
       expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل سجل الفواتير');
-      expect(find.text(invoiceNumber), findsOneWidget);
-      expect(find.text('طباعة A4'), findsOneWidget);
-      expect(find.text('طباعة حراري'), findsOneWidget);
+      final invoiceNumberFinder = find.text(invoiceNumber);
+      expect(invoiceNumberFinder, findsOneWidget);
+
+      // قد يحتوي السجل على فواتير أخرى؛ نفحص أزرار بطاقة الفاتورة التجريبية وحدها.
+      final invoiceCard = find.ancestor(
+        of: invoiceNumberFinder,
+        matching: find.byType(Card),
+      ).first;
+      await tester.ensureVisible(invoiceNumberFinder);
+      expect(
+        find.descendant(of: invoiceCard, matching: find.text('طباعة A4')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: invoiceCard, matching: find.text('طباعة حراري')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.runAsync(() async {
