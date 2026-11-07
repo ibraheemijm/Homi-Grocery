@@ -290,15 +290,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          // يسمح بنقل شارة الحالة إلى سطر مستقل على الهواتف الضيقة.
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
                               const Icon(Icons.verified_user_outlined),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _requestType(approval.requestType),
-                                  style: Theme.of(context).textTheme.labelLarge,
-                                ),
+                              Text(
+                                _requestType(approval.requestType),
+                                style: Theme.of(context).textTheme.labelLarge,
                               ),
                               Chip(label: Text(_approvalStatus(approval.status))),
                             ],
