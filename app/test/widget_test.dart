@@ -104,93 +104,6 @@ class _CollectionOnlyCustomerSource implements CustomerDataSource {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 
-  testWidgets('تتكيف شاشة التقارير على هاتف Android بعرض 320 بكسل',
-      (tester) async {
-    tester.view.physicalSize = const Size(320, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ReportsScreen(userId: 1),
-        ),
-      );
-
-      var loading = true;
-      for (var attempt = 0; attempt < 30 && loading; attempt++) {
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
-        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
-      }
-
-      expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل التقارير اليومية والفترية');
-      expect(find.text('التقارير'), findsOneWidget);
-      expect(find.text('التقرير اليومي'), findsOneWidget);
-      expect(find.text('حركة الخزينة'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
-  });
-
-  testWidgets('تتكيف بطاقة الفاتورة وأزرارها على هاتف Android بعرض 320 بكسل',
-      (tester) async {
-    tester.view.physicalSize = const Size(320, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    late final Database database;
-    const invoiceNumber = 'HG-MOBILE-320';
-    await tester.runAsync(() async {
-      database = await GroceryDatabase.open();
-      await database.insert('sales', {
-        'invoice_number': invoiceNumber,
-        'customer_name': 'زبون اختبار الهاتف',
-        'subtotal': 123456,
-        'discount': 0,
-        'total': 123456,
-        'paid_amount': 123456,
-        'overpayment_amount': 0,
-        'payment_method': 'cash',
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      });
-    });
-
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: InvoicesScreen(userId: 1),
-        ),
-      );
-
-      var loading = true;
-      for (var attempt = 0; attempt < 30 && loading; attempt++) {
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
-        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
-      }
-
-      expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل سجل الفواتير');
-      expect(find.text(invoiceNumber), findsOneWidget);
-      expect(find.text('طباعة A4'), findsOneWidget);
-      expect(find.text('طباعة حراري'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.runAsync(() async {
-        await database.delete('sales', where: 'invoice_number = ?', whereArgs: [invoiceNumber]);
-      });
-      debugDefaultTargetPlatformOverride = null;
-    }
-  });
 
 }
 
@@ -1346,5 +1259,95 @@ void main() {
       debugDefaultTargetPlatformOverride = previousPlatform;
     }
   });
+
+
+  testWidgets('تتكيف شاشة التقارير على هاتف Android بعرض 320 بكسل',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ReportsScreen(userId: 1),
+        ),
+      );
+
+      var loading = true;
+      for (var attempt = 0; attempt < 30 && loading; attempt++) {
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
+        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
+      }
+
+      expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل التقارير اليومية والفترية');
+      expect(find.text('التقارير'), findsOneWidget);
+      expect(find.text('التقرير اليومي'), findsOneWidget);
+      expect(find.text('حركة الخزينة'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('تتكيف بطاقة الفاتورة وأزرارها على هاتف Android بعرض 320 بكسل',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    late final Database database;
+    const invoiceNumber = 'HG-MOBILE-320';
+    await tester.runAsync(() async {
+      database = await GroceryDatabase.open();
+      await database.insert('sales', {
+        'invoice_number': invoiceNumber,
+        'customer_name': 'زبون اختبار الهاتف',
+        'subtotal': 123456,
+        'discount': 0,
+        'total': 123456,
+        'paid_amount': 123456,
+        'overpayment_amount': 0,
+        'payment_method': 'cash',
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: InvoicesScreen(userId: 1),
+        ),
+      );
+
+      var loading = true;
+      for (var attempt = 0; attempt < 30 && loading; attempt++) {
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
+        loading = find.byType(CircularProgressIndicator).evaluate().isNotEmpty;
+      }
+
+      expect(loading, isFalse, reason: 'يجب أن ينتهي تحميل سجل الفواتير');
+      expect(find.text(invoiceNumber), findsOneWidget);
+      expect(find.text('طباعة A4'), findsOneWidget);
+      expect(find.text('طباعة حراري'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.runAsync(() async {
+        await database.delete('sales', where: 'invoice_number = ?', whereArgs: [invoiceNumber]);
+      });
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
 
 }
