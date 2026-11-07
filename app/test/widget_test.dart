@@ -1225,7 +1225,14 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(notification, findsOneWidget);
-      expect(find.text('سجل موافقات الدليفري'), findsOneWidget);
+
+      final approvalsHeading = find.text('سجل موافقات الدليفري');
+      await tester.scrollUntilVisible(
+        approvalsHeading,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(approvalsHeading, findsOneWidget);
 
       final approval = find.text(approvalSummary);
       await tester.scrollUntilVisible(
