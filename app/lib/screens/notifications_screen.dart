@@ -191,7 +191,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الإشعارات وسجل الموافقات'),
+        // اختصار العنوان بصريًا عند ضيق عرض الهاتف مع إبقاء النص الكامل متاحًا دلاليًا.
+        title: const Text(
+          'الإشعارات وسجل الموافقات',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: 'تحديث',
