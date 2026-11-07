@@ -96,7 +96,7 @@ jobs:
                       insert_at = release_block.end()
                       source = source[:insert_at] + '\n            signingConfig = signingConfigs.getByName("debug")' + source[insert_at:]
               else:
-                  release_block = re.search(r"(buildTypes\\s*\\{\\s*release\\s*\\{)", source)
+                  release_block = re.search(r"(buildTypes\s*\{\s*release\s*\{)", source)
                   if release_block is None:
                       raise SystemExit("Could not locate the Android release build type")
                   insert_at = release_block.end()
