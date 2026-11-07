@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:homi_grocery/main.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
@@ -1169,12 +1170,19 @@ void main() {
 
     const notificationTitle = 'إشعار اختبار شاشة الهاتف';
     const approvalSummary = 'طلب اختبار طويل للتأكد من التفاف النص وعرض حالة الموافقة دون تجاوز أفقي';
+    late final Database database;
     await tester.runAsync(() async {
-      final database = await GroceryDatabase.open();
+      database = await GroceryDatabase.open();
       await NotificationRepository(database).add(
         type: 'general',
         title: notificationTitle,
         body: 'رسالة اختبار طويلة نسبيًا للتحقق من عرض تفاصيل الإشعار على شاشة صغيرة.',
+      );
+      final savedNotifications = await NotificationRepository(database).list();
+      expect(
+        savedNotifications.any((item) => item.title == notificationTitle),
+        isTrue,
+        reason: 'يجب التأكد من حفظ الإشعار في قاعدة البيانات قبل اختبار الشاشة.',
       );
       await DeliveryApprovalRepository(database).requestInitialEnable(
         summary: approvalSummary,
@@ -1187,7 +1195,7 @@ void main() {
     try {
       await tester.pumpWidget(
         const MaterialApp(
-          home: NotificationsScreen(userId: 1, isManager: true),
+          home: NotificationsScreen(userId: 1, isManager: true, database: database),
         ),
       );
       await _waitForSqliteStartup(tester);
