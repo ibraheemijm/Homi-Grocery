@@ -57,7 +57,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           MobileScanner(
             onDetect: _handleDetection,
             // إظهار حالة تهيئة الكاميرا أو سبب فشلها بدل ترك مساحة سوداء بلا تفسير.
-            placeholderBuilder: (context, child) => const ColoredBox(
+            placeholderBuilder: (context) => const ColoredBox(
               color: Colors.black,
               child: Center(
                 child: Column(
@@ -73,7 +73,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                 ),
               ),
             ),
-            errorBuilder: (context, error, child) {
+            errorBuilder: (context, error) {
               _recordScannerError(error);
               return ColoredBox(
                 color: Colors.black,
