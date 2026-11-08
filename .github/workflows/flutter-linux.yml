@@ -30,6 +30,10 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze
+      - name: Install system SQLite for FFI tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
       - name: Run widget tests
         run: flutter test
       - name: Prepare Linux desktop platform
