@@ -4,8 +4,8 @@ publish_to: "none"
 version: 0.1.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
-  flutter: ">=3.24.0"
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
 
 dependencies:
   flutter:
@@ -21,7 +21,7 @@ dependencies:
   # تجزئة كلمات المرور محليًا باستخدام HMAC-SHA256.
   crypto: ^3.0.6
   # قارئ باركود بالكاميرا على Android.
-  mobile_scanner: ^6.0.11
+  mobile_scanner: ^7.5.0
   # المصادقة الحيوية والتخزين المشفر لبيانات الدخول على Android.
   local_auth: ^2.3.0
   flutter_secure_storage: ^9.2.4
