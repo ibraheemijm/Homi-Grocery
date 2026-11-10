@@ -128,12 +128,13 @@ class PlatformApiClient {
         (uri.scheme != 'https' && !(uri.scheme == 'http' && localHost)) ||
         uri.userInfo.isNotEmpty ||
         uri.hasQuery ||
-        uri.hasFragment) {
+        uri.hasFragment ||
+        (uri.path.isNotEmpty && uri.path != '/')) {
       throw const PlatformApiConfigurationException(
         'يجب أن يكون عنوان المنصة HTTPS صالحًا؛ يسمح بـ HTTP لعناوين التطوير المحلية فقط.',
       );
     }
-    return uri.replace(path: uri.path.endsWith('/') ? uri.path : '${uri.path}/');
+    return uri.replace(path: '/');
   }
 
   Future<Map<String, Object?>> getJson(
