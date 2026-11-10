@@ -174,9 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           canPop: false,
           child: AlertDialog(
             title: const Text('تم ربط بيانات المتجر'),
-            content: Text('تم فحص قاعدة البيانات وربطها بنجاح.\n\nالموقع:\n' +
-                target.path +
-                '\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل.'),
+            content: Text('تم فحص قاعدة البيانات وربطها بنجاح.\n\nالموقع:\n${target.path}\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل.'),
             actions: [
               FilledButton(
                 onPressed: () => exit(0),
