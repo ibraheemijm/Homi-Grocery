@@ -135,5 +135,37 @@ void main() {
     final recoveredProducts = await recoveredDatabase.query('products');
     expect(recoveredProducts, hasLength(1));
     expect(recoveredProducts.single['name'], 'صنف النقل');
+
+    // محاكاة فشل إعادة فتح قاعدة البيانات بعد اعتماد المسار الجديد،
+    // والتأكد من الرجوع للمسار السابق مع بقاء البيانات سليمة.
+    final rollbackParent = await Directory.systemTemp.createTemp('homi-data-rollback-');
+    var reopenAttempts = 0;
+    await expectLater(
+      AppDataLocation.migrate(
+        currentDatabase: recoveredDatabase,
+        closeDatabase: GroceryDatabase.closeForMaintenance,
+        reopenDatabase: () async {
+          reopenAttempts++;
+          if (reopenAttempts == 1) {
+            throw StateError('فشل تجريبي بعد اعتماد مسار النقل.');
+          }
+          return GroceryDatabase.open();
+        },
+        selectedParentPath: rollbackParent.path,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(reopenAttempts, 2);
+    expect(await AppDataLocation.currentPath(), target.path);
+    expect(
+      await Directory(p.join(rollbackParent.path, 'Homi Grocery Data')).exists(),
+      isFalse,
+      reason: 'يجب تنظيف مجلد النقل الجزئي بعد فشل إعادة الفتح.',
+    );
+    final restoredDatabase = await GroceryDatabase.open();
+    final restoredProducts = await restoredDatabase.query('products');
+    expect(restoredProducts, hasLength(1));
+    expect(restoredProducts.single['name'], 'صنف النقل');
+    await rollbackParent.delete(recursive: true);
   });
 }
