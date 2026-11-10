@@ -39,7 +39,7 @@ class GroceryDatabase {
       databaseFactory = databaseFactoryFfi;
     }
 
-    final directory = await getApplicationSupportDirectory();
+    final directory = await AppDataLocation.resolveDataDirectory();
     await directory.create(recursive: true);
     final databasePath = p.join(directory.path, 'homi_grocery.db');
 
