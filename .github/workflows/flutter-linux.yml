@@ -3,7 +3,7 @@ name: Flutter Linux checks
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/windows-ota-foundation]
   pull_request:
     branches: [main]
 
