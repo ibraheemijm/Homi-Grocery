@@ -55,7 +55,7 @@ void main() {
       success({'challenge_id': challengeId, 'nonce': nonceText}),
       success({'id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17'}),
     ]);
-    final identity = PlatformDeviceIdentity(MemorySecretStore());
+    final identity = PlatformDeviceIdentity(MemorySecretStore(), isAndroid: () => true);
     final api = PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
@@ -152,7 +152,7 @@ void main() {
     );
     final service = PlatformLicensingService(
       api: api,
-      deviceIdentity: PlatformDeviceIdentity(MemorySecretStore()),
+      deviceIdentity: PlatformDeviceIdentity(MemorySecretStore(), isAndroid: () => true),
     );
 
     final grant = await service.issueOfflineGrant(
