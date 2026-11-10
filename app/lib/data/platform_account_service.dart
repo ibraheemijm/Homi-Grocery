@@ -103,6 +103,7 @@ class PlatformAccountService {
   final PlatformApiClient _api;
   final PlatformSessionStore _sessions;
   final DateTime Function() _clock;
+  Future<void>? _refreshing;
 
   Future<Map<String, Object?>> register({
     required String email,
@@ -164,7 +165,17 @@ class PlatformAccountService {
     return updated.accessToken;
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+    final operation = _performRefresh();
+    _refreshing = operation;
+    return operation.whenComplete(() {
+      if (identical(_refreshing, operation)) _refreshing = null;
+    });
+  }
+
+  Future<void> _performRefresh() async {
     final current = await _sessions.read();
     if (current == null) {
       throw const PlatformApiException(
