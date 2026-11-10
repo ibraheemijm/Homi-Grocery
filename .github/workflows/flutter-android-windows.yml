@@ -52,6 +52,13 @@ jobs:
         run: flutter test
       - name: Build Windows desktop
         run: flutter build windows --release
+      - name: Build standalone Windows updater
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater/HomiUpdater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/updater
+          if (-not (Test-Path "build/windows/updater/HomiUpdater.exe")) {
+            throw "لم يتم إنشاء مساعد تحديث Windows."
+          }
       - name: Package Windows update bundle
         shell: pwsh
         run: |
@@ -68,7 +75,7 @@ jobs:
           }
           $version = $versionLine.Matches[0].Groups[1].Value.Split('+')[0]
           $sourceDir = (Resolve-Path "build/windows/x64/runner/Release").Path
-          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "../installer/windows/HomiGrocery.iss"
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "/DUpdaterPath=$((Resolve-Path \"build/windows/updater/HomiUpdater.exe\").Path)" "../installer/windows/HomiGrocery.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "فشل إنشاء مثبت Homi Grocery باستخدام Inno Setup."
           }
@@ -82,6 +89,7 @@ jobs:
           path: |
             app/build/windows/x64/runner/Release/
             app/build/windows/homi-grocery-windows-x64.zip
+            app/build/windows/updater/HomiUpdater.exe
             app/build/windows/installer/Homi-Grocery-Setup-x64.exe
           if-no-files-found: error
           retention-days: 14
