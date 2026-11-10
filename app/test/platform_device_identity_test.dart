@@ -19,7 +19,7 @@ class MemorySecretStore implements PlatformSecretStore {
 void main() {
   test('ينشئ هوية ثابتة ومفتاح Ed25519 داخل التخزين الآمن', () async {
     final store = MemorySecretStore();
-    final identity = PlatformDeviceIdentity(store);
+    final identity = PlatformDeviceIdentity(store, isAndroid: () => true);
 
     final first = await identity.loadOrCreate();
     final second = await identity.loadOrCreate();
@@ -45,7 +45,7 @@ void main() {
 
   test('يوقع nonce بالمفتاح الخاص ولا يرسل المفتاح الخاص', () async {
     final store = MemorySecretStore();
-    final identity = PlatformDeviceIdentity(store);
+    final identity = PlatformDeviceIdentity(store, isAndroid: () => true);
     final data = await identity.loadOrCreate();
     final nonce = List<int>.generate(32, (index) => index);
     final nonceText = base64UrlEncode(nonce).replaceAll('=', '');
