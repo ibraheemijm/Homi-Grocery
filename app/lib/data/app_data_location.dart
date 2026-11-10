@@ -74,7 +74,7 @@ class AppDataLocation {
     final targetPath = p.normalize(target.absolute.path);
     if (p.equals(p.normalize(previousPath), targetPath)) return target;
 
-    await currentDatabase.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    await _checkpoint(currentDatabase);
     await closeDatabase();
     var committed = false;
     try {
@@ -132,7 +132,7 @@ class AppDataLocation {
       rethrow;
     }
 
-    await currentDatabase.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    await _checkpoint(currentDatabase);
     await closeDatabase();
     var committed = false;
     try {
@@ -166,6 +166,16 @@ class AppDataLocation {
       }
       if (await target.exists()) await target.delete(recursive: true);
       rethrow;
+    }
+  }
+
+  static Future<void> _checkpoint(Database database) async {
+    final result = await database.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    if (result.isNotEmpty) {
+      final busy = result.first['busy'];
+      if (busy is num && busy != 0) {
+        throw StateError('قاعدة البيانات مشغولة بعملية أخرى؛ أغلق الشاشات المفتوحة ثم أعد المحاولة.');
+      }
     }
   }
 
