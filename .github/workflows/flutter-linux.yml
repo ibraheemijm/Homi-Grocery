@@ -54,6 +54,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: homi-grocery-linux-x64
-          path: |\n            app/build/linux/x64/release/bundle/\n            app/build/linux/packages/homi-grocery-linux-x64.tar.gz
+          path: |
+            app/build/linux/x64/release/bundle/
+            app/build/linux/packages/homi-grocery-linux-x64.tar.gz
           if-no-files-found: error
           retention-days: 14
