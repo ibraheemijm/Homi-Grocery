@@ -120,6 +120,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _connectExistingData() async {
+    if (!widget.canManageSystemSettings ||
+        (defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux)) {
+      return;
+    }
+    final selected = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'اختر المجلد الأب الذي يحتوي مجلد Homi Grocery Data',
+    );
+    if (selected == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ربط بيانات متجر موجودة'),
+        content: Text(
+          'سيبحث التطبيق عن قاعدة بيانات Homi داخل مجلد Homi Grocery Data في:\n\n$selected\n\nلن ينسخ أو يستبدل الملفات. سيجري فحص قاعدة البيانات قبل ربطها.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('فحص وربط البيانات'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _movingData = true;
+      _message = 'جارٍ فحص قاعدة البيانات الموجودة...';
+    });
+    try {
+      final database = await GroceryDatabase.open();
+      final target = await AppDataLocation.connectExisting(
+        currentDatabase: database,
+        closeDatabase: GroceryDatabase.closeForMaintenance,
+        reopenDatabase: GroceryDatabase.open,
+        selectedParentPath: selected,
+      );
+      if (!mounted) return;
+      setState(() {
+        _dataLocationPath = target.path;
+        _movingData = false;
+      });
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('تم ربط بيانات المتجر'),
+            content: Text('تم فحص قاعدة البيانات وربطها بنجاح.\n\nالموقع:\n' +
+                target.path +
+                '\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل.'),
+            actions: [
+              FilledButton(
+                onPressed: () => exit(0),
+                child: const Text('إغلاق التطبيق'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _movingData = false;
+          _message = 'تعذر ربط مجلد البيانات: $error';
+        });
+      }
+    }
+  }
+
   Future<void> _changeDataLocation() async {
     if (!widget.canManageSystemSettings ||
         (defaultTargetPlatform != TargetPlatform.windows &&
@@ -528,6 +604,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                                   : const Icon(Icons.drive_file_move_outline),
                               label: Text(_movingData ? 'جارٍ نقل البيانات...' : 'اختيار قسم أو مجلد آخر'),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _movingData ? null : _connectExistingData,
+                              icon: const Icon(Icons.folder_open_outlined),
+                              label: const Text('ربط مجلد بيانات موجود'),
                             ),
                           ],
                         ),
