@@ -179,7 +179,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: AlertDialog(
             title: const Text('اكتمل نقل البيانات'),
             content: Text(
-              'تم نقل البيانات والتحقق منها.\n\nالموقع الجديد:\n\${target.path}\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل من الموقع الجديد.',
+              'تم نقل البيانات والتحقق منها.\n\nالموقع الجديد:\n${target.path}\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل من الموقع الجديد.',
             ),
             actions: [
               FilledButton(
