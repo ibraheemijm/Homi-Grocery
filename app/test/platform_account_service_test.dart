@@ -12,35 +12,6 @@ class MemorySessionStore implements PlatformSessionSecretStore {
   Future<void> write(String key, String value) async { values[key] = value; }
   @override
   Future<void> delete(String key) async { values.remove(key); }
-  test('يوحد طلبات التجديد المتزامنة لتجنب إعادة استخدام refresh token', () async {
-    final store = PlatformSessionStore(MemorySessionStore());
-    await store.save(
-      accessToken: 'access-before-concurrent-refresh',
-      refreshToken: 'refresh-before-concurrent-refresh',
-      expiresInSeconds: 5,
-      now: DateTime.utc(2026, 11, 10, 12),
-    );
-    final transport = QueueTransport([
-      success({
-        'access_token': 'access-after-concurrent-refresh',
-        'refresh_token': 'refresh-after-concurrent-refresh',
-        'expires_in': 900,
-      }),
-    ]);
-    final service = PlatformAccountService(
-      api: PlatformApiClient(
-        baseUri: Uri.parse('https://platform.example.test'),
-        transport: transport,
-      ),
-      sessions: store,
-      clock: () => DateTime.utc(2026, 11, 10, 12),
-    );
-
-    await Future.wait([service.refresh(), service.refresh(), service.refresh()]);
-    expect(transport.requests, hasLength(1));
-    expect((await store.read())!.refreshToken, 'refresh-after-concurrent-refresh');
-  });
-
 }
 
 class QueueTransport implements PlatformHttpTransport {
@@ -142,5 +113,35 @@ void main() {
 
     await expectLater(service.validAccessToken(), throwsA(isA<PlatformApiException>()));
     expect((await store.read())!.refreshToken, 'refresh-before-offline');
+  });
+
+  test('يوحد طلبات التجديد المتزامنة لتجنب إعادة استخدام refresh token', () async {
+    final store = PlatformSessionStore(MemorySessionStore());
+    final now = DateTime.utc(2026, 11, 10, 12);
+    await store.save(
+      accessToken: 'access-before-concurrent-refresh',
+      refreshToken: 'refresh-before-concurrent-refresh',
+      expiresInSeconds: 5,
+      now: now,
+    );
+    final transport = QueueTransport([
+      success({
+        'access_token': 'access-after-concurrent-refresh',
+        'refresh_token': 'refresh-after-concurrent-refresh',
+        'expires_in': 900,
+      }),
+    ]);
+    final service = PlatformAccountService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      sessions: store,
+      clock: () => now,
+    );
+
+    await Future.wait([service.refresh(), service.refresh(), service.refresh()]);
+    expect(transport.requests, hasLength(1));
+    expect((await store.read())!.refreshToken, 'refresh-after-concurrent-refresh');
   });
 }
