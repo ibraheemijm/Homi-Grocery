@@ -140,6 +140,20 @@ class PlatformApiClient {
     return uri.replace(path: '/');
   }
 
+  /// يحول مسار API داخليًا إلى URI دون السماح بمضيف خارجي أو مسار خارج v1.
+  Uri resolveApiUri(String path) {
+    if (!path.startsWith(apiPrefix) ||
+        path.contains('..') ||
+        path.contains('\\\\') ||
+        path.contains('?') ||
+        path.contains('#')) {
+      throw const PlatformApiConfigurationException(
+        'مسار API غير صالح أو خارج الإصدار v1.',
+      );
+    }
+    return _baseUri.resolve(path.substring(1));
+  }
+
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
