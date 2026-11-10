@@ -57,6 +57,27 @@ jobs:
         run: |
           $bundle = Resolve-Path "build/windows/x64/runner/Release"
           Compress-Archive -Path "$($bundle.Path)/*" -DestinationPath "build/windows/homi-grocery-windows-x64.zip" -Force
+      - name: Build Windows installer with Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "لم يتم العثور على مترجم Inno Setup بعد التثبيت."
+          }
+          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\\s*(\\S+)'
+          if (-not $versionLine) {
+            throw "تعذر قراءة إصدار التطبيق من pubspec.yaml."
+          }
+          $version = $versionLine.Matches[0].Groups[1].Value.Split('+')[0]
+          $sourceDir = (Resolve-Path "build/windows/x64/runner/Release").Path
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "../installer/windows/HomiGrocery.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "فشل إنشاء مثبت Homi Grocery باستخدام Inno Setup."
+          }
+          if (-not (Test-Path "build/windows/installer/Homi-Grocery-Setup-x64.exe")) {
+            throw "لم يتم إنشاء ملف المثبت المتوقع."
+          }
       - name: Upload Windows bundle and update package
         uses: actions/upload-artifact@v4
         with:
@@ -64,5 +85,6 @@ jobs:
           path: |
             app/build/windows/x64/runner/Release/
             app/build/windows/homi-grocery-windows-x64.zip
+            app/build/windows/installer/Homi-Grocery-Setup-x64.exe
           if-no-files-found: error
           retention-days: 14
