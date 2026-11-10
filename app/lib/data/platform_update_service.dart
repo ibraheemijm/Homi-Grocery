@@ -18,7 +18,8 @@ abstract interface class PlatformUpdateDownloader {
 }
 
 class IoPlatformUpdateDownloader implements PlatformUpdateDownloader {
-  IoPlatformUpdateDownloader({HttpClient? client}) : _client = client ?? HttpClient();
+  IoPlatformUpdateDownloader({HttpClient? client})
+      : _client = client ?? HttpClient();
 
   final HttpClient _client;
 
@@ -29,41 +30,67 @@ class IoPlatformUpdateDownloader implements PlatformUpdateDownloader {
     required File destination,
     required int expectedSizeBytes,
   }) async {
-    if (uri.scheme != 'https' || accessToken.isEmpty ||
-        expectedSizeBytes < 1 || expectedSizeBytes > 1024 * 1024 * 1024) {
+    if (uri.scheme != 'https' ||
+        accessToken.isEmpty ||
+        expectedSizeBytes < 1 ||
+        expectedSizeBytes > 1024 * 1024 * 1024) {
       throw const FormatException('إعدادات تنزيل تحديث Homi غير صالحة.');
     }
+
     IOSink? sink;
     try {
-      final request = await _client.getUrl(uri).timeout(const Duration(seconds: 20));
+      final request = await _client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $accessToken');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/octet-stream');
-      final response = await request.close().timeout(const Duration(seconds: 30));
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $accessToken',
+      );
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/octet-stream',
+      );
+      final response = await request
+          .close()
+          .timeout(const Duration(seconds: 30));
       if (response.statusCode != HttpStatus.ok ||
-          (response.contentLength >= 0 && response.contentLength != expectedSizeBytes)) {
-        throw HttpException('رفض الخادم ملف التحديث أو أعاد حجمًا غير متوقع.', uri: uri);
+          (response.contentLength >= 0 &&
+              response.contentLength != expectedSizeBytes)) {
+        throw HttpException(
+          'رفض الخادم ملف التحديث أو أعاد حجمًا غير متوقع.',
+          uri: uri,
+        );
       }
+
       await destination.parent.create(recursive: true);
       sink = destination.openWrite(mode: FileMode.writeOnly);
       var received = 0;
-      await for (final chunk in response.timeout(const Duration(seconds: 60))) {
+      await for (final chunk
+          in response.timeout(const Duration(seconds: 60))) {
         received += chunk.length;
         if (received > expectedSizeBytes) {
-          throw const FormatException('حجم ملف التحديث أكبر من الحجم المعلن.');
+          throw const FormatException(
+            'حجم ملف التحديث أكبر من الحجم المعلن.',
+          );
         }
         sink.add(chunk);
       }
       await sink.flush();
       await sink.close();
       sink = null;
+
       if (received != expectedSizeBytes) {
-        throw const FormatException('اكتمل التنزيل بحجم لا يطابق بيانات الإصدار.');
+        throw const FormatException(
+          'اكتمل التنزيل بحجم لا يطابق بيانات الإصدار.',
+        );
       }
       return destination;
     } catch (_) {
       await sink?.close();
-      if (await destination.exists()) await destination.delete();
+      if (await destination.exists()) {
+        await destination.delete();
+      }
       rethrow;
     } finally {
       _client.close(force: true);
@@ -285,93 +312,13 @@ class PlatformUpdateService {
   }) async {
     if (manifest.sizeBytes < 1 ||
         manifest.sizeBytes > 1024 * 1024 * 1024 ||
-        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,119}
-    Map<String, dynamic> claims, {
-    required PlatformUpdateInfo update,
-    required String productKey,
-    required String platform,
-    required String architecture,
-    required String channel,
-  }) {
-    final expectedDownloadPath =
-        '/api/v1/updates/${update.publicationId}/download';
-    if (claims['schema_version'] != 1 ||
-        claims['publication_id'] != update.publicationId ||
-        claims['product_key'] != productKey ||
-        claims['platform'] != platform ||
-        (claims['architecture'] != architecture &&
-            claims['architecture'] != 'universal') ||
-        claims['channel'] != channel ||
-        claims['version'] != update.version ||
-        claims['version_code'] != update.versionCode ||
-        claims['file_name'] != update.fileName ||
-        claims['size_bytes'] != update.sizeBytes ||
-        claims['sha256'] != update.sha256 ||
-        claims['key_id'] != update.signingKeyId ||
-        claims['download_url'] != expectedDownloadPath) {
-      throw const FormatException('محتوى manifest لا يطابق بيانات الإصدار.');
-    }
-    final publishedAt = claims['published_at'];
-    if (publishedAt is! String || DateTime.tryParse(publishedAt) == null) {
-      throw const FormatException('تاريخ نشر manifest غير صالح.');
-    }
-  }
-
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
-    }
-    return difference == 0;
-  }
-}
-).hasMatch(manifest.fileName) ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$')
+            .hasMatch(manifest.fileName) ||
         manifest.fileName.contains('..') ||
-        !RegExp(r'^[0-9a-f]{64}
-    Map<String, dynamic> claims, {
-    required PlatformUpdateInfo update,
-    required String productKey,
-    required String platform,
-    required String architecture,
-    required String channel,
-  }) {
-    final expectedDownloadPath =
-        '/api/v1/updates/${update.publicationId}/download';
-    if (claims['schema_version'] != 1 ||
-        claims['publication_id'] != update.publicationId ||
-        claims['product_key'] != productKey ||
-        claims['platform'] != platform ||
-        (claims['architecture'] != architecture &&
-            claims['architecture'] != 'universal') ||
-        claims['channel'] != channel ||
-        claims['version'] != update.version ||
-        claims['version_code'] != update.versionCode ||
-        claims['file_name'] != update.fileName ||
-        claims['size_bytes'] != update.sizeBytes ||
-        claims['sha256'] != update.sha256 ||
-        claims['key_id'] != update.signingKeyId ||
-        claims['download_url'] != expectedDownloadPath) {
-      throw const FormatException('محتوى manifest لا يطابق بيانات الإصدار.');
-    }
-    final publishedAt = claims['published_at'];
-    if (publishedAt is! String || DateTime.tryParse(publishedAt) == null) {
-      throw const FormatException('تاريخ نشر manifest غير صالح.');
-    }
-  }
-
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
-    }
-    return difference == 0;
-  }
-}
-).hasMatch(manifest.sha256)) {
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(manifest.sha256)) {
       throw const FormatException('بيانات ملف تحديث Homi غير آمنة.');
     }
+
     final uri = _api.resolveApiUri(manifest.downloadPath);
     final directory = await Directory.systemTemp.createTemp('homi-ota-');
     final file = File('${directory.path}/${manifest.fileName}');
@@ -385,18 +332,26 @@ class PlatformUpdateService {
       );
       final actualLength = await file.length();
       if (actualLength != manifest.sizeBytes) {
-        throw const FormatException('حجم حزمة تحديث Homi لا يطابق manifest.');
+        throw const FormatException(
+          'حجم حزمة تحديث Homi لا يطابق manifest.',
+        );
       }
+
       final digest = await crypto.sha256.bind(file.openRead()).first;
       if (digest.toString() != manifest.sha256) {
-        throw const FormatException('فشل التحقق من SHA-256 لحزمة تحديث Homi.');
+        throw const FormatException(
+          'فشل التحقق من SHA-256 لحزمة تحديث Homi.',
+        );
       }
       return file;
     } catch (_) {
-      if (await directory.exists()) await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
       rethrow;
     }
   }
+
 
   void _validateClaims(
     Map<String, dynamic> claims, {
