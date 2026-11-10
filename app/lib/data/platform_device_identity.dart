@@ -1,5 +1,6 @@
 // هوية جهاز مستقرة ومفتاح Ed25519 محفوظان في التخزين الآمن على الجهاز.
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
@@ -41,9 +42,11 @@ class PlatformDeviceIdentityData {
 }
 
 class PlatformDeviceIdentity {
-  PlatformDeviceIdentity(this._store);
+  PlatformDeviceIdentity(this._store, {bool Function()? isAndroid})
+      : _isAndroid = isAndroid ?? (() => Platform.isAndroid);
 
   final PlatformSecretStore _store;
+  final bool Function() _isAndroid;
   static const _deviceKeyName = 'homi_platform_device_key';
   static const _privateSeedName = 'homi_platform_ed25519_seed';
   static const _spkiPrefix = <int>[
@@ -54,6 +57,9 @@ class PlatformDeviceIdentity {
   final Ed25519 _algorithm = Ed25519();
 
   Future<PlatformDeviceIdentityData> loadOrCreate() async {
+    if (!_isAndroid()) {
+      throw UnsupportedError('ربط الترخيص متاح على Android في هذه المرحلة فقط.');
+    }
     var deviceKey = await _store.read(_deviceKeyName);
     var seedText = await _store.read(_privateSeedName);
 
