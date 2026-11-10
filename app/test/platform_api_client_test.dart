@@ -67,7 +67,7 @@ void main() {
     expect(result['created'], isTrue);
     expect(transport.requestedMethod, 'POST');
     expect(transport.requestedUri!.path, '/api/v1/subscription-requests');
-    expect(transport.requestedHeaders!['Authorization'], 'Bearer access-token');
+    expect(transport.requestedHeaders!['authorization'], 'Bearer access-token');
     expect(transport.requestedHeaders!['Idempotency-Key'], 'request-key-0001');
     expect(jsonDecode(transport.requestedBody!), {'plan_key': 'monthly'});
     api.close();
