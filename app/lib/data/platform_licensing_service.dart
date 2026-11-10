@@ -1,4 +1,4 @@
-// ربط جهاز Android بالترخيص وإصدار تصريح offline بعد التحقق من توقيع الخادم.
+// ربط أجهزة Homi بالترخيص وإصدار تصريح offline بعد التحقق من توقيع الخادم.
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
