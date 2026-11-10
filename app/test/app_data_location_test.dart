@@ -116,5 +116,24 @@ void main() {
         columns: ['value'], where: 'key = ?', whereArgs: ['imported_font_path']);
     expect(fonts.single['value'], p.join(target.path, 'fonts', 'homi_imported.ttf'));
     expect(await AppDataLocation.currentPath(), target.path);
+
+    // محاكاة إعادة تثبيت النظام وفقدان ملف إعداد الموقع مع بقاء القسم الآخر.
+    await GroceryDatabase.closeForMaintenance();
+    await supportDirectory.delete(recursive: true);
+    await supportDirectory.create();
+    final freshDatabase = await GroceryDatabase.open();
+    expect(await freshDatabase.query('products'), isEmpty);
+
+    final reconnected = await AppDataLocation.connectExisting(
+      currentDatabase: freshDatabase,
+      closeDatabase: GroceryDatabase.closeForMaintenance,
+      reopenDatabase: GroceryDatabase.open,
+      selectedParentPath: targetParent.path,
+    );
+    expect(reconnected.path, target.path);
+    final recoveredDatabase = await GroceryDatabase.open();
+    final recoveredProducts = await recoveredDatabase.query('products');
+    expect(recoveredProducts, hasLength(1));
+    expect(recoveredProducts.single['name'], 'صنف النقل');
   });
 }
