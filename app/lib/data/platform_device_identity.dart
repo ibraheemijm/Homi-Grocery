@@ -64,6 +64,8 @@ class PlatformDeviceIdentity {
   ];
 
   final Ed25519 _algorithm = Ed25519();
+  _StoredDeviceIdentity? _cachedIdentity;
+  Future<_StoredDeviceIdentity>? _openingIdentity;
 
   Future<PlatformDeviceIdentityData> loadOrCreate() async {
     if (!_isAndroid()) {
@@ -102,6 +104,22 @@ class PlatformDeviceIdentity {
   }
 
   Future<_StoredDeviceIdentity> _readOrCreate() async {
+    final cached = _cachedIdentity;
+    if (cached != null) return cached;
+    final pending = _openingIdentity;
+    if (pending != null) return pending;
+    final opening = _loadStoredOrCreate();
+    _openingIdentity = opening;
+    try {
+      final identity = await opening;
+      _cachedIdentity = identity;
+      return identity;
+    } finally {
+      if (identical(_openingIdentity, opening)) _openingIdentity = null;
+    }
+  }
+
+  Future<_StoredDeviceIdentity> _loadStoredOrCreate() async {
     final record = await _store.read(_identityRecordName);
     if (record == null || record.isEmpty) {
       final keyPair = await _algorithm.newKeyPair();
