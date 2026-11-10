@@ -144,7 +144,7 @@ class PlatformApiClient {
   Uri resolveApiUri(String path) {
     if (!path.startsWith(apiPrefix) ||
         path.contains('..') ||
-        path.contains('\\\\') ||
+        path.contains('\\') ||
         path.contains('?') ||
         path.contains('#')) {
       throw const PlatformApiConfigurationException(
