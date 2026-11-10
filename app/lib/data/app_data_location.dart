@@ -110,6 +110,7 @@ class AppDataLocation {
       } on Object {
         // يبقى المصدر الأصلي دون حذف ويمكن استعادته يدويًا.
       }
+      if (await target.exists()) await target.delete(recursive: true);
       rethrow;
     }
   }
@@ -171,9 +172,19 @@ class AppDataLocation {
   static Future<void> _writeConfig(String path) async {
     final file = await _config();
     final temp = File(file.path + '.tmp');
+    final backup = File(file.path + '.previous');
     await temp.writeAsString(path, flush: true);
-    if (await file.exists()) await file.delete();
-    await temp.rename(file.path);
+    if (await backup.exists()) await backup.delete();
+    if (await file.exists()) await file.rename(backup.path);
+    try {
+      await temp.rename(file.path);
+      if (await backup.exists()) await backup.delete();
+    } on Object {
+      if (await backup.exists() && !await file.exists()) {
+        await backup.rename(file.path);
+      }
+      rethrow;
+    }
   }
 
   static Future<void> _restoreConfig(String source) async {
