@@ -40,6 +40,60 @@ class AppDataLocation {
   static Future<String> currentPath() async =>
       (await resolveDataDirectory()).absolute.path;
 
+  /// يربط نسخة بيانات موجودة بعد إعادة تثبيت النظام أو فقدان إعداد الموقع.
+  /// لا ينسخ قاعدة البيانات الافتراضية فوق النسخة الموجودة ولا يحذف أي ملف.
+  static Future<Directory> connectExisting({
+    required Database currentDatabase,
+    required Future<void> Function() closeDatabase,
+    required Future<Database> Function() reopenDatabase,
+    required String selectedParentPath,
+  }) async {
+    if (!Platform.isWindows && !Platform.isLinux) {
+      throw UnsupportedError('ربط مجلد بيانات موجود متاح حاليًا على Windows وLinux فقط.');
+    }
+    final parent = Directory(selectedParentPath.trim());
+    if (!p.isAbsolute(parent.path) || !await parent.exists()) {
+      throw FileSystemException('اختر المجلد الأب الذي يحتوي بيانات Homi.', parent.path);
+    }
+    final target = Directory(p.join(parent.absolute.path, _managedFolder));
+    final dbPath = p.join(target.path, _databaseName);
+    if (!await target.exists() || !await File(dbPath).exists()) {
+      throw FileSystemException('لم يتم العثور على قاعدة بيانات Homi في المجلد المحدد.', dbPath);
+    }
+
+    Database? candidate;
+    try {
+      candidate = await databaseFactory.openDatabase(dbPath);
+      await candidate.execute('PRAGMA foreign_keys = ON');
+      await _verify(candidate);
+    } finally {
+      if (candidate != null && candidate.isOpen) await candidate.close();
+    }
+
+    final previousPath = await currentPath();
+    final targetPath = p.normalize(target.absolute.path);
+    if (p.equals(p.normalize(previousPath), targetPath)) return target;
+
+    await currentDatabase.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    await closeDatabase();
+    var committed = false;
+    try {
+      await _writeConfig(targetPath);
+      committed = true;
+      final reopened = await reopenDatabase();
+      await _verify(reopened);
+      return target;
+    } on Object {
+      if (committed) await _restoreConfig(previousPath);
+      try {
+        await reopenDatabase();
+      } on Object {
+        // تبقى النسخة الموجودة سليمة ولا نحذفها عند تعذر إعادة الفتح.
+      }
+      rethrow;
+    }
+  }
+
   /// ينسخ قاعدة البيانات وملفات الأصناف والخطوط والنسخ الاحتياطية.
   /// يبقي المصدر كما هو بعد النقل ليكون نسخة رجوع آمنة.
   static Future<Directory> migrate({
