@@ -1,0 +1,172 @@
+name: Flutter Android checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/flutter-foundation]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: flutter-android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate Android platform
+        run: flutter create --platforms=android .
+      - name: Configure Android biometric authentication
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # local_auth يحتاج إلى FragmentActivity على Android.
+          activity_files = list(Path("android/app/src/main").rglob("MainActivity.kt"))
+          if not activity_files:
+              raise SystemExit("MainActivity.kt was not generated")
+          activity = activity_files[0]
+          source = activity.read_text()
+          source = source.replace(
+              "import io.flutter.embedding.android.FlutterActivity",
+              "import io.flutter.embedding.android.FlutterFragmentActivity",
+          )
+          source = re.sub(
+              r"class MainActivity\s*:\s*FlutterActivity\(\)",
+              "class MainActivity : FlutterFragmentActivity()",
+              source,
+          )
+          if "FlutterFragmentActivity" not in source:
+              raise SystemExit("Could not configure MainActivity for biometric authentication")
+          activity.write_text(source)
+
+          # التصريح صراحةً بالكاميرا والمصادقة الحيوية في Manifest الخاص بالتطبيق.
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          xml = manifest.read_text()
+          manifest_tag = re.search(r"<manifest\b[^>]*>", xml, flags=re.S)
+          if manifest_tag is None:
+              raise SystemExit("Could not locate the manifest root element")
+          permissions = [
+              "android.permission.CAMERA",
+              "android.permission.USE_BIOMETRIC",
+              "android.permission.USE_FINGERPRINT",
+          ]
+          missing_permissions = [
+              permission for permission in permissions
+              if f'android:name="{permission}"' not in xml
+          ]
+          if missing_permissions:
+              position = manifest_tag.end()
+              permission_xml = "".join(
+                  f'\n    <uses-permission android:name="{permission}" />'
+                  for permission in missing_permissions
+              )
+              xml = xml[:position] + permission_xml + xml[position:]
+
+          # الكاميرا اختيارية على مستوى الجهاز؛ يفحص التطبيق توفرها عند فتح الماسح.
+          if "android.hardware.camera" not in xml:
+              closing_tag = re.search(r"</manifest>", xml)
+              if closing_tag is None:
+                  raise SystemExit("Could not locate the manifest closing element")
+              xml = (
+                  xml[:closing_tag.start()]
+                  + '\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n'
+                  + xml[closing_tag.start():]
+              )
+
+          # ضمان تسريع عرض معاينة الكاميرا داخل نشاط Flutter.
+          activity_tag = re.search(r"<activity\b[^>]*>", xml, flags=re.S)
+          if activity_tag is None:
+              raise SystemExit("Could not locate the Android activity element")
+          activity_xml = activity_tag.group(0)
+          if "android:hardwareAccelerated" not in activity_xml:
+              activity_xml = activity_xml[:-1] + ' android:hardwareAccelerated="true">'
+              xml = xml[:activity_tag.start()] + activity_xml + xml[activity_tag.end():]
+          elif 'android:hardwareAccelerated="false"' in activity_xml:
+              activity_xml = activity_xml.replace(
+                  'android:hardwareAccelerated="false"',
+                  'android:hardwareAccelerated="true"',
+              )
+              xml = xml[:activity_tag.start()] + activity_xml + xml[activity_tag.end():]
+
+          manifest.write_text(xml)
+
+          # تحقق من أن التصاريح أُدرجت فعلًا قبل متابعة البناء.
+          for permission in permissions:
+              if f'android:name="{permission}"' not in xml:
+                  raise SystemExit(f"Missing Android permission: {permission}")
+
+          # الحد الأدنى المطلوب من local_auth على Android.
+          for gradle in Path("android/app").glob("build.gradle*"):
+              source = gradle.read_text()
+              source = re.sub(r"minSdk\s*=\s*flutter.minSdkVersion", "minSdk = 23", source)
+              source = re.sub(r"minSdkVersion\s+flutter.minSdkVersion", "minSdkVersion 23", source)
+
+              # عزل نسخة الاختبار Release عن نسخة Debug حتى لا تتطلب إزالة التطبيق الحالي.
+              if gradle.name.endswith(".kts"):
+                  release_block = re.search(r"(buildTypes\s*\{\s*release\s*\{)", source)
+                  if release_block is None:
+                      raise SystemExit("Could not locate the Android release build type")
+                  if "applicationIdSuffix" not in source[release_block.start():]:
+                      insert_at = release_block.end()
+                      source = source[:insert_at] + '\n            applicationIdSuffix = ".stabletest"' + source[insert_at:]
+                  if "signingConfig" not in source[release_block.start():]:
+                      insert_at = release_block.end()
+                      source = source[:insert_at] + '\n            signingConfig = signingConfigs.getByName("debug")' + source[insert_at:]
+              else:
+                  release_block = re.search(r"(buildTypes\s*\{\s*release\s*\{)", source)
+                  if release_block is None:
+                      raise SystemExit("Could not locate the Android release build type")
+                  insert_at = release_block.end()
+                  if "applicationIdSuffix" not in source[release_block.start():]:
+                      source = source[:insert_at] + '\n            applicationIdSuffix ".stabletest"' + source[insert_at:]
+                  if "signingConfig" not in source[release_block.start():]:
+                      source = source[:insert_at] + '\n            signingConfig signingConfigs.debug' + source[insert_at:]
+              gradle.write_text(source)
+          PY
+      - name: Analyze
+        run: flutter analyze
+      - name: Install system SQLite for FFI tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      - name: Run tests
+        run: flutter test
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: homi-grocery-android-debug
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Build Android release candidate APK
+        run: flutter build apk --release --build-name=1.0.0-rc.1 --build-number=1
+      - name: Upload Android release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: homi-grocery-android-release-candidate
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
