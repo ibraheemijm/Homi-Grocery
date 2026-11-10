@@ -55,6 +55,30 @@ try {
     throw "Invalid hash attempt modified the installation."
   }
 
+  # رفض ZIP يحاول الكتابة خارج مجلد التثبيت (Zip Slip).
+  $slipRoot = Join-Path $root "zip-slip"
+  New-Item -ItemType Directory -Path $slipRoot | Out-Null
+  $slipInstall = Join-Path $slipRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $slipInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $slipInstall "keep.txt") -Value "safe"
+  $slipZip = Join-Path $slipRoot "malicious.zip"
+  $archive = [System.IO.Compression.ZipFile]::Open($slipZip, [System.IO.Compression.ZipArchiveMode]::Create)
+  try {
+    $entry = $archive.CreateEntry("../escaped.txt")
+    $entryStream = $entry.Open()
+    try {
+      $writer = [System.IO.StreamWriter]::new($entryStream)
+      try { $writer.Write("outside") } finally { $writer.Dispose() }
+    } finally { $entryStream.Dispose() }
+  } finally { $archive.Dispose() }
+  $slipHash = (Get-FileHash -LiteralPath $slipZip -Algorithm SHA256).Hash.ToLowerInvariant()
+  & $UpdaterExe --pid 999999 --install-dir $slipInstall --package $slipZip --sha256 $slipHash
+  if ($LASTEXITCODE -eq 0) { throw "Updater accepted a path traversal archive." }
+  if (Test-Path (Join-Path $slipRoot "escaped.txt")) { throw "ZIP traversal wrote outside the staging directory." }
+  if ((Get-Content -LiteralPath (Join-Path $slipInstall "keep.txt") -Raw) -ne "safe") {
+    throw "ZIP traversal attempt modified the installation."
+  }
+
   Write-Host "Windows updater smoke tests passed."
 }
 finally {
