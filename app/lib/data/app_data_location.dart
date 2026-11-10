@@ -84,7 +84,10 @@ class AppDataLocation {
       await _verify(reopened);
       return target;
     } on Object {
-      if (committed) await _restoreConfig(previousPath);
+      if (committed) {
+        await closeDatabase();
+        await _restoreConfig(previousPath);
+      }
       try {
         await reopenDatabase();
       } on Object {
@@ -158,7 +161,10 @@ class AppDataLocation {
       await _verify(reopened);
       return target;
     } on Object {
-      if (committed) await _restoreConfig(sourcePath);
+      if (committed) {
+        await closeDatabase();
+        await _restoreConfig(sourcePath);
+      }
       try {
         await reopenDatabase();
       } on Object {
