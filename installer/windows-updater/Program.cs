@@ -37,7 +37,7 @@ internal static class Program
                 throw new ArgumentException("Duplicate updater argument.");
         }
 
-        foreach (var required in new[] { "pid", "install-dir", "package" })
+        foreach (var required in new[] { "pid", "install-dir", "package", "sha256" })
             if (!values.ContainsKey(required))
                 throw new ArgumentException($"Missing argument: {required}");
 
@@ -59,16 +59,29 @@ internal static class Program
 
         if (!File.Exists(packagePath))
             throw new FileNotFoundException("Update package was not found.", packagePath);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(options["sha256"], "^[0-9a-fA-F]{64}$"))
+            throw new ArgumentException("Invalid package SHA-256.");
+        using (var stream = File.OpenRead(packagePath))
+        {
+            var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+            if (!digest.Equals(options["sha256"], StringComparison.OrdinalIgnoreCase))
+                throw new SecurityException("Update package SHA-256 verification failed.");
+        }
 
         var archiveInfo = new FileInfo(packagePath);
         if (archiveInfo.Length is <= 0 or > MaxArchiveBytes)
             throw new InvalidDataException("Update archive size is invalid.");
 
-        using (var process = Process.GetProcessById(processId))
+        try
         {
-            if (process.ProcessName.Equals("HomiUpdater", StringComparison.OrdinalIgnoreCase))
-                throw new SecurityException("Updater cannot wait for itself.");
+            using var process = Process.GetProcessById(processId);
+            if (!process.ProcessName.Equals("homi_grocery", StringComparison.OrdinalIgnoreCase))
+                throw new SecurityException("The supplied process ID is not Homi Grocery.");
             process.WaitForExit();
+        }
+        catch (ArgumentException)
+        {
+            // التطبيق قد يكون أغلق قبل بدء المساعد؛ لا توجد عملية لانتظارها.
         }
 
         var parent = Directory.GetParent(installDir)?.FullName
