@@ -1,8 +1,11 @@
 name: Flutter Windows checks
 
 on:
-  # تشغيل Windows يدويًا فقط؛ تعديلات Android لا تطلق بناء Windows تلقائيًا.
   workflow_dispatch:
+  push:
+    branches: [feature/windows-ota-foundation]
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: flutter-windows-${{ github.workflow }}-${{ github.ref }}
@@ -33,10 +36,17 @@ jobs:
         run: flutter test
       - name: Build Windows desktop
         run: flutter build windows --release
-      - name: Upload Windows bundle
+      - name: Package Windows update bundle
+        shell: pwsh
+        run: |
+          $bundle = Resolve-Path "build/windows/x64/runner/Release"
+          Compress-Archive -Path "$($bundle.Path)/*" -DestinationPath "build/windows/homi-grocery-windows-x64.zip" -Force
+      - name: Upload Windows bundle and update package
         uses: actions/upload-artifact@v4
         with:
           name: homi-grocery-windows-x64
-          path: app/build/windows/x64/runner/Release/
+          path: |
+            app/build/windows/x64/runner/Release/
+            app/build/windows/homi-grocery-windows-x64.zip
           if-no-files-found: error
           retention-days: 14
