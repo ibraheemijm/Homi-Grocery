@@ -45,10 +45,15 @@ jobs:
           flutter config --enable-linux-desktop
           CXXFLAGS="-Wno-error=deprecated-literal-operator" flutter build linux
 
+      - name: Package Linux release bundle
+        run: |
+          mkdir -p build/linux/packages
+          tar -czf build/linux/packages/homi-grocery-linux-x64.tar.gz -C build/linux/x64/release bundle
+          test -s build/linux/packages/homi-grocery-linux-x64.tar.gz
       - name: Upload Linux desktop bundle
         uses: actions/upload-artifact@v4
         with:
           name: homi-grocery-linux-x64
-          path: app/build/linux/x64/release/bundle/
+          path: |\n            app/build/linux/x64/release/bundle/\n            app/build/linux/packages/homi-grocery-linux-x64.tar.gz
           if-no-files-found: error
           retention-days: 14
