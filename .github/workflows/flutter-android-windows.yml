@@ -39,7 +39,7 @@ jobs:
           $definition = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
           if (-not $source.Contains($definition)) {
             # Flutter قد يولد اسم المشروع بصيغة مختلفة؛ ندرج التعريف بعد cmake_minimum_required بدل الاعتماد على اسم المشروع.
-            $match = [regex]::Match($source, '(?m)^cmake_minimum_required\\([^\\r\\n]*\\)\\s*')
+            $match = [regex]::Match($source, '(?m)^cmake_minimum_required\([^\r\n]*\)\s*')
             if (-not $match.Success) {
               throw "لم يتم العثور على cmake_minimum_required في ملف Windows CMake."
             }
