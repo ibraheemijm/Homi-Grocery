@@ -122,7 +122,7 @@ class PlatformAccountService {
 
   Future<Map<String, Object?>> confirmEmail(String token) {
     return _api.postJson(
-      '/api/v1/auth/verify-email',
+      '/api/v1/auth/email-verifications/confirm',
       body: {'token': token},
     );
   }
