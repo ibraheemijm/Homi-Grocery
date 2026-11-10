@@ -59,6 +59,16 @@ jobs:
           if (-not (Test-Path "build/windows/updater/HomiUpdater.exe")) {
             throw "لم يتم إنشاء مساعد تحديث Windows."
           }
+      - name: Build Windows updater test application
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater/tests/FakeHomiApp.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/fake-app
+      - name: Test Windows updater replacement and integrity checks
+        shell: pwsh
+        run: |
+          $updaterPath = (Resolve-Path "build/windows/updater/HomiUpdater.exe").Path
+          $fakeAppPath = (Resolve-Path "build/windows/fake-app").Path
+          & ../installer/windows-updater/tests/UpdaterSmokeTest.ps1 -UpdaterExe $updaterPath -FakeAppDir $fakeAppPath
       - name: Package Windows update bundle
         shell: pwsh
         run: |
