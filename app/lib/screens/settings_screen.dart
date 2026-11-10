@@ -593,7 +593,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                             const SizedBox(height: 8),
                             const Text(
-                              'يمكنك نقل قاعدة البيانات وصور الأصناف والخطوط والنسخ الاحتياطية إلى مجلد في قسم آخر. سيحتفظ التطبيق بالنسخة القديمة ولن يحذفها.',
+                              'انقل قاعدة البيانات وصور الأصناف والخطوط المستوردة والنسخ الاحتياطية إلى قسم مختلف عن قسم النظام. سيبقى المجلد القديم نسخة قبل النقل فقط ولن يستقبل العمليات الجديدة. لحماية أقوى، استخدم قرصًا ماديًا آخر للنسخ الاحتياطية.',
                             ),
                             const SizedBox(height: 10),
                             SelectableText(_dataLocationPath ?? 'جارٍ تحديد الموقع...'),
