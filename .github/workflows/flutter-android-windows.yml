@@ -61,11 +61,8 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
-          $iscc = "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            throw "لم يتم العثور على مترجم Inno Setup بعد التثبيت."
-          }
-          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\\s*(\\S+)'
+          $iscc = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)'
           if (-not $versionLine) {
             throw "تعذر قراءة إصدار التطبيق من pubspec.yaml."
           }
