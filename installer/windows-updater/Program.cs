@@ -57,6 +57,14 @@ internal static class Program
             !Directory.Exists(installDir))
             throw new SecurityException("The installation directory is unsafe or missing.");
 
+        var installInfo = new DirectoryInfo(installDir);
+        if ((installInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new SecurityException("The installation directory cannot be a symbolic link or junction.");
+
+        var installPrefix = installDir + Path.DirectorySeparatorChar;
+        if (packagePath.StartsWith(installPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new SecurityException("The update package must be outside the installation directory.");
+
         if (!File.Exists(packagePath))
             throw new FileNotFoundException("Update package was not found.", packagePath);
         if (!System.Text.RegularExpressions.Regex.IsMatch(options["sha256"], "^[0-9a-fA-F]{64}$"))
