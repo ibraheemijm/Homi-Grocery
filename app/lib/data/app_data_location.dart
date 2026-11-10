@@ -171,8 +171,8 @@ class AppDataLocation {
 
   static Future<void> _writeConfig(String path) async {
     final file = await _config();
-    final temp = File(file.path + '.tmp');
-    final backup = File(file.path + '.previous');
+    final temp = File('${file.path}.tmp');
+    final backup = File('${file.path}.previous');
     await temp.writeAsString(path, flush: true);
     if (await backup.exists()) await backup.delete();
     if (await file.exists()) await file.rename(backup.path);
