@@ -9,6 +9,10 @@
   #define SourceDir "..\..\app\build\windows\x64\runner\Release"
 #endif
 
+#ifndef UpdaterPath
+  #define UpdaterPath "..\\..\\app\\build\\windows\\updater\\HomiUpdater.exe"
+#endif
+
 [Setup]
 AppId={{B86F2F48-DB42-4B7B-A4B9-8E4E9E31C6D2}
 AppName=Homi Grocery
