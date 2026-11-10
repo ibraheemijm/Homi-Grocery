@@ -10,7 +10,7 @@
 #endif
 
 #ifndef UpdaterPath
-  #define UpdaterPath "..\\..\\app\\build\\windows\\updater\\HomiUpdater.exe"
+  #define UpdaterPath "..\..\app\build\windows\updater\HomiUpdater.exe"
 #endif
 
 [Setup]
@@ -42,6 +42,8 @@ Name: "desktopicon"; Description: "إنشاء اختصار على سطح الم�
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; يُثبت المساعد خارج مجلد التطبيق حتى يمكنه استبدال مجلد التطبيق بعد إغلاقه.
+Source: "{#UpdaterPath}"; DestDir: "{commonappdata}\Homi Grocery\Updater"; DestName: "HomiUpdater.exe"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Homi Grocery"; Filename: "{app}\homi_grocery.exe"; WorkingDir: "{app}"
