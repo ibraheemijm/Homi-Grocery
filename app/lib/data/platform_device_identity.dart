@@ -1,4 +1,4 @@
-// هوية جهاز مستقرة ومفتاح Ed25519 محفوظان في التخزين الآمن على الجهاز.
+// هوية جهاز مستقرة ومفتاح Ed25519 محفوظان في سجل واحد داخل التخزين الآمن.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -41,14 +41,23 @@ class PlatformDeviceIdentityData {
   String get publicKeyBase64 => base64Encode(publicKeyDer);
 }
 
+class _StoredDeviceIdentity {
+  const _StoredDeviceIdentity({
+    required this.deviceKey,
+    required this.privateSeed,
+  });
+
+  final String deviceKey;
+  final List<int> privateSeed;
+}
+
 class PlatformDeviceIdentity {
   PlatformDeviceIdentity(this._store, {bool Function()? isAndroid})
       : _isAndroid = isAndroid ?? (() => Platform.isAndroid);
 
   final PlatformSecretStore _store;
   final bool Function() _isAndroid;
-  static const _deviceKeyName = 'homi_platform_device_key';
-  static const _privateSeedName = 'homi_platform_ed25519_seed';
+  static const _identityRecordName = 'homi_platform_device_identity_v1';
   static const _spkiPrefix = <int>[
     0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
     0x70, 0x03, 0x21, 0x00,
@@ -60,37 +69,15 @@ class PlatformDeviceIdentity {
     if (!_isAndroid()) {
       throw UnsupportedError('ربط الترخيص متاح على Android في هذه المرحلة فقط.');
     }
-    var deviceKey = await _store.read(_deviceKeyName);
-    var seedText = await _store.read(_privateSeedName);
-
-    if (deviceKey == null || deviceKey.isEmpty) {
-      deviceKey = _createUuid();
-      await _store.write(_deviceKeyName, deviceKey);
-    }
-
-    if (seedText == null || seedText.isEmpty) {
-      final generated = await _algorithm.newKeyPair();
-      final extracted = await generated.extract();
-      final seed = extracted.bytes;
-      if (seed.length != 32) {
-        throw StateError('Ed25519 private seed must contain exactly 32 bytes.');
-      }
-      seedText = base64Encode(seed);
-      await _store.write(_privateSeedName, seedText);
-    }
-
-    final seed = base64Decode(seedText);
-    if (seed.length != 32) {
-      throw StateError('The stored Ed25519 private seed is invalid.');
-    }
-    final keyPair = await _algorithm.newKeyPairFromSeed(seed);
+    final stored = await _readOrCreate();
+    final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
     final publicKey = await keyPair.extractPublicKey();
     if (publicKey.bytes.length != 32) {
       throw StateError('Ed25519 public key must contain exactly 32 bytes.');
     }
 
     return PlatformDeviceIdentityData(
-      deviceKey: deviceKey,
+      deviceKey: stored.deviceKey,
       publicKeyDer: <int>[..._spkiPrefix, ...publicKey.bytes],
       platform: 'android',
       // كتالوج Homi Grocery يسجل Android بمعمارية universal حاليًا.
@@ -99,23 +86,60 @@ class PlatformDeviceIdentity {
   }
 
   Future<String> signNonce(String nonceBase64Url) async {
+    if (!_isAndroid()) {
+      throw UnsupportedError('توقيع تحديات الترخيص متاح على Android فقط.');
+    }
     final nonce = base64Url.decode(base64Url.normalize(nonceBase64Url));
     if (nonce.length != 32 ||
         base64UrlEncode(nonce).replaceAll('=', '') != nonceBase64Url) {
       throw const FormatException('Device challenge nonce is invalid.');
     }
 
-    final seedText = await _store.read(_privateSeedName);
-    if (seedText == null || seedText.isEmpty) {
-      throw StateError('The device signing key has not been initialized.');
-    }
-    final seed = base64Decode(seedText);
-    if (seed.length != 32) {
-      throw StateError('The stored Ed25519 private seed is invalid.');
-    }
-    final keyPair = await _algorithm.newKeyPairFromSeed(seed);
+    final stored = await _readOrCreate();
+    final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
     final signature = await _algorithm.sign(nonce, keyPair: keyPair);
     return base64UrlEncode(signature.bytes).replaceAll('=', '');
+  }
+
+  Future<_StoredDeviceIdentity> _readOrCreate() async {
+    final record = await _store.read(_identityRecordName);
+    if (record == null || record.isEmpty) {
+      final keyPair = await _algorithm.newKeyPair();
+      final extracted = await keyPair.extract();
+      final seed = extracted.bytes;
+      if (seed.length != 32) {
+        throw StateError('Ed25519 private seed must contain exactly 32 bytes.');
+      }
+      final identity = _StoredDeviceIdentity(
+        deviceKey: _createUuid(),
+        privateSeed: seed,
+      );
+      // سجل واحد يمنع ربط معرف جهاز بمفتاح جديد بعد كتابة جزئية.
+      await _store.write(_identityRecordName, jsonEncode({
+        'device_key': identity.deviceKey,
+        'private_seed': base64Encode(identity.privateSeed),
+      }));
+      return identity;
+    }
+
+    try {
+      final decoded = jsonDecode(record);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['device_key'] is! String ||
+          decoded['private_seed'] is! String) {
+        throw const FormatException();
+      }
+      final deviceKey = decoded['device_key'] as String;
+      final seed = base64Decode(decoded['private_seed'] as String);
+      if (!RegExp(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      ).hasMatch(deviceKey) || seed.length != 32) {
+        throw const FormatException();
+      }
+      return _StoredDeviceIdentity(deviceKey: deviceKey, privateSeed: seed);
+    } on FormatException {
+      throw StateError('سجل هوية الجهاز تالف؛ أوقف الربط بدل إنشاء هوية مختلفة بصمت.');
+    }
   }
 
   String _createUuid() {
