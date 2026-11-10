@@ -69,6 +69,22 @@ void main() {
       'value': font.path,
     });
 
+    final blockedParent = Directory(p.join(targetParent.path, 'blocked'));
+    final blockedTarget = Directory(p.join(blockedParent.path, 'Homi Grocery Data'));
+    await blockedTarget.create(recursive: true);
+    await File(p.join(blockedTarget.path, 'keep.txt')).writeAsString('existing');
+    await expectLater(
+      AppDataLocation.migrate(
+        currentDatabase: db,
+        closeDatabase: GroceryDatabase.closeForMaintenance,
+        reopenDatabase: GroceryDatabase.open,
+        selectedParentPath: blockedParent.path,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(db.isOpen, isTrue, reason: 'يجب ألا يغلق التطبيق قاعدة البيانات قبل قبول المجلد الهدف.');
+    await blockedParent.delete(recursive: true);
+
     final target = await AppDataLocation.migrate(
       currentDatabase: db,
       closeDatabase: GroceryDatabase.closeForMaintenance,
@@ -82,6 +98,16 @@ void main() {
     expect(await File(p.join(target.path, 'fonts', 'homi_imported.ttf')).exists(), isTrue);
     expect(await File(p.join(target.path, 'backups', 'homi-grocery-test.db')).exists(), isTrue);
     expect(await image.exists(), isTrue, reason: 'يجب الاحتفاظ بالمصدر القديم كنسخة رجوع.');
+
+    await GroceryDatabase.closeForMaintenance();
+    final unavailable = Directory('${target.path}.offline');
+    await target.rename(unavailable.path);
+    await expectLater(
+      AppDataLocation.resolveDataDirectory(),
+      throwsA(isA<FileSystemException>()),
+      reason: 'يجب ألا ينشئ التطبيق قاعدة بيانات فارغة عند فقدان القسم المحدد.',
+    );
+    await unavailable.rename(target.path);
 
     final reopened = await GroceryDatabase.open();
     final products = await reopened.query('products', columns: ['image_path']);
