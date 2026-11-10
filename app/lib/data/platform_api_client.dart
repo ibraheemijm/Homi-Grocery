@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 class PlatformApiConfigurationException implements Exception {
   const PlatformApiConfigurationException(this.message);
   final String message;
@@ -122,7 +124,8 @@ class PlatformApiClient {
   }
 
   static Uri _validateBaseUri(Uri uri) {
-    final localHost = const {'localhost', '127.0.0.1', '10.0.2.2'}.contains(uri.host);
+    final localHost = kDebugMode &&
+        const {'localhost', '127.0.0.1', '10.0.2.2'}.contains(uri.host);
     if (!uri.hasAuthority ||
         uri.host.isEmpty ||
         (uri.scheme != 'https' && !(uri.scheme == 'http' && localHost)) ||
