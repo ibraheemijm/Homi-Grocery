@@ -37,10 +37,17 @@ void main() {
       0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
     ]);
     expect(store.values.keys, containsAll([
-      'homi_platform_device_key',
-      'homi_platform_ed25519_seed',
+      'homi_platform_device_identity_v1',
     ]));
     expect(store.values.values, isNot(contains(first.publicKeyBase64)));
+  });
+
+  test('يرفض سجل هوية تالفًا بدل إنشاء مفتاح جديد لنفس الجهاز', () async {
+    final store = MemorySecretStore();
+    store.values['homi_platform_device_identity_v1'] = '{"device_key":"bad","private_seed":"broken"}';
+    final identity = PlatformDeviceIdentity(store, isAndroid: () => true);
+
+    await expectLater(identity.loadOrCreate(), throwsA(isA<StateError>()));
   });
 
   test('يوقع nonce بالمفتاح الخاص ولا يرسل المفتاح الخاص', () async {
