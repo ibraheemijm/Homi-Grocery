@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart' as crypto;
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +27,28 @@ class QueueTransport implements PlatformHttpTransport {
 
   @override
   void close() {}
+}
+
+class FakeUpdateDownloader implements PlatformUpdateDownloader {
+  FakeUpdateDownloader(this.bytes);
+  final List<int> bytes;
+  Uri? uri;
+  String? token;
+  int? expectedSize;
+
+  @override
+  Future<File> download({
+    required Uri uri,
+    required String accessToken,
+    required File destination,
+    required int expectedSizeBytes,
+  }) async {
+    this.uri = uri;
+    token = accessToken;
+    expectedSize = expectedSizeBytes;
+    await destination.writeAsBytes(bytes, flush: true);
+    return destination;
+  }
 }
 
 PlatformHttpResponse success(Map<String, Object?> data) => PlatformHttpResponse(
@@ -199,4 +224,98 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+  test('ينزل حزمة OTA ويتحقق من الحجم وبصمة SHA-256 قبل إرجاعها', () async {
+    final bytes = utf8.encode('Homi signed update package');
+    final transport = QueueTransport([]);
+    final service = PlatformUpdateService(PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: transport,
+    ));
+    final downloader = FakeUpdateDownloader(bytes);
+    final manifest = VerifiedPlatformUpdateManifest(
+      publicationId: 'publication-2',
+      keyId: 'ota-key',
+      payload: const [],
+      signature: const [],
+      downloadPath: '/api/v1/updates/publication-2/download',
+      version: '1.0.3',
+      versionCode: 103,
+      fileName: 'homi-update.zip',
+      sizeBytes: bytes.length,
+      sha256: crypto.sha256.convert(bytes).toString(),
+    );
+
+    final file = await service.downloadVerifiedPackage(
+      accessToken: 'access-token',
+      manifest: manifest,
+      downloader: downloader,
+    );
+    addTearDown(() async {
+      if (await file.parent.exists()) await file.parent.delete(recursive: true);
+    });
+
+    expect(await file.readAsBytes(), bytes);
+    expect(downloader.uri!.origin, 'https://platform.example.test');
+    expect(downloader.uri!.path, manifest.downloadPath);
+    expect(downloader.token, 'access-token');
+    expect(downloader.expectedSize, bytes.length);
+  });
+
+  test('يحذف الحزمة إذا لم تطابق SHA-256 المعلن', () async {
+    final bytes = utf8.encode('tampered update package');
+    final service = PlatformUpdateService(PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: QueueTransport([]),
+    ));
+    final manifest = VerifiedPlatformUpdateManifest(
+      publicationId: 'publication-3',
+      keyId: 'ota-key',
+      payload: const [],
+      signature: const [],
+      downloadPath: '/api/v1/updates/publication-3/download',
+      version: '1.0.4',
+      versionCode: 104,
+      fileName: 'homi-update.zip',
+      sizeBytes: bytes.length,
+      sha256: '0' * 64,
+    );
+
+    await expectLater(
+      service.downloadVerifiedPackage(
+        accessToken: 'access-token',
+        manifest: manifest,
+        downloader: FakeUpdateDownloader(bytes),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('يرفض اسم ملف يحتوي مسارًا قبل بدء التنزيل', () async {
+    final service = PlatformUpdateService(PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: QueueTransport([]),
+    ));
+    final manifest = VerifiedPlatformUpdateManifest(
+      publicationId: 'publication-4',
+      keyId: 'ota-key',
+      payload: const [],
+      signature: const [],
+      downloadPath: '/api/v1/updates/publication-4/download',
+      version: '1.0.5',
+      versionCode: 105,
+      fileName: '../homi-update.zip',
+      sizeBytes: 10,
+      sha256: 'a' * 64,
+    );
+
+    await expectLater(
+      service.downloadVerifiedPackage(
+        accessToken: 'access-token',
+        manifest: manifest,
+        downloader: FakeUpdateDownloader(utf8.encode('0123456789')),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
 }
