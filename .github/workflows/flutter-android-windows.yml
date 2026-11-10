@@ -30,6 +30,19 @@ jobs:
         run: flutter pub get
       - name: Generate Windows platform
         run: flutter create --platforms=windows .
+      # يعالج تحذير MSVC STL1011 داخل local_auth_windows مع Visual Studio 2026.
+      - name: Apply Windows MSVC compatibility definition
+        shell: pwsh
+        run: |
+          $cmake = "windows/CMakeLists.txt"
+          $source = Get-Content $cmake -Raw
+          $marker = "project(runner LANGUAGES CXX)"
+          if (-not $source.Contains($marker)) { throw "لم يتم العثور على نقطة إدراج تعريف توافق MSVC في CMakeLists.txt" }
+          if (-not $source.Contains("_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")) {
+            $replacement = $marker + "`r`nadd_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+            $source = $source.Replace($marker, $replacement)
+            Set-Content -Path $cmake -Value $source -NoNewline
+          }
       - name: Analyze
         run: flutter analyze
       - name: Run tests
