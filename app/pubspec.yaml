@@ -1,5 +1,5 @@
 name: homi_grocery
-description: Homi Grocery - Arabic-first offline grocery management for Linux and Android.
+description: Homi Grocery - Arabic-first offline grocery management for Android, Linux and Windows.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # مكتبات قاعدة SQLite المحلية لدعم Linux وAndroid.
+  # مكتبات قاعدة SQLite المحلية لدعم Linux وAndroid وWindows.
   sqflite: ^2.4.2
   # تثبيت إصدار FFI المتوافق مع sqlite3 v2 لتجنب تنزيل مكتبة أصلية أثناء الاختبارات.
   sqflite_common_ffi: ">=2.3.7 <2.4.0"
@@ -22,7 +22,7 @@ dependencies:
   printing: ^5.14.2
   # تجزئة كلمات المرور محليًا باستخدام HMAC-SHA256.
   crypto: ^3.0.6
-  # مفاتيح Ed25519 الخاصة بالجهاز وتحقق توقيعات الترخيص وتحديثات OTA.
+  # مفاتيح Ed25519 الخاصة بالجهاز وتحقق توقيعات الترخيص وتحديثات OTA على المنصات المدعومة.
   cryptography: ^2.7.0
   # قارئ باركود بالكاميرا على Android.
   mobile_scanner: ^7.5.0
