@@ -315,7 +315,7 @@ internal static class Program
     private static void EnsureRegisteredInstallDirectory(string installDir)
     {
         using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-        using var key = baseKey.OpenSubKey(@"Software\\Homi Grocery", writable: false)
+        using var key = baseKey.OpenSubKey(@"Software\Homi Grocery", writable: false)
             ?? throw new SecurityException("Homi Grocery installation is not registered by the official installer.");
 
         var registeredPath = key.GetValue(
