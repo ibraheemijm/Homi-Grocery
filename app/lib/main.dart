@@ -1389,7 +1389,7 @@ class _NavigationItem {
   final String label;
   final IconData icon;
 }
-).hasMatch(nonce) || !File(marker).isAbsolute) return null;
+).hasMatch(nonce)) return null;
   return {'marker': marker, 'nonce': nonce};
 }
 
