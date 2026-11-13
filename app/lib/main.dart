@@ -93,7 +93,14 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
-          onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null ? null : () async { final marker = File(widget.healthMarkerPath!); final temporary = File('${widget.healthMarkerPath!}.tmp'); await temporary.writeAsString(widget.healthNonce!, flush: true); await temporary.rename(marker.path); },
+          onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
+              ? null
+              : () async {
+                  final marker = File(widget.healthMarkerPath!);
+                  final temporary = File(widget.healthMarkerPath! + '.tmp');
+                  await temporary.writeAsString(widget.healthNonce!, flush: true);
+                  await temporary.rename(marker.path);
+                },
           authenticatedBuilder: (user, shiftId, onLogout) => user.isManager
               ? DashboardScreen(
                   isDark: _themeMode == ThemeMode.dark,
