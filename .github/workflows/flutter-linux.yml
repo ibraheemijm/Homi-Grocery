@@ -5,7 +5,7 @@ on:
   push:
     branches: [main, feature/windows-ota-foundation]
   pull_request:
-    branches: [main]
+    branches: [main, feature/flutter-foundation]
 
 # إلغاء الفحوصات الأقدم عند وصول تعديل أحدث إلى الفرع نفسه.
 concurrency:
