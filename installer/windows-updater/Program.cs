@@ -67,6 +67,12 @@ internal static class Program
 
         if (!File.Exists(packagePath))
             throw new FileNotFoundException("Update package was not found.", packagePath);
+
+        // افحص الحجم قبل قراءة الملف وحساب البصمة لتجنب استهلاك غير محدود للذاكرة أو الوقت.
+        var archiveInfo = new FileInfo(packagePath);
+        if (archiveInfo.Length is <= 0 or > MaxArchiveBytes)
+            throw new InvalidDataException("Update archive size is invalid.");
+
         if (!System.Text.RegularExpressions.Regex.IsMatch(options["sha256"], "^[0-9a-fA-F]{64}$"))
             throw new ArgumentException("Invalid package SHA-256.");
         using (var stream = File.OpenRead(packagePath))
@@ -75,10 +81,6 @@ internal static class Program
             if (!digest.Equals(options["sha256"], StringComparison.OrdinalIgnoreCase))
                 throw new SecurityException("Update package SHA-256 verification failed.");
         }
-
-        var archiveInfo = new FileInfo(packagePath);
-        if (archiveInfo.Length is <= 0 or > MaxArchiveBytes)
-            throw new InvalidDataException("Update archive size is invalid.");
 
         try
         {
@@ -163,15 +165,25 @@ internal static class Program
                 continue;
             }
 
-            expandedBytes = checked(expandedBytes + entry.Length);
-            if (expandedBytes > MaxExpandedBytes)
+            if (entry.Length > MaxExpandedBytes - expandedBytes)
                 throw new InvalidDataException("Expanded update package is too large.");
 
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             using var input = entry.Open();
             using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            input.CopyTo(output);
-            if (output.Length != entry.Length)
+            var buffer = new byte[81920];
+            long entryBytes = 0;
+            int bytesRead;
+            while ((bytesRead = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                entryBytes = checked(entryBytes + bytesRead);
+                expandedBytes = checked(expandedBytes + bytesRead);
+                // لا نعتمد على أحجام ZIP الوصفية وحدها؛ نحد الحجم الفعلي أثناء فك الضغط.
+                if (entryBytes > entry.Length || expandedBytes > MaxExpandedBytes)
+                    throw new InvalidDataException("Expanded update package exceeded its declared or allowed size.");
+                output.Write(buffer, 0, bytesRead);
+            }
+            if (entryBytes != entry.Length)
                 throw new InvalidDataException("Extracted file length does not match the archive.");
         }
     }
