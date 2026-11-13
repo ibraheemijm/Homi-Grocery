@@ -65,6 +65,22 @@ internal static class Program
         values["package"] = Path.GetFullPath(values["package"]);
         values["updater"] = Path.GetFullPath(values["updater"]);
 
+        // لا نرفع صلاحيات ملف يحدده المستدعي؛ استخدم النسخة التي يثبتها المثبت الرسمي فقط.
+        var trustedUpdaterPath = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Homi Grocery",
+            "Updater",
+            "HomiUpdater.exe"));
+        if (!values["updater"].Equals(trustedUpdaterPath, StringComparison.OrdinalIgnoreCase))
+            throw new SecurityException("The updater path does not match the protected ProgramData installation.");
+
+        var updaterDirectory = new DirectoryInfo(Path.GetDirectoryName(trustedUpdaterPath)!);
+        var updaterFile = new FileInfo(trustedUpdaterPath);
+        if (!updaterDirectory.Exists ||
+            (updaterDirectory.Attributes & FileAttributes.ReparsePoint) != 0 ||
+            (updaterFile.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new SecurityException("The installed updater path is missing or redirected.");
+
         if (!Directory.Exists(values["install-dir"]))
             throw new DirectoryNotFoundException("مجلد تثبيت Homi Grocery غير موجود.");
         if (!File.Exists(values["package"]))
