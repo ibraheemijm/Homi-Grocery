@@ -1,6 +1,10 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.IO.Pipes;
 using System.Security;
+using System.Text;
+using System.Text.Json;
 
 namespace HomiUpdater;
 
@@ -11,12 +15,14 @@ internal static class Program
     private const long MaxExpandedBytes = 3L * 1024 * 1024 * 1024;
     private const int AppExitTimeoutMilliseconds = 120_000;
 
-    private static int Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         try
         {
             var options = ParseArgs(args);
             Apply(options);
+            if (options.ContainsKey("pipe-name"))
+                await NotifyLauncherAsync(options["pipe-name"], options["nonce"]);
             Console.WriteLine("Homi Grocery update applied successfully.");
             return 0;
         }
@@ -41,6 +47,21 @@ internal static class Program
         foreach (var required in new[] { "pid", "install-dir", "package", "sha256" })
             if (!values.ContainsKey(required))
                 throw new ArgumentException($"Missing argument: {required}");
+
+        var allowed = new HashSet<string>(
+            ["pid", "install-dir", "package", "sha256", "pipe-name", "nonce"],
+            StringComparer.OrdinalIgnoreCase);
+        if (values.Keys.Any(key => !allowed.Contains(key)))
+            throw new ArgumentException("Unknown updater argument.");
+
+        if (values.ContainsKey("pipe-name") != values.ContainsKey("nonce"))
+            throw new ArgumentException("Launcher pipe name and nonce must be supplied together.");
+        if (values.TryGetValue("pipe-name", out var pipeName) &&
+            !System.Text.RegularExpressions.Regex.IsMatch(pipeName, "^homi-update-[0-9a-f]{32}$"))
+            throw new ArgumentException("Invalid launcher pipe name.");
+        if (values.TryGetValue("nonce", out var nonce) &&
+            !System.Text.RegularExpressions.Regex.IsMatch(nonce, "^[0-9A-F]{64}$"))
+            throw new ArgumentException("Invalid launcher nonce.");
 
         return values;
     }
@@ -142,6 +163,33 @@ internal static class Program
             if (Directory.Exists(stageDir))
                 Directory.Delete(stageDir, recursive: true);
         }
+    }
+
+    private static async Task NotifyLauncherAsync(string pipeName, string nonce)
+    {
+        await using var pipe = new NamedPipeClientStream(
+            ".",
+            pipeName,
+            PipeDirection.InOut,
+            PipeOptions.Asynchronous);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        await pipe.ConnectAsync(timeout.Token);
+
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Version = 1,
+            Type = "installed",
+            Nonce = nonce
+        });
+        if (payload.Length is <= 0 or > 4096)
+            throw new InvalidDataException("Launcher protocol message size is invalid.");
+
+        var header = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
+        await pipe.WriteAsync(header, timeout.Token);
+        await pipe.WriteAsync(payload, timeout.Token);
+        await pipe.FlushAsync(timeout.Token);
     }
 
     private static void ExtractAndValidate(string archivePath, string stageDir)
