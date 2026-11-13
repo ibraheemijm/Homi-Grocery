@@ -50,7 +50,7 @@ Name: "{commonappdata}\\Homi Grocery\\Updater"; Permissions: users-readexec admi
 
 [Registry]
 ; يسجل المثبت المسار الفعلي حتى لا يقبل المساعد المرتفع مسار تثبيت يمرره المستدعي عشوائيًا.
-Root: HKLM64; Subkey: "Software\\Homi Grocery"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletevalue
+Root: HKLM64; Subkey: "Software\Homi Grocery"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletevalue
 
 [Files]
 Source: "{#SourceDir}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
