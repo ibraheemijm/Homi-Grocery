@@ -59,15 +59,18 @@ function Invoke-UpdaterDecisionTest(
     }
 
     if ($Decision -ne "disconnect") {
-      $response = [System.Text.Json.JsonSerializer]::Serialize(@{
+      $response = [pscustomobject]@{
         Version = 1
         Type = $Decision
         Nonce = $nonce
-      })
+      } | ConvertTo-Json -Compress
       $bytes = [System.Text.Encoding]::UTF8.GetBytes($response)
       $writer.Write([int]$bytes.Length)
       $writer.Write($bytes)
       $writer.Flush()
+    } else {
+      # إغلاق القناة مباشرة لمحاكاة انهيار المنسق بعد تبديل الملفات.
+      $pipe.Dispose()
     }
     $process.WaitForExit(30000) | Out-Null
     if (-not $process.HasExited) { throw "Updater did not exit after receiving the health decision." }
