@@ -105,7 +105,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
               ? null
               : () async {
                   final marker = File(widget.healthMarkerPath!);
-                  final temporary = File(widget.healthMarkerPath! + '.tmp');
+                  final temporary = File('${widget.healthMarkerPath!}.tmp');
                   await temporary.writeAsString(widget.healthNonce!, flush: true);
                   await temporary.rename(marker.path);
                 },
