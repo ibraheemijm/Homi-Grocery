@@ -137,15 +137,113 @@ internal static class Program
         }
 
         var message = await ReadMessageAsync(pipe, timeout.Token);
+        EnsureAuthenticatedMessage(message, nonce, "installed");
+
+        var markerPath = Path.Combine(
+            Path.GetTempPath(),
+            $"homi-update-health-{Guid.NewGuid():N}.marker");
+        var decision = "rollback";
+        Process? updatedApp = null;
+
+        try
+        {
+            var executable = Path.Combine(options["install-dir"], "homi_grocery.exe");
+            var appInfo = new ProcessStartInfo
+            {
+                FileName = executable,
+                WorkingDirectory = options["install-dir"],
+                Arguments = string.Join(" ", new[]
+                {
+                    "--homi-update-health-marker",
+                    QuoteWindowsArgument(markerPath),
+                    "--homi-update-health-nonce",
+                    QuoteWindowsArgument(nonce)
+                }),
+                UseShellExecute = true
+            };
+
+            // المنسق غير المرتفع هو من يشغل النسخة الجديدة؛ لا نمرر صلاحيات المسؤول للتطبيق.
+            updatedApp = Process.Start(appInfo)
+                ?? throw new InvalidOperationException("تعذر تشغيل نسخة Homi Grocery بعد التحديث.");
+
+            using var healthTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            while (!healthTimeout.IsCancellationRequested)
+            {
+                if (File.Exists(markerPath))
+                {
+                    var marker = await File.ReadAllTextAsync(markerPath, healthTimeout.Token);
+                    if (CryptographicOperations.FixedTimeEquals(
+                        Encoding.UTF8.GetBytes(marker.Trim()),
+                        Encoding.UTF8.GetBytes(nonce)))
+                    {
+                        decision = "commit";
+                        break;
+                    }
+                }
+
+                if (updatedApp.HasExited)
+                    throw new InvalidOperationException("أغلقت النسخة الجديدة قبل إكمال فحص الصحة.");
+
+                await Task.Delay(250, healthTimeout.Token);
+            }
+
+            if (decision != "commit")
+                throw new TimeoutException("لم تؤكد النسخة الجديدة سلامة التشغيل خلال 60 ثانية.");
+        }
+        catch
+        {
+            if (updatedApp is { HasExited: false })
+            {
+                try
+                {
+                    updatedApp.Kill(entireProcessTree: true);
+                    await updatedApp.WaitForExitAsync();
+                }
+                catch
+                {
+                    // يظل قرار rollback هو الافتراضي حتى إن تعذر إيقاف العملية.
+                }
+            }
+        }
+        finally
+        {
+            updatedApp?.Dispose();
+            if (File.Exists(markerPath))
+                File.Delete(markerPath);
+        }
+
+        await WriteMessageAsync(pipe, new ProtocolMessage(ProtocolVersion, decision, nonce), timeout.Token);
+        if (decision == "rollback")
+            throw new InvalidOperationException("لم تجتز النسخة الجديدة فحص الصحة؛ أُرسل طلب الاسترجاع إلى المساعد.");
+    }
+
+    private static void EnsureAuthenticatedMessage(
+        ProtocolMessage message,
+        string nonce,
+        string expectedType)
+    {
         var expectedNonce = Encoding.UTF8.GetBytes(nonce);
         var receivedNonce = Encoding.UTF8.GetBytes(message.Nonce ?? string.Empty);
         if (message.Version != ProtocolVersion ||
             !CryptographicOperations.FixedTimeEquals(expectedNonce, receivedNonce) ||
-            !string.Equals(message.Type, "installed", StringComparison.Ordinal))
+            !string.Equals(message.Type, expectedType, StringComparison.Ordinal))
             throw new SecurityException("رفض المنسق رسالة غير موثوقة أو خارج تسلسل بروتوكول التحديث.");
+    }
 
-        // هذه المرحلة تتحقق من قناة الاتصال فقط. قرار commit/rollback وتشغيل النسخة
-        // الجديدة وفحص صحتها سيضاف بعد توصيل المساعد ببروتوكول الاسترداد.
+    private static async Task WriteMessageAsync(
+        Stream stream,
+        ProtocolMessage message,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(message);
+        if (payload.Length is <= 0 or > MaxMessageBytes)
+            throw new InvalidDataException("حجم رسالة بروتوكول التحديث غير مسموح.");
+
+        var header = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
+        await stream.WriteAsync(header, cancellationToken);
+        await stream.WriteAsync(payload, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
     }
 
     private static async Task<ProtocolMessage> ReadMessageAsync(
