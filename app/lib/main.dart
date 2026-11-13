@@ -37,7 +37,10 @@ Future<void> main(List<String> args) async {
     // تبقى الواجهة على الخط الافتراضي إذا تعذر تحميل التفضيلات.
   }
   final healthOptions = _parseUpdateHealthArguments(args);
-  runApp(HomiGroceryApp(healthMarkerPath: healthOptions?['marker'], healthNonce: healthOptions?['nonce']));
+  runApp(HomiGroceryApp(
+    healthMarkerPath: healthOptions?['marker'],
+    healthNonce: healthOptions?['nonce'],
+  ));
 }
 
 Map<String, String>? _parseUpdateHealthArguments(List<String> args) {
@@ -51,8 +54,13 @@ Map<String, String>? _parseUpdateHealthArguments(List<String> args) {
       nonce = args[++index];
     }
   }
-  if (defaultTargetPlatform != TargetPlatform.windows || marker == null || nonce == null) return null;
-  if (nonce.length != 64 || !RegExp(r'^[0-9A-F]+').hasMatch(nonce)) return null;
+  if (defaultTargetPlatform != TargetPlatform.windows || marker == null || nonce == null) {
+    return null;
+  }
+  if (nonce.length != 64 ||
+      nonce.runes.any((code) => !((code >= 48 && code <= 57) || (code >= 65 && code <= 70)))) {
+    return null;
+  }
   return {'marker': marker, 'nonce': nonce};
 }
 
