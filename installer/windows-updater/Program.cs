@@ -9,6 +9,7 @@ internal static class Program
     private const long MaxArchiveBytes = 1024L * 1024 * 1024;
     private const int MaxEntries = 20_000;
     private const long MaxExpandedBytes = 3L * 1024 * 1024 * 1024;
+    private const int AppExitTimeoutMilliseconds = 120_000;
 
     private static int Main(string[] args)
     {
@@ -85,9 +86,24 @@ internal static class Program
         try
         {
             using var process = Process.GetProcessById(processId);
-            if (!process.ProcessName.Equals("homi_grocery", StringComparison.OrdinalIgnoreCase))
-                throw new SecurityException("The supplied process ID is not Homi Grocery.");
-            process.WaitForExit();
+            if (!process.HasExited)
+            {
+                if (!process.ProcessName.Equals("homi_grocery", StringComparison.OrdinalIgnoreCase))
+                    throw new SecurityException("The supplied process ID is not Homi Grocery.");
+
+                // تحقق من أن PID يعود إلى نسخة Homi الموجودة في مجلد التثبيت نفسه،
+                // وليس إلى عملية أخرى تحمل الاسم ذاته.
+                var runningExecutable = process.MainModule?.FileName;
+                var expectedExecutable = Path.Combine(installDir, "homi_grocery.exe");
+                if (string.IsNullOrWhiteSpace(runningExecutable) ||
+                    !Path.GetFullPath(runningExecutable).Equals(
+                        Path.GetFullPath(expectedExecutable),
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new SecurityException("The supplied process is not running from the target installation.");
+
+                if (!process.WaitForExit(AppExitTimeoutMilliseconds))
+                    throw new TimeoutException("Homi Grocery did not close within the allowed update window.");
+            }
         }
         catch (ArgumentException)
         {
