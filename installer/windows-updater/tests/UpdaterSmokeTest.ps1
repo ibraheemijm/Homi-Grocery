@@ -145,6 +145,21 @@ try {
   }
   if (-not $wrongProcess.HasExited) { Stop-Process -Id $wrongProcess.Id -Force }
 
+  # رفض مجلد غير مسجل حتى لو كانت الحزمة وبصمتها سليمتين.
+  $unregisteredRoot = Join-Path $root "unregistered-install"
+  New-Item -ItemType Directory -Path $unregisteredRoot | Out-Null
+  $unregisteredInstall = Join-Path $unregisteredRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $unregisteredInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $unregisteredInstall "keep.txt") -Value "registered-only" -NoNewline
+  $unregisteredPackage = New-TestPackage $unregisteredRoot "homi_grocery.exe" "must-not-install"
+  $unregisteredHash = (Get-FileHash -LiteralPath $unregisteredPackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  Set-RegisteredInstallDirectory (Join-Path $unregisteredRoot "Different Installation")
+  & $UpdaterExe --pid 999999 --install-dir $unregisteredInstall --package $unregisteredPackage --sha256 $unregisteredHash
+  if ($LASTEXITCODE -eq 0) { throw "Updater accepted an installation path not registered by the installer." }
+  if ((Get-Content -LiteralPath (Join-Path $unregisteredInstall "keep.txt") -Raw) -ne "registered-only") {
+    throw "Unregistered installation attempt modified the target directory."
+  }
+
   # رفض بصمة غير مطابقة دون تعديل مجلد التطبيق.
   $badHash = Join-Path $root "bad-hash"
   New-Item -ItemType Directory -Path $badHash | Out-Null
