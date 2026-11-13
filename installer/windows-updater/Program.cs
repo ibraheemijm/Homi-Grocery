@@ -172,6 +172,7 @@ internal static class Program
         string nonce,
         UpdateResult update)
     {
+        var rollbackAttempted = false;
         try
         {
             await using var pipe = new NamedPipeClientStream(
@@ -197,6 +198,7 @@ internal static class Program
             if (decision.Type != "rollback")
                 throw new SecurityException("Launcher sent an unsupported update decision.");
 
+            rollbackAttempted = true;
             RestorePreviousVersion(update);
             Console.WriteLine("The update was rolled back by the launcher.");
         }
@@ -204,7 +206,8 @@ internal static class Program
         {
             // انقطاع المنسق أو انتهاء المهلة بعد تبديل الملفات يعني أن النسخة الجديدة
             // لم تحصل على تأكيد صحة؛ لذلك نرجع إلى النسخة السابقة تلقائيًا.
-            RestorePreviousVersion(update);
+            if (!rollbackAttempted && Directory.Exists(update.BackupDirectory))
+                RestorePreviousVersion(update);
             throw;
         }
     }
@@ -241,8 +244,44 @@ internal static class Program
             ?? throw new InvalidDataException("Launcher protocol message is empty.");
     }
 
+    private static void StopInstalledApplication(string installDirectory)
+    {
+        var expectedExecutable = Path.GetFullPath(Path.Combine(installDirectory, "homi_grocery.exe"));
+        foreach (var process in Process.GetProcessesByName("homi_grocery"))
+        {
+            using (process)
+            {
+                try
+                {
+                    var runningExecutable = process.MainModule?.FileName;
+                    if (string.IsNullOrWhiteSpace(runningExecutable) ||
+                        !Path.GetFullPath(runningExecutable).Equals(
+                            expectedExecutable,
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                        if (!process.WaitForExit(10_000))
+                            throw new TimeoutException("Updated Homi Grocery process could not be stopped for rollback.");
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // انتهت العملية أثناء الفحص؛ يمكن متابعة الاسترجاع.
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // لا نقتل عملية لا نستطيع التحقق من مسارها أو إدارتها.
+                }
+            }
+        }
+    }
+
     private static void RestorePreviousVersion(UpdateResult update)
     {
+        StopInstalledApplication(update.InstallDirectory);
         if (!Directory.Exists(update.BackupDirectory))
             throw new DirectoryNotFoundException("Previous application backup is unavailable; automatic rollback cannot continue.");
 
