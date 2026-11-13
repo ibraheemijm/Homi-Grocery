@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.IO.Pipes;
+using Microsoft.Win32;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
@@ -79,6 +80,10 @@ internal static class Program
             string.Equals(installDir, Path.TrimEndingDirectorySeparator(installRoot), StringComparison.OrdinalIgnoreCase) ||
             !Directory.Exists(installDir))
             throw new SecurityException("The installation directory is unsafe or missing.");
+
+        // لا نسمح للمساعد المرتفع باستهداف مجلد يمرره المستدعي عشوائيًا؛
+        // يجب أن يطابق المسار المسجل في HKLM بواسطة مثبت Homi الرسمي.
+        EnsureRegisteredInstallDirectory(installDir);
 
         var installInfo = new DirectoryInfo(installDir);
         if ((installInfo.Attributes & FileAttributes.ReparsePoint) != 0)
@@ -271,9 +276,12 @@ internal static class Program
                 {
                     // انتهت العملية أثناء الفحص؛ يمكن متابعة الاسترجاع.
                 }
-                catch (System.ComponentModel.Win32Exception)
+                catch (System.ComponentModel.Win32Exception error)
                 {
-                    // لا نقتل عملية لا نستطيع التحقق من مسارها أو إدارتها.
+                    // فشل التحقق من العملية يمنع الاسترجاع الآمن؛ لا نتابع وكأن المسار أصبح خاليًا.
+                    throw new SecurityException(
+                        "Could not safely inspect or stop the updated Homi Grocery process; rollback was halted.",
+                        error);
                 }
             }
         }
@@ -302,6 +310,24 @@ internal static class Program
 
         if (Directory.Exists(failedDirectory))
             Directory.Delete(failedDirectory, recursive: true);
+    }
+
+    private static void EnsureRegisteredInstallDirectory(string installDir)
+    {
+        using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        using var key = baseKey.OpenSubKey(@"Software\\Homi Grocery", writable: false)
+            ?? throw new SecurityException("Homi Grocery installation is not registered by the official installer.");
+
+        var registeredPath = key.GetValue(
+            "InstallDir",
+            null,
+            RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        if (string.IsNullOrWhiteSpace(registeredPath))
+            throw new SecurityException("The registered Homi Grocery installation path is missing.");
+
+        var normalizedRegisteredPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(registeredPath));
+        if (!installDir.Equals(normalizedRegisteredPath, StringComparison.OrdinalIgnoreCase))
+            throw new SecurityException("The requested installation directory does not match the registered Homi Grocery installation.");
     }
 
     private sealed record ProtocolMessage(int Version, string Type, string? Nonce);
