@@ -5,7 +5,7 @@ on:
   push:
     branches: [feature/flutter-foundation, feature/windows-ota-foundation]
   pull_request:
-    branches: [main]
+    branches: [main, feature/flutter-foundation]
 
 concurrency:
   group: flutter-android-${{ github.workflow }}-${{ github.ref }}
