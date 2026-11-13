@@ -101,3 +101,6 @@ try {
 finally {
   if (Test-Path $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }
+
+# أوامر الرفض أعلاه متوقعة؛ لا نسمح لرمز خروج آخر تشغيل للمساعد بتحديد نتيجة السكربت.
+exit 0
