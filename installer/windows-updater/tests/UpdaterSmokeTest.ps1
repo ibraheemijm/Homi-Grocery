@@ -47,7 +47,7 @@ try {
   New-Item -ItemType Directory -Path $badHash | Out-Null
   $badInstall = Join-Path $badHash "Homi Grocery"
   New-Item -ItemType Directory -Path $badInstall | Out-Null
-  Set-Content -LiteralPath (Join-Path $badInstall "keep.txt") -Value "keep"
+  Set-Content -LiteralPath (Join-Path $badInstall "keep.txt") -Value "keep" -NoNewline
   $badPackage = New-TestPackage $badHash "homi_grocery.exe" "tampered"
   & $UpdaterExe --pid 999999 --install-dir $badInstall --package $badPackage --sha256 ("0" * 64)
   if ($LASTEXITCODE -eq 0) { throw "Updater accepted an invalid SHA-256." }
@@ -60,7 +60,7 @@ try {
   New-Item -ItemType Directory -Path $slipRoot | Out-Null
   $slipInstall = Join-Path $slipRoot "Homi Grocery"
   New-Item -ItemType Directory -Path $slipInstall | Out-Null
-  Set-Content -LiteralPath (Join-Path $slipInstall "keep.txt") -Value "safe"
+  Set-Content -LiteralPath (Join-Path $slipInstall "keep.txt") -Value "safe" -NoNewline
   $slipZip = Join-Path $slipRoot "malicious.zip"
   $archive = [System.IO.Compression.ZipFile]::Open($slipZip, [System.IO.Compression.ZipArchiveMode]::Create)
   try {
