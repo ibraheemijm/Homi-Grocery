@@ -51,7 +51,11 @@ Map<String, String>? _parseUpdateHealthArguments(List<String> args) {
       nonce = args[++index];
     }
   }
-  if (defaultTargetPlatform != TargetPlatform.windows || marker == null || nonce == null || !RegExp(r'^[0-9A-F]{64}
+  if (defaultTargetPlatform != TargetPlatform.windows || marker == null || nonce == null) return null;
+  if (nonce.length != 64 || !RegExp(r'^[0-9A-F]+').hasMatch(nonce)) return null;
+  return {'marker': marker, 'nonce': nonce};
+}
+
 const Color brandGreen = Color(0xFF173D32);
 const Color brandCream = Color(0xFFF7F4EA);
 const Color brandGold = Color(0xFFC7A35A);
