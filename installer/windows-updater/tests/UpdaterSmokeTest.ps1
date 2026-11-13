@@ -42,6 +42,23 @@ try {
     throw "Previous application directory was not preserved."
   }
 
+  # رفض PID لعملية Homi تعمل من مجلد مختلف عن مجلد التثبيت المستهدف.
+  $wrongProcessRoot = Join-Path $root "wrong-process"
+  New-Item -ItemType Directory -Path $wrongProcessRoot | Out-Null
+  $wrongProcessInstall = Join-Path $wrongProcessRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $wrongProcessInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $wrongProcessInstall "keep.txt") -Value "untouched" -NoNewline
+  $wrongProcessPackage = New-TestPackage $wrongProcessRoot "homi_grocery.exe" "must not install"
+  $wrongProcessHash = (Get-FileHash -LiteralPath $wrongProcessPackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  $wrongProcess = Start-Process -FilePath (Join-Path $FakeAppDir "homi_grocery.exe") -WorkingDirectory $FakeAppDir -PassThru -WindowStyle Hidden
+  Start-Sleep -Milliseconds 300
+  & $UpdaterExe --pid $wrongProcess.Id --install-dir $wrongProcessInstall --package $wrongProcessPackage --sha256 $wrongProcessHash
+  if ($LASTEXITCODE -eq 0) { throw "Updater accepted a Homi process running from another installation directory." }
+  if ((Get-Content -LiteralPath (Join-Path $wrongProcessInstall "keep.txt") -Raw) -ne "untouched") {
+    throw "Wrong-process attempt modified the target installation."
+  }
+  if (-not $wrongProcess.HasExited) { Stop-Process -Id $wrongProcess.Id -Force }
+
   # رفض بصمة غير مطابقة دون تعديل مجلد التطبيق.
   $badHash = Join-Path $root "bad-hash"
   New-Item -ItemType Directory -Path $badHash | Out-Null
