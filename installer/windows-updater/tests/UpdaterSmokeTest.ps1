@@ -55,6 +55,23 @@ try {
     throw "Invalid hash attempt modified the installation."
   }
 
+  # رفض حزمة سليمة البنية لكنها لا تحتوي الملف التنفيذي الرئيسي، دون المساس بالتثبيت الحالي.
+  $missingExeRoot = Join-Path $root "missing-exe"
+  New-Item -ItemType Directory -Path $missingExeRoot | Out-Null
+  $missingExeInstall = Join-Path $missingExeRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $missingExeInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $missingExeInstall "keep.txt") -Value "preserve" -NoNewline
+  $missingExePackage = New-TestPackage $missingExeRoot "readme.txt" "not an application"
+  $missingExeHash = (Get-FileHash -LiteralPath $missingExePackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  & $UpdaterExe --pid 999999 --install-dir $missingExeInstall --package $missingExePackage --sha256 $missingExeHash
+  if ($LASTEXITCODE -eq 0) { throw "Updater accepted a package without homi_grocery.exe." }
+  if ((Get-Content -LiteralPath (Join-Path $missingExeInstall "keep.txt") -Raw) -ne "preserve") {
+    throw "Package without the main executable modified the installation."
+  }
+  if (Get-ChildItem -LiteralPath $missingExeRoot -Directory -Filter ".Homi Grocery.homi-stage-*" | Select-Object -First 1) {
+    throw "Updater left a staging directory after rejecting an incomplete package."
+  }
+
   # رفض ZIP يحاول الكتابة خارج مجلد التثبيت (Zip Slip).
   $slipRoot = Join-Path $root "zip-slip"
   New-Item -ItemType Directory -Path $slipRoot | Out-Null
