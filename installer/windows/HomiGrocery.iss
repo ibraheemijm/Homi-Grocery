@@ -44,6 +44,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "إنشاء اختصار على سطح المكتب"; GroupDescription: "اختصارات إضافية:"; Flags: unchecked
 
+[Dirs]
+; أدوات التحديث المرتفعة لا يجوز أن يستبدلها مستخدم عادي داخل ProgramData.
+Name: "{commonappdata}\\Homi Grocery\\Updater"; Permissions: users-readexec admins-full system-full
+
+[Registry]
+; يسجل المثبت المسار الفعلي حتى لا يقبل المساعد المرتفع مسار تثبيت يمرره المستدعي عشوائيًا.
+Root: HKLM64; Subkey: "Software\\Homi Grocery"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletevalue
+
 [Files]
 Source: "{#SourceDir}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; تُحفظ أدوات التحديث خارج مجلد التطبيق حتى يمكنها استبداله بعد إغلاقه.
