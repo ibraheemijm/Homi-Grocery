@@ -59,6 +59,13 @@ jobs:
           if (-not (Test-Path "build/windows/updater/HomiUpdater.exe")) {
             throw "لم يتم إنشاء مساعد تحديث Windows."
           }
+      - name: Build unelevated Windows update launcher
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater-launcher/HomiUpdateLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/updater-launcher
+          if (-not (Test-Path "build/windows/updater-launcher/HomiUpdateLauncher.exe")) {
+            throw "لم يتم إنشاء منسق تحديث Windows."
+          }
       - name: Build Windows updater test application
         shell: pwsh
         run: |
@@ -86,7 +93,8 @@ jobs:
           $version = $versionLine.Matches[0].Groups[1].Value.Split('+')[0]
           $sourceDir = (Resolve-Path "build/windows/x64/runner/Release").Path
           $updaterPath = (Resolve-Path "build/windows/updater/HomiUpdater.exe").Path
-          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "/DUpdaterPath=$updaterPath" "../installer/windows/HomiGrocery.iss"
+          $launcherPath = (Resolve-Path "build/windows/updater-launcher/HomiUpdateLauncher.exe").Path
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "/DUpdaterPath=$updaterPath" "/DLauncherPath=$launcherPath" "../installer/windows/HomiGrocery.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "فشل إنشاء مثبت Homi Grocery باستخدام Inno Setup."
           }
@@ -101,6 +109,7 @@ jobs:
             app/build/windows/x64/runner/Release/
             app/build/windows/homi-grocery-windows-x64.zip
             app/build/windows/updater/HomiUpdater.exe
+            app/build/windows/updater-launcher/HomiUpdateLauncher.exe
             app/build/windows/installer/Homi-Grocery-Setup-x64.exe
           if-no-files-found: error
           retention-days: 14
