@@ -10,4 +10,9 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
   </PropertyGroup>
+
+  <!-- لا نضمّن ملفات مشروع الاختبار الموجود داخل مجلد tests في ملف المساعد. -->
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>
