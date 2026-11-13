@@ -18,6 +18,67 @@ function New-TestPackage([string]$directory, [string]$fileName, [string]$content
   return $zip
 }
 
+function Invoke-UpdaterDecisionTest(
+  [string]$InstallDir,
+  [string]$PackagePath,
+  [string]$PackageHash,
+  [ValidateSet("commit", "rollback", "disconnect")][string]$Decision
+) {
+  $pipeName = "homi-update-" + [guid]::NewGuid().ToString("N")
+  $nonce = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+  $pipe = [System.IO.Pipes.NamedPipeServerStream]::new(
+    $pipeName,
+    [System.IO.Pipes.PipeDirection]::InOut,
+    1,
+    [System.IO.Pipes.PipeTransmissionMode]::Byte,
+    [System.IO.Pipes.PipeOptions]::Asynchronous
+  )
+  $start = [System.Diagnostics.ProcessStartInfo]::new()
+  $start.FileName = $UpdaterExe
+  $start.UseShellExecute = $false
+  foreach ($argument in @(
+    "--pid", "999999",
+    "--install-dir", $InstallDir,
+    "--package", $PackagePath,
+    "--sha256", $PackageHash,
+    "--pipe-name", $pipeName,
+    "--nonce", $nonce
+  )) { [void]$start.ArgumentList.Add($argument) }
+
+  $process = [System.Diagnostics.Process]::Start($start)
+  try {
+    $pipe.WaitForConnection()
+    $reader = [System.IO.BinaryReader]::new($pipe, [System.Text.Encoding]::UTF8, $true)
+    $writer = [System.IO.BinaryWriter]::new($pipe, [System.Text.Encoding]::UTF8, $true)
+    $length = $reader.ReadInt32()
+    if ($length -le 0 -or $length -gt 4096) { throw "Updater sent invalid protocol message length." }
+    $payload = $reader.ReadBytes($length)
+    $message = [System.Text.Encoding]::UTF8.GetString($payload) | ConvertFrom-Json
+    if ($message.Version -ne 1 -or $message.Type -ne "installed" -or $message.Nonce -ne $nonce) {
+      throw "Updater sent an invalid installed handshake."
+    }
+
+    if ($Decision -ne "disconnect") {
+      $response = [System.Text.Json.JsonSerializer]::Serialize(@{
+        Version = 1
+        Type = $Decision
+        Nonce = $nonce
+      })
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes($response)
+      $writer.Write([int]$bytes.Length)
+      $writer.Write($bytes)
+      $writer.Flush()
+    }
+    $process.WaitForExit(30000) | Out-Null
+    if (-not $process.HasExited) { throw "Updater did not exit after receiving the health decision." }
+    return $process.ExitCode
+  }
+  finally {
+    $pipe.Dispose()
+    $process.Dispose()
+  }
+}
+
 try {
   # اختبار الاستبدال الناجح مع الاحتفاظ بنسخة مجلد التطبيق السابق.
   $install = Join-Path $root "Homi Grocery"
@@ -111,6 +172,55 @@ try {
   if (Test-Path (Join-Path $slipRoot "escaped.txt")) { throw "ZIP traversal wrote outside the staging directory." }
   if ((Get-Content -LiteralPath (Join-Path $slipInstall "keep.txt") -Raw) -ne "safe") {
     throw "ZIP traversal attempt modified the installation."
+  }
+
+  # قرار rollback يعيد مجلد الإصدار السابق بعد رسالة installed.
+  $rollbackRoot = Join-Path $root "protocol-rollback"
+  New-Item -ItemType Directory -Path $rollbackRoot | Out-Null
+  $rollbackInstall = Join-Path $rollbackRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $rollbackInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $rollbackInstall "old-version.txt") -Value "restore-me" -NoNewline
+  $rollbackPackage = New-TestPackage $rollbackRoot "homi_grocery.exe" "candidate-build"
+  $rollbackHash = (Get-FileHash -LiteralPath $rollbackPackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  $rollbackExit = Invoke-UpdaterDecisionTest $rollbackInstall $rollbackPackage $rollbackHash "rollback"
+  if ($rollbackExit -ne 0) { throw "Updater did not complete the explicit rollback decision." }
+  if ((Get-Content -LiteralPath (Join-Path $rollbackInstall "old-version.txt") -Raw) -ne "restore-me") {
+    throw "Explicit rollback did not restore the previous application files."
+  }
+  if (Test-Path (Join-Path $rollbackInstall "homi_grocery.exe")) {
+    throw "Explicit rollback left the candidate executable installed."
+  }
+
+  # قرار commit يبقي الإصدار الجديد مع نسخة احتياطية قابلة للاسترجاع.
+  $commitRoot = Join-Path $root "protocol-commit"
+  New-Item -ItemType Directory -Path $commitRoot | Out-Null
+  $commitInstall = Join-Path $commitRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $commitInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $commitInstall "old-version.txt") -Value "keep-backup" -NoNewline
+  $commitPackage = New-TestPackage $commitRoot "homi_grocery.exe" "committed-build"
+  $commitHash = (Get-FileHash -LiteralPath $commitPackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  $commitExit = Invoke-UpdaterDecisionTest $commitInstall $commitPackage $commitHash "commit"
+  if ($commitExit -ne 0) { throw "Updater did not accept the explicit commit decision." }
+  if ((Get-Content -LiteralPath (Join-Path $commitInstall "homi_grocery.exe") -Raw) -ne "committed-build") {
+    throw "Commit decision did not preserve the candidate application."
+  }
+  $commitBackup = Get-ChildItem -LiteralPath $commitRoot -Directory -Filter ".Homi Grocery.homi-backup-*" | Select-Object -First 1
+  if (-not $commitBackup -or -not (Test-Path (Join-Path $commitBackup.FullName "old-version.txt"))) {
+    throw "Committed update did not preserve the previous version backup."
+  }
+
+  # انقطاع قناة الاتصال بعد التبديل يجب أن يؤدي إلى rollback تلقائي.
+  $disconnectRoot = Join-Path $root "protocol-disconnect"
+  New-Item -ItemType Directory -Path $disconnectRoot | Out-Null
+  $disconnectInstall = Join-Path $disconnectRoot "Homi Grocery"
+  New-Item -ItemType Directory -Path $disconnectInstall | Out-Null
+  Set-Content -LiteralPath (Join-Path $disconnectInstall "old-version.txt") -Value "disconnect-restore" -NoNewline
+  $disconnectPackage = New-TestPackage $disconnectRoot "homi_grocery.exe" "unconfirmed-build"
+  $disconnectHash = (Get-FileHash -LiteralPath $disconnectPackage -Algorithm SHA256).Hash.ToLowerInvariant()
+  $disconnectExit = Invoke-UpdaterDecisionTest $disconnectInstall $disconnectPackage $disconnectHash "disconnect"
+  if ($disconnectExit -eq 0) { throw "Updater treated a disconnected health channel as a successful update." }
+  if ((Get-Content -LiteralPath (Join-Path $disconnectInstall "old-version.txt") -Raw) -ne "disconnect-restore") {
+    throw "Updater did not automatically restore the previous version after pipe disconnection."
   }
 
   Write-Host "Windows updater smoke tests passed."
