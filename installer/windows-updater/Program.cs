@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.IO.Pipes;
 using System.Security;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -20,9 +21,9 @@ internal static class Program
         try
         {
             var options = ParseArgs(args);
-            Apply(options);
+            var update = Apply(options);
             if (options.ContainsKey("pipe-name"))
-                await NotifyLauncherAsync(options["pipe-name"], options["nonce"]);
+                await NotifyLauncherAsync(options["pipe-name"], options["nonce"], update);
             Console.WriteLine("Homi Grocery update applied successfully.");
             return 0;
         }
@@ -66,7 +67,7 @@ internal static class Program
         return values;
     }
 
-    private static void Apply(IReadOnlyDictionary<string, string> options)
+    private static UpdateResult Apply(IReadOnlyDictionary<string, string> options)
     {
         if (!int.TryParse(options["pid"], out var processId) || processId <= 0)
             throw new ArgumentException("Invalid application process ID.");
@@ -156,7 +157,8 @@ internal static class Program
                 throw;
             }
 
-            // لا نحذف النسخة السابقة هنا؛ تظل متاحة للاسترجاع اليدوي بعد التحقق من التشغيل.
+            // لا نحذف النسخة السابقة؛ يقرر المنسق اعتماد التحديث أو استرجاعها بعد فحص صحة التطبيق.
+            return new UpdateResult(installDir, backupDir);
         }
         finally
         {
@@ -165,32 +167,106 @@ internal static class Program
         }
     }
 
-    private static async Task NotifyLauncherAsync(string pipeName, string nonce)
+    private static async Task NotifyLauncherAsync(
+        string pipeName,
+        string nonce,
+        UpdateResult update)
     {
-        await using var pipe = new NamedPipeClientStream(
-            ".",
-            pipeName,
-            PipeDirection.InOut,
-            PipeOptions.Asynchronous);
-
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-        await pipe.ConnectAsync(timeout.Token);
-
-        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        try
         {
-            Version = 1,
-            Type = "installed",
-            Nonce = nonce
-        });
+            await using var pipe = new NamedPipeClientStream(
+                ".",
+                pipeName,
+                PipeDirection.InOut,
+                PipeOptions.Asynchronous);
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+            await pipe.ConnectAsync(timeout.Token);
+
+            await WriteMessageAsync(pipe, new ProtocolMessage(1, "installed", nonce), timeout.Token);
+            var decision = await ReadMessageAsync(pipe, timeout.Token);
+            if (decision.Version != 1 ||
+                !CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(nonce),
+                    Encoding.UTF8.GetBytes(decision.Nonce ?? string.Empty)))
+                throw new SecurityException("Launcher decision authentication failed.");
+
+            if (decision.Type == "commit")
+                return;
+
+            if (decision.Type != "rollback")
+                throw new SecurityException("Launcher sent an unsupported update decision.");
+
+            RestorePreviousVersion(update);
+            Console.WriteLine("The update was rolled back by the launcher.");
+        }
+        catch
+        {
+            // انقطاع المنسق أو انتهاء المهلة بعد تبديل الملفات يعني أن النسخة الجديدة
+            // لم تحصل على تأكيد صحة؛ لذلك نرجع إلى النسخة السابقة تلقائيًا.
+            RestorePreviousVersion(update);
+            throw;
+        }
+    }
+
+    private static async Task WriteMessageAsync(
+        Stream stream,
+        ProtocolMessage message,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(message);
         if (payload.Length is <= 0 or > 4096)
             throw new InvalidDataException("Launcher protocol message size is invalid.");
 
         var header = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
-        await pipe.WriteAsync(header, timeout.Token);
-        await pipe.WriteAsync(payload, timeout.Token);
-        await pipe.FlushAsync(timeout.Token);
+        await stream.WriteAsync(header, cancellationToken);
+        await stream.WriteAsync(payload, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
     }
+
+    private static async Task<ProtocolMessage> ReadMessageAsync(
+        Stream stream,
+        CancellationToken cancellationToken)
+    {
+        var header = new byte[sizeof(int)];
+        await stream.ReadExactlyAsync(header, cancellationToken);
+        var length = BinaryPrimitives.ReadInt32LittleEndian(header);
+        if (length is <= 0 or > 4096)
+            throw new InvalidDataException("Launcher protocol message size is invalid.");
+
+        var payload = new byte[length];
+        await stream.ReadExactlyAsync(payload, cancellationToken);
+        return JsonSerializer.Deserialize<ProtocolMessage>(payload)
+            ?? throw new InvalidDataException("Launcher protocol message is empty.");
+    }
+
+    private static void RestorePreviousVersion(UpdateResult update)
+    {
+        if (!Directory.Exists(update.BackupDirectory))
+            throw new DirectoryNotFoundException("Previous application backup is unavailable; automatic rollback cannot continue.");
+
+        var failedDirectory = update.InstallDirectory + ".homi-rejected-" + Guid.NewGuid().ToString("N");
+        if (Directory.Exists(update.InstallDirectory))
+            Directory.Move(update.InstallDirectory, failedDirectory);
+
+        try
+        {
+            Directory.Move(update.BackupDirectory, update.InstallDirectory);
+        }
+        catch
+        {
+            if (!Directory.Exists(update.InstallDirectory) && Directory.Exists(failedDirectory))
+                Directory.Move(failedDirectory, update.InstallDirectory);
+            throw;
+        }
+
+        if (Directory.Exists(failedDirectory))
+            Directory.Delete(failedDirectory, recursive: true);
+    }
+
+    private sealed record ProtocolMessage(int Version, string Type, string? Nonce);
+    private sealed record UpdateResult(string InstallDirectory, string BackupDirectory);
 
     private static void ExtractAndValidate(string archivePath, string stageDir)
     {
