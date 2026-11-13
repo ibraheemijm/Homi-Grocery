@@ -259,8 +259,10 @@ internal static class Program
                 try
                 {
                     var runningExecutable = process.MainModule?.FileName;
-                    if (string.IsNullOrWhiteSpace(runningExecutable) ||
-                        !Path.GetFullPath(runningExecutable).Equals(
+                    if (string.IsNullOrWhiteSpace(runningExecutable))
+                        throw new SecurityException("Could not verify the executable path of a running Homi Grocery process.");
+
+                    if (!Path.GetFullPath(runningExecutable).Equals(
                             expectedExecutable,
                             StringComparison.OrdinalIgnoreCase))
                         continue;
