@@ -280,7 +280,7 @@ class PlatformUpdateService {
 
     return VerifiedPlatformUpdateManifest(
       publicationId: update.publicationId,
-      keyId: keyId as String,
+      keyId: update.signingKeyId,
       payload: payload,
       signature: signature,
       downloadPath: claims['download_url'] as String,
