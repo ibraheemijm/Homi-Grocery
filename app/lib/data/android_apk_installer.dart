@@ -20,7 +20,7 @@ class AndroidApkInstaller {
 
   /// يفتح إعداد السماح لهذا التطبيق بتثبيت ملفات APK على Android 8+.
   Future<void> openInstallPermissionSettings() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       throw UnsupportedError('إعداد تثبيت APK متاح على Android فقط.');
     }
     await _channel.invokeMethod<void>('openInstallPermissionSettings');
