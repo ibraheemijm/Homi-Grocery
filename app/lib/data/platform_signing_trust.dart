@@ -340,7 +340,8 @@ class PlatformSigningTrust {
   DateTime _parseTimestamp(Object? value) {
     final pattern = RegExp(
       r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))',
-    );    final match = value is String ? pattern.firstMatch(value) : null;
+    );
+    final match = value is String ? pattern.firstMatch(value) : null;
     if (match == null || match.group(0) != value) {
       throw const FormatException(
         'تاريخ Keyset يجب أن يتضمن منطقة زمنية بصيغة ISO-8601.',
