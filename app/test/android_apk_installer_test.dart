@@ -21,7 +21,7 @@ void main() {
       return true;
     });
 
-    expect(await AndroidApkInstaller(channel: channel).canRequestPackageInstalls(), isTrue);
+    expect(await AndroidApkInstaller(channel: channel, isAndroid: true).canRequestPackageInstalls(), isTrue);
   });
 
   test('يفتح إعداد السماح بالتثبيت من المصدر الحالي', () async {
@@ -32,7 +32,7 @@ void main() {
       return null;
     });
 
-    await AndroidApkInstaller(channel: channel).openInstallPermissionSettings();
+    await AndroidApkInstaller(channel: channel, isAndroid: true).openInstallPermissionSettings();
     expect(invoked, isTrue);
   });
 
@@ -48,11 +48,11 @@ void main() {
       return null;
     });
 
-    await AndroidApkInstaller(channel: channel).installVerifiedApk(apk);
+    await AndroidApkInstaller(channel: channel, isAndroid: true).installVerifiedApk(apk);
     expect(receivedPath, apk.absolute.path);
 
     await expectLater(
-      AndroidApkInstaller(channel: channel).installVerifiedApk(
+      AndroidApkInstaller(channel: channel, isAndroid: true).installVerifiedApk(
         File('${directory.path}/missing.apk'),
       ),
       throwsA(isA<FormatException>()),
@@ -65,6 +65,6 @@ void main() {
       return 207;
     });
 
-    expect(await AndroidApkInstaller(channel: channel).installedVersionCode(), 207);
+    expect(await AndroidApkInstaller(channel: channel, isAndroid: true).installedVersionCode(), 207);
   });
 }
