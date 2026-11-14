@@ -122,6 +122,7 @@ class PlatformSigningTrust {
       }
       final previous = await _verifyEnvelope(
         Map<String, Object?>.from(storedDecoded),
+        enforceCurrentValidity: false,
       );
       if (verified.version < previous.version) {
         throw const FormatException('رُفض Keyset أقدم من النسخة الموثوقة.');
@@ -159,8 +160,9 @@ class PlatformSigningTrust {
   }
 
   Future<VerifiedPlatformKeyset> _verifyEnvelope(
-    Map<String, Object?> envelope,
-  ) async {
+    Map<String, Object?> envelope, {
+    bool enforceCurrentValidity = true,
+  }) async {
     if (envelope['root_key_id'] != rootKeyId ||
         envelope['payload'] is! String ||
         envelope['signature'] is! String) {
@@ -206,8 +208,9 @@ class PlatformSigningTrust {
     final now = _clock().toUtc();
     if (!expiresAt.isAfter(issuedAt) ||
         expiresAt.difference(issuedAt) > maxKeysetLifetime ||
-        issuedAt.isAfter(now.add(clockSkew)) ||
-        now.isAfter(expiresAt.add(clockSkew))) {
+        (enforceCurrentValidity &&
+            (issuedAt.isAfter(now.add(clockSkew)) ||
+                now.isAfter(expiresAt.add(clockSkew))))) {
       throw const FormatException(
         'Keyset منتهي الصلاحية أو بتواريخ خارج السياسة المعتمدة.',
       );
