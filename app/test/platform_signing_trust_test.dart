@@ -181,6 +181,7 @@ void main() {
     var now = _clockNow;
     final initial = await _signedKeyset(
       version: 1,
+      issuedAt: '2026-11-01T12:00:00.000Z',
       expiresAt: '2026-11-14T12:00:00.000Z',
     );
     final rootPublic = await initial.rootPair.extractPublicKey();
