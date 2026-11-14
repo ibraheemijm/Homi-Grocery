@@ -292,6 +292,12 @@ class PlatformUpdateService {
       architecture: architecture,
       channel: channel,
     );
+    final publishedAt = _parseManifestTimestamp(claims['published_at']);
+    keyset.validateSignatureTime(
+      key: trustedKey,
+      signedAt: publishedAt,
+      now: DateTime.now().toUtc(),
+    );
 
     return VerifiedPlatformUpdateManifest(
       publicationId: update.publicationId,
@@ -387,6 +393,19 @@ class PlatformUpdateService {
     if (publishedAt is! String || DateTime.tryParse(publishedAt) == null) {
       throw const FormatException('تاريخ نشر manifest غير صالح.');
     }
+  }
+
+  DateTime _parseManifestTimestamp(Object? value) {
+    if (value is! String ||
+        !RegExp(r'^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?(?:Z|[+-]\\d\\d:\\d\\d)$')
+            .hasMatch(value)) {
+      throw const FormatException('تاريخ توقيع manifest يجب أن يتضمن منطقة زمنية.');
+    }
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      throw const FormatException('تاريخ نشر manifest غير صالح.');
+    }
+    return parsed.toUtc();
   }
 
 }
