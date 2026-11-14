@@ -396,9 +396,44 @@ class PlatformUpdateService {
   }
 
   DateTime _parseManifestTimestamp(Object? value) {
-    final match = value is String
-        ? RegExp(
-            r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))
+    final pattern = RegExp(
+      r'^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d+)?(Z|([+-])(\\d{2}):(\\d{2}))',
+    );
+    final match = value is String ? pattern.firstMatch(value) : null;
+    if (match == null || match.group(0) != value) {
+      throw const FormatException(
+        'تاريخ manifest يجب أن يتضمن منطقة زمنية بصيغة ISO-8601.',
+      );
+    }
+
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final hour = int.parse(match.group(4)!);
+    final minute = int.parse(match.group(5)!);
+    final second = int.parse(match.group(6)!);
+    final offsetHour = int.tryParse(match.group(9) ?? '0') ?? 0;
+    final offsetMinute = int.tryParse(match.group(10) ?? '0') ?? 0;
+
+    // نرفض القيم التقويمية غير الصحيحة قبل تحويل التاريخ.
+    if (month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > DateTime.utc(year, month + 1, 0).day ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59 ||
+        offsetHour > 23 ||
+        offsetMinute > 59) {
+      throw const FormatException('تاريخ manifest يحتوي قيمًا تقويمية غير صالحة.');
+    }
+
+    final parsed = DateTime.tryParse(value as String);
+    if (parsed == null) {
+      throw const FormatException('تاريخ manifest غير صالح.');
+    }
+    return parsed.toUtc();
+  }
 
 }
 ,
