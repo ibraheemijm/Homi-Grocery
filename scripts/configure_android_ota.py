@@ -2,7 +2,6 @@
 """تهيئة ملفات Android التي ينشئها flutter create لإتاحة تثبيت APK بموافقة المستخدم."""
 from pathlib import Path
 import re
-import sys
 
 root = Path(__file__).resolve().parents[1] / "app" / "android" / "app" / "src" / "main"
 manifest = root / "AndroidManifest.xml"
@@ -65,7 +64,7 @@ source = source.replace(
     "import io.flutter.embedding.android.FlutterFragmentActivity",
 )
 source = re.sub(
-    r"class MainActivity\\s*:\\s*FlutterActivity\\(\\)",
+    r"class MainActivity\s*:\s*FlutterActivity\(\)",
     "class MainActivity : FlutterFragmentActivity()",
     source,
 )
@@ -80,10 +79,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 """
 if "import io.flutter.embedding.engine.FlutterEngine" not in source:
-    package_match = re.search(r"^package [^\\n]+\\n", source, flags=re.M)
+    package_match = re.search(r"^package [^\n]+\n", source, flags=re.M)
     if package_match is None:
         raise SystemExit("تعذر تحديد package declaration في MainActivity.")
-    source = source[:package_match.end()] + "\\n" + imports + source[package_match.end():]
+    source = source[:package_match.end()] + "\n" + imports + source[package_match.end():]
 
 if "com.homi.grocery/apk_installer" not in source:
     if "class MainActivity : FlutterFragmentActivity()" not in source:
@@ -118,11 +117,13 @@ if "com.homi.grocery/apk_installer" not in source:
                             @Suppress("DEPRECATION")
                             packageManager.getPackageInfo(packageName, 0)
                         }
+                        @Suppress("DEPRECATION")
+                        val legacyVersionCode = info.versionCode.toLong()
                         result.success(
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                                 info.longVersionCode
                             else
-                                @Suppress("DEPRECATION") info.versionCode.toLong()
+                                legacyVersionCode
                         )
                     }
                     "installApk" -> {
@@ -168,6 +169,6 @@ if "com.homi.grocery/apk_installer" not in source:
     closing = source.rfind("}")
     if closing < 0:
         raise SystemExit("تعذر تحديد نهاية MainActivity.")
-    source = source[:closing] + handler + "\\n" + source[closing:]
+    source = source[:closing] + handler + "\n" + source[closing:]
 activity.write_text(source, encoding="utf-8")
 print("تم إعداد Android APK installer bridge.")
