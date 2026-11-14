@@ -204,7 +204,7 @@ class PlatformUpdateService {
         sizeBytes > 1024 * 1024 * 1024 ||
         sizeBytes.toInt() != sizeBytes ||
         sha256 is! String ||
-        !RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) ||
         signingKeyId is! String) {
       throw const FormatException('بيانات الإصدار المتاح غير مكتملة.');
     }
