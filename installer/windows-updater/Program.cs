@@ -98,17 +98,28 @@ internal static class Program
 
         // افحص الحجم قبل قراءة الملف وحساب البصمة لتجنب استهلاك غير محدود للذاكرة أو الوقت.
         var archiveInfo = new FileInfo(packagePath);
-        if (archiveInfo.Length is <= 0 or > MaxArchiveBytes)
-            throw new InvalidDataException("Update archive size is invalid.");
+        if ((archiveInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new SecurityException("The update package cannot be a symbolic link or reparse point.");
 
         if (!System.Text.RegularExpressions.Regex.IsMatch(options["sha256"], "^[0-9a-fA-F]{64}$"))
             throw new ArgumentException("Invalid package SHA-256.");
-        using (var stream = File.OpenRead(packagePath))
-        {
-            var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
-            if (!digest.Equals(options["sha256"], StringComparison.OrdinalIgnoreCase))
-                throw new SecurityException("Update package SHA-256 verification failed.");
-        }
+
+        // نبقي مقبض الملف نفسه مفتوحًا من لحظة فحص البصمة حتى نهاية الاستخراج.
+        // FileShare.Read يمنع استبدال الحزمة أو تعديلها بين التحقق والاستخدام (TOCTOU).
+        using var packageStream = new FileStream(
+            packagePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 1024 * 1024,
+            FileOptions.SequentialScan);
+        if (packageStream.Length is <= 0 or > MaxArchiveBytes)
+            throw new InvalidDataException("Update archive size is invalid.");
+
+        var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(packageStream));
+        if (!digest.Equals(options["sha256"], StringComparison.OrdinalIgnoreCase))
+            throw new SecurityException("Update package SHA-256 verification failed.");
+        packageStream.Position = 0;
 
         try
         {
@@ -146,7 +157,7 @@ internal static class Program
 
         try
         {
-            ExtractAndValidate(packagePath, stageDir);
+            ExtractAndValidate(packageStream, stageDir);
             if (!File.Exists(Path.Combine(stageDir, "homi_grocery.exe")))
                 throw new InvalidDataException("Update archive does not contain homi_grocery.exe.");
 
@@ -335,9 +346,9 @@ internal static class Program
     private sealed record ProtocolMessage(int Version, string Type, string? Nonce);
     private sealed record UpdateResult(string InstallDirectory, string BackupDirectory);
 
-    private static void ExtractAndValidate(string archivePath, string stageDir)
+    private static void ExtractAndValidate(Stream archiveStream, string stageDir)
     {
-        using var archive = ZipFile.OpenRead(archivePath);
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: true);
         if (archive.Entries.Count is 0 or > MaxEntries)
             throw new InvalidDataException("Update archive entry count is invalid.");
 
