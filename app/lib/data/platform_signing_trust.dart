@@ -126,7 +126,7 @@ class PlatformSigningTrust {
         throw const FormatException('رُفض Keyset أقدم من النسخة الموثوقة.');
       }
       if (verified.version == previous.version &&
-          !const ListEquality<int>().equals(
+          !_sameBytes(
             base64Decode(verified.signedEnvelope['payload']! as String),
             base64Decode(previous.signedEnvelope['payload']! as String),
           )) {
