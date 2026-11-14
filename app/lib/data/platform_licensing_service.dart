@@ -188,13 +188,13 @@ class PlatformLicensingService {
       signature: signature,
       issuedAt: issuedAt.toUtc(),
       expiresAt: expiresAt?.toUtc(),
-      entitlementVersion: entitlementVersion.toInt(),
+      entitlementVersion: entitlementVersion,
     );
   }
   
   DateTime? _parseGrantTimestamp(Object? value) {
     if (value is! String ||
-        !RegExp(r'^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?(?:Z|[+-]\\d\\d:\\d\\d)$')
+        !RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$')
             .hasMatch(value)) {
       return null;
     }
