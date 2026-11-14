@@ -7,6 +7,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/data/platform_api_client.dart';
 import 'package:homi_grocery/data/platform_update_service.dart';
+import 'package:homi_grocery/data/platform_device_identity.dart';
+import 'package:homi_grocery/data/platform_signing_trust.dart';
 
 class QueueTransport implements PlatformHttpTransport {
   QueueTransport(this.responses);
@@ -56,13 +58,60 @@ PlatformHttpResponse success(Map<String, Object?> data) => PlatformHttpResponse(
   body: jsonEncode({'success': true, 'data': data}),
 );
 
+
+class MemorySecretStore implements PlatformSecretStore {
+  final Map<String, String> values = {};
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async { values[key] = value; }
+}
+
+Future<PlatformSigningTrust> testTrust(SimpleKeyPair rootPair) async {
+  final publicKey = await rootPair.extractPublicKey();
+  return PlatformSigningTrust(
+    store: MemorySecretStore(),
+    rootKeyId: 'homi-root-test',
+    rootPublicKeyBase64: base64Encode(publicKey.bytes),
+  );
+}
+
+Future<Map<String, Object?>> signedKeyset({
+  required SimpleKeyPair rootPair,
+  required String keyId,
+  required List<int> publicDer,
+}) async {
+  final payload = utf8.encode(jsonEncode({
+    'schema_version': 1,
+    'keyset_version': 1,
+    'issued_at': '2026-11-10T12:00:00.000Z',
+    'expires_at': '2026-12-10T12:00:00.000Z',
+    'keys': [{
+      'key_id': keyId,
+      'purpose': 'update_manifest',
+      'algorithm': 'Ed25519',
+      'public_key': base64Encode(publicDer),
+      'not_before': '2026-11-01T00:00:00.000Z',
+      'not_after': '2027-01-01T00:00:00.000Z',
+      'status': 'active',
+    }],
+  }));
+  final signature = await Ed25519().sign(payload, keyPair: rootPair);
+  return {
+    'root_key_id': 'homi-root-test',
+    'payload': base64Encode(payload),
+    'signature': base64Encode(signature.bytes),
+  };
+}
+
 void main() {
   test('يعيد null عندما لا يوجد إصدار أحدث', () async {
     final transport = QueueTransport([success({'available': false})]);
+    final rootPair = await Ed25519().newKeyPair();
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
-    ));
+    ), signingTrust: await testTrust(rootPair));
 
     final update = await service.checkForUpdate(
       accessToken: 'access-test',
@@ -98,10 +147,11 @@ void main() {
       {...base, 'size_bytes': 0},
       {...base, 'size_bytes': 1024 * 1024 * 1024 + 1},
     ]) {
+      final rootPair = await Ed25519().newKeyPair();
       final service = PlatformUpdateService(PlatformApiClient(
         baseUri: Uri.parse('https://platform.example.test'),
         transport: QueueTransport([success(invalid)]),
-      ));
+      ), signingTrust: await testTrust(rootPair));
       await expectLater(
         service.checkForUpdate(
           accessToken: 'access-test',
@@ -147,6 +197,7 @@ void main() {
     };
     final payload = utf8.encode(jsonEncode(claims));
     final signature = await Ed25519().sign(payload, keyPair: keyPair);
+    final rootPair = await Ed25519().newKeyPair();
     final transport = QueueTransport([
       success({
         'publication_id': publicationId,
@@ -154,18 +205,12 @@ void main() {
         'manifest': base64Encode(payload),
         'signature': base64Encode(signature.bytes),
       }),
-      success({
-        'items': [{
-          'key_id': keyId,
-          'public_key': base64Encode(publicDer),
-          'status': 'active',
-        }],
-      }),
+      success(await signedKeyset(rootPair: rootPair, keyId: keyId, publicDer: publicDer)),
     ]);
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
-    ));
+    ), signingTrust: await testTrust(rootPair));
     const update = PlatformUpdateInfo(
       publicationId: publicationId,
       version: '1.0.2',
@@ -191,7 +236,7 @@ void main() {
     expect(manifest.keyId, keyId);
     expect(manifest.downloadPath, '/api/v1/updates/$publicationId/download');
     expect(manifest.sha256, update.sha256);
-    expect(transport.requestedUris.last.path, '/api/v1/update-signing-keys');
+    expect(transport.requestedUris.last.path, '/api/v1/signing-keyset');
   });
 
   test('يرفض manifest إذا لم يطابق الإصدار المتوقع حتى لو كان موقعًا', () async {
@@ -227,13 +272,7 @@ void main() {
         'manifest': base64Encode(payload),
         'signature': base64Encode(signature.bytes),
       }),
-      success({
-        'items': [{
-          'key_id': 'ota-test-key',
-          'public_key': base64Encode(publicDer),
-          'status': 'active',
-        }],
-      }),
+      success(await signedKeyset(rootPair: rootPair, keyId: 'ota-test-key', publicDer: publicDer)),
     ]);
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
@@ -266,10 +305,11 @@ void main() {
   test('ينزل حزمة OTA ويتحقق من الحجم وبصمة SHA-256 قبل إرجاعها', () async {
     final bytes = utf8.encode('Homi signed update package');
     final transport = QueueTransport([]);
+    final rootPair = await Ed25519().newKeyPair();
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
-    ));
+    ), signingTrust: await testTrust(rootPair));
     final downloader = FakeUpdateDownloader(bytes);
     final manifest = VerifiedPlatformUpdateManifest(
       publicationId: 'publication-2',
@@ -302,10 +342,11 @@ void main() {
 
   test('يحذف الحزمة إذا لم تطابق SHA-256 المعلن', () async {
     final bytes = utf8.encode('tampered update package');
+    final rootPair = await Ed25519().newKeyPair();
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: QueueTransport([]),
-    ));
+    ), signingTrust: await testTrust(rootPair));
     final manifest = VerifiedPlatformUpdateManifest(
       publicationId: 'publication-3',
       keyId: 'ota-key',
@@ -330,10 +371,11 @@ void main() {
   });
 
   test('يرفض اسم ملف يحتوي مسارًا قبل بدء التنزيل', () async {
+    final rootPair = await Ed25519().newKeyPair();
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: QueueTransport([]),
-    ));
+    ), signingTrust: await testTrust(rootPair));
     final manifest = VerifiedPlatformUpdateManifest(
       publicationId: 'publication-4',
       keyId: 'ota-key',
