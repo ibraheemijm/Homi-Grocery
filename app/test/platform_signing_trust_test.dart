@@ -27,6 +27,8 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
   String expiresAt = '2026-12-14T12:00:00.000Z',
   bool duplicateIds = false,
   bool invalidPurpose = false,
+  String status = 'active',
+  String? signingNotAfter,
   SimpleKeyPair? rootPair,
 }) async {
   final algorithm = Ed25519();
@@ -45,7 +47,8 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
     'public_key': base64Encode(der),
     'not_before': '2026-11-01T00:00:00.000Z',
     'not_after': '2027-01-01T00:00:00.000Z',
-    'status': 'active',
+    'status': status,
+    if (signingNotAfter != null) 'signing_not_after': signingNotAfter,
   };
   final keys = <Map<String, Object?>>[key];
   if (duplicateIds) keys.add(Map<String, Object?>.from(key));
@@ -101,6 +104,47 @@ void main() {
       'active',
     );
     expect(store.values, hasLength(1));
+  });
+
+  test('يسمح بالتحقق من توقيع verify_only القديم ويرفض التوقيع بعد cutoff', () async {
+    final signed = await _signedKeyset(
+      status: 'verify_only',
+      signingNotAfter: '2026-11-13T23:59:59.000Z',
+    );
+    final trust = await _trust(MemorySecretStore(), signed.rootPair);
+    final keyset = await trust.acceptSignedEnvelope(signed.envelope);
+    final key = keyset.keyForVerification(
+      keyId: 'ota-key-1',
+      purpose: 'update_manifest',
+      at: _clockNow,
+    );
+
+    expect(key.status, 'verify_only');
+    expect(
+      () => keyset.validateSignatureTime(
+        key: key,
+        signedAt: DateTime.utc(2026, 11, 13, 12),
+        now: _clockNow,
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => keyset.validateSignatureTime(
+        key: key,
+        signedAt: DateTime.utc(2026, 11, 14, 1),
+        now: _clockNow,
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('يرفض verify_only دون signing_not_after', () async {
+    final signed = await _signedKeyset(status: 'verify_only');
+    final trust = await _trust(MemorySecretStore(), signed.rootPair);
+    await expectLater(
+      trust.acceptSignedEnvelope(signed.envelope),
+      throwsA(isA<FormatException>()),
+    );
   });
 
   test('يرفض توقيعًا مزورًا ولا يحفظه', () async {
