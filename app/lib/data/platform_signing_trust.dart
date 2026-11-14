@@ -77,6 +77,28 @@ class PlatformSigningTrust {
     }
   }
 
+  /// يحمّل الجذر العام من dart-define؛ لا توجد قيمة افتراضية أو مفتاح اختبار.
+  factory PlatformSigningTrust.fromEnvironment({
+    required PlatformSecretStore store,
+    DateTime Function()? clock,
+  }) {
+    const configuredKeyId = String.fromEnvironment('HOMI_PLATFORM_ROOT_KEY_ID');
+    const configuredPublicKey =
+        String.fromEnvironment('HOMI_PLATFORM_ROOT_PUBLIC_KEY');
+    if (configuredKeyId.trim().isEmpty ||
+        configuredPublicKey.trim().isEmpty) {
+      throw const FormatException(
+        'لم يتم إعداد جذر ثقة Homi Platform لهذا الإصدار.',
+      );
+    }
+    return PlatformSigningTrust(
+      store: store,
+      rootKeyId: configuredKeyId,
+      rootPublicKeyBase64: configuredPublicKey,
+      clock: clock,
+    );
+  }
+
   static const Duration maxKeysetLifetime = Duration(days: 30);
   static const Duration clockSkew = Duration(minutes: 5);
   static const String _storageKey = 'homi_platform_trusted_keyset_v1';
