@@ -303,6 +303,73 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+  test('يرفض manifest بتوقيع غير صحيح قبل محاولة تحليل JSON', () async {
+    final trustedPair = await Ed25519().newKeyPair();
+    final attackerPair = await Ed25519().newKeyPair();
+    final trustedPublic = await trustedPair.extractPublicKey();
+    final publicDer = <int>[
+      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
+      0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+      ...trustedPublic.bytes,
+    ];
+    // محتوى غير صالح كـ JSON عمدًا؛ يجب أن يفشل التوقيع أولًا.
+    final payload = utf8.encode('{not-json');
+    final wrongSignature =
+        await Ed25519().sign(payload, keyPair: attackerPair);
+    final rootPair = await Ed25519().newKeyPair();
+    final transport = QueueTransport([
+      success({
+        'publication_id': 'publication-bad',
+        'key_id': 'ota-trusted-key',
+        'manifest': base64Encode(payload),
+        'signature': base64Encode(wrongSignature.bytes),
+      }),
+      success(await signedKeyset(
+        rootPair: rootPair,
+        keyId: 'ota-trusted-key',
+        publicDer: publicDer,
+      )),
+    ]);
+    final service = PlatformUpdateService(
+      PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      signingTrust: await testTrust(rootPair),
+    );
+    const update = PlatformUpdateInfo(
+      publicationId: 'publication-bad',
+      version: '1.0.0',
+      versionCode: 100,
+      fileName: 'homi-grocery.apk',
+      sizeBytes: 100,
+      sha256: 'a' * 64,
+      signingKeyId: 'ota-trusted-key',
+    );
+
+    await expectLater(
+      service.fetchVerifiedManifest(
+        accessToken: 'access-test',
+        update: update,
+        licenseId: 'license-1',
+        deviceId: 'device-1',
+        productKey: 'homi-grocery',
+        platform: 'android',
+        architecture: 'universal',
+        channel: 'stable',
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('فشل التحقق من توقيع تحديث Homi'),
+        ),
+      ),
+    );
+    expect(transport.requestedUris, hasLength(2));
+    expect(transport.requestedUris.last.path, '/api/v1/signing-keyset');
+  });
+
   test('ينزل حزمة OTA ويتحقق من الحجم وبصمة SHA-256 قبل إرجاعها', () async {
     final bytes = utf8.encode('Homi signed update package');
     final transport = QueueTransport([]);
