@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 import 'platform_api_client.dart';
+import 'platform_signing_trust.dart';
 
 abstract interface class PlatformUpdateDownloader {
   Future<File> download({
@@ -147,9 +148,11 @@ class VerifiedPlatformUpdateManifest {
 }
 
 class PlatformUpdateService {
-  PlatformUpdateService(this._api);
+  PlatformUpdateService(this._api, {required PlatformSigningTrust signingTrust})
+      : _signingTrust = signingTrust;
 
   final PlatformApiClient _api;
+  final PlatformSigningTrust _signingTrust;
   final Ed25519 _ed25519 = Ed25519();
 
   Future<PlatformUpdateInfo?> checkForUpdate({
@@ -261,35 +264,15 @@ class PlatformUpdateService {
       channel: channel,
     );
 
-    final keysResponse = await _api.getJson('/api/v1/update-signing-keys');
-    final items = keysResponse['items'];
-    if (items is! List) {
-      throw const FormatException('تعذر قراءة مفاتيح توقيع تحديثات Homi.');
-    }
-    final matching = items.cast<Object?>().whereType<Map>().where(
-          (item) => item['key_id'] == keyId &&
-              (item['status'] == 'active' || item['status'] == 'verify_only'),
-        );
-    if (matching.isEmpty || matching.first['public_key'] is! String) {
-      throw const FormatException('مفتاح توقيع تحديث Homi غير معروف.');
-    }
-
-    final publicDer = base64Decode(matching.first['public_key'] as String);
-    const spkiPrefix = <int>[
-      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
-      0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
-    ];
-    if (publicDer.length != 44 ||
-        !_sameBytes(publicDer.take(12).toList(), spkiPrefix)) {
-      throw const FormatException('صيغة مفتاح OTA العام غير مدعومة.');
-    }
-    final publicKey = SimplePublicKey(
-      publicDer.sublist(12),
-      type: KeyPairType.ed25519,
+    final keyset = await _signingTrust.fetchAndAccept(_api);
+    final trustedKey = keyset.keyForVerification(
+      keyId: keyId as String,
+      purpose: 'update_manifest',
+      at: DateTime.now().toUtc(),
     );
     final verified = await _ed25519.verify(
       payload,
-      signature: Signature(signature, publicKey: publicKey),
+      signature: Signature(signature, publicKey: trustedKey.publicKey),
     );
     if (!verified) {
       throw const FormatException('فشل التحقق من توقيع تحديث Homi.');
@@ -391,12 +374,4 @@ class PlatformUpdateService {
     }
   }
 
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
-    }
-    return difference == 0;
-  }
 }
