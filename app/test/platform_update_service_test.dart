@@ -337,7 +337,7 @@ void main() {
       ),
       signingTrust: await testTrust(rootPair),
     );
-    const update = PlatformUpdateInfo(
+    final update = PlatformUpdateInfo(
       publicationId: 'publication-bad',
       version: '1.0.0',
       versionCode: 100,
