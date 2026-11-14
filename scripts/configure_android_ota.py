@@ -166,9 +166,14 @@ if "com.homi.grocery/apk_installer" not in source:
             }
     }
 """
-    closing = source.rfind("}")
-    if closing < 0:
-        raise SystemExit("تعذر تحديد نهاية MainActivity.")
-    source = source[:closing] + handler + "\n" + source[closing:]
+    declaration = re.search(r"(?m)^class MainActivity : FlutterFragmentActivity\(\)\s*$", source)
+    if declaration is not None:
+        source = source[:declaration.start()] + "class MainActivity : FlutterFragmentActivity() {\n" + source[declaration.end():]
+        source = source.rstrip() + "\n" + handler + "\n}\n"
+    else:
+        closing = source.rfind("}")
+        if closing < 0:
+            raise SystemExit("تعذر تحديد نهاية MainActivity.")
+        source = source[:closing] + handler + "\n" + source[closing:]
 activity.write_text(source, encoding="utf-8")
 print("تم إعداد Android APK installer bridge.")
