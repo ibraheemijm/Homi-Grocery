@@ -267,7 +267,7 @@ class PlatformUpdateService {
     // لا نفك JSON ولا نستخدم أي مطالبة قبل التحقق من التوقيع التشغيلي.
     final keyset = await _signingTrust.fetchAndAccept(_api);
     final trustedKey = keyset.keyForVerification(
-      keyId: keyId,
+      keyId: keyId as String,
       purpose: 'update_manifest',
       at: DateTime.now().toUtc(),
     );
