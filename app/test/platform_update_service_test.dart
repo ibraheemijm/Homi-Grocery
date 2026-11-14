@@ -277,7 +277,7 @@ void main() {
     final service = PlatformUpdateService(PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
-    ));
+    ), signingTrust: await testTrust(rootPair));
     const update = PlatformUpdateInfo(
       publicationId: 'publication-1',
       version: '1.0.2',
