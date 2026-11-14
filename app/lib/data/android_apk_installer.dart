@@ -28,7 +28,7 @@ class AndroidApkInstaller {
 
   /// يفتح واجهة Android Package Installer؛ القرار النهائي للمستخدم.
   Future<void> installVerifiedApk(File apk) async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       throw UnsupportedError('تثبيت APK متاح على Android فقط.');
     }
     if (!await apk.exists() ||
@@ -44,7 +44,7 @@ class AndroidApkInstaller {
 
   /// يعيد الإصدار المثبت من PackageManager بعد عودة المستخدم من المثبّت.
   Future<int> installedVersionCode() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       throw UnsupportedError('قراءة إصدار Android متاحة على Android فقط.');
     }
     final version = await _channel.invokeMethod<int>('installedVersionCode');
