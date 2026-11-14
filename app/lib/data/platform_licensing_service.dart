@@ -124,17 +124,23 @@ class PlatformLicensingService {
       throw const FormatException('بيانات تصريح offline غير مكتملة.');
     }
 
-    final payload = base64Decode(payloadText);
-    final signature = base64Decode(signatureText);
-    final claims = jsonDecode(utf8.decode(payload));
-    if (claims is! Map<String, dynamic> ||
-        claims['grant_id'] != grantId ||
-        claims['license_id'] != licenseId ||
-        claims['device_id'] != deviceId ||
-        claims['key_id'] != keyId) {
-      throw const FormatException('بيانات التصريح لا تطابق الجهاز أو الترخيص.');
+    late final List<int> payload;
+    late final List<int> signature;
+    try {
+      payload = base64Decode(payloadText);
+      signature = base64Decode(signatureText);
+      if (base64Encode(payload) != payloadText ||
+          base64Encode(signature) != signatureText ||
+          payload.isEmpty ||
+          payload.length > 64 * 1024 ||
+          signature.length != 64) {
+        throw const FormatException();
+      }
+    } on FormatException {
+      throw const FormatException('ترميز payload أو توقيع تصريح offline غير صالح.');
     }
 
+    // لا نحلل المطالبات ولا نستخدمها قبل إثبات التوقيع بمفتاح موثوق.
     final keyset = await _signingTrust.fetchAndAccept(_api);
     final trustedKey = keyset.keyForVerification(
       keyId: keyId,
@@ -149,16 +155,27 @@ class PlatformLicensingService {
       throw const FormatException('فشل التحقق من توقيع تصريح offline.');
     }
 
-    final issuedAt = DateTime.tryParse(claims['issued_at'] as String? ?? '');
-    final expiresAtText = claims['expires_at'];
+    final decodedClaims = jsonDecode(utf8.decode(payload));
+    if (decodedClaims is! Map<String, dynamic> ||
+        decodedClaims['schema_version'] != 1 ||
+        decodedClaims['grant_id'] != grantId ||
+        decodedClaims['license_id'] != licenseId ||
+        decodedClaims['device_id'] != deviceId ||
+        decodedClaims['key_id'] != keyId) {
+      throw const FormatException('بيانات التصريح لا تطابق الجهاز أو الترخيص.');
+    }
+
+    final issuedAt = _parseGrantTimestamp(decodedClaims['issued_at']);
+    final expiresAtText = decodedClaims['expires_at'];
     final expiresAt = expiresAtText == null
         ? null
-        : DateTime.tryParse(expiresAtText as String);
-    final entitlementVersion = claims['entitlement_version'];
+        : _parseGrantTimestamp(expiresAtText);
+    final entitlementVersion = decodedClaims['entitlement_version'];
     if (issuedAt == null ||
         (expiresAtText != null && expiresAt == null) ||
-        entitlementVersion is! num ||
-        !entitlementVersion.isFinite) {
+        (expiresAt != null && !expiresAt.isAfter(issuedAt)) ||
+        entitlementVersion is! int ||
+        entitlementVersion < 1) {
       throw const FormatException('حقول صلاحية التصريح غير صالحة.');
     }
 
