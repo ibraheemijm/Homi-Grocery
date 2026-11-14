@@ -27,9 +27,10 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
   String expiresAt = '2026-12-14T12:00:00.000Z',
   bool duplicateIds = false,
   bool invalidPurpose = false,
+  SimpleKeyPair? rootPair,
 }) async {
   final algorithm = Ed25519();
-  final rootPair = await algorithm.newKeyPair();
+  final signingRootPair = rootPair ?? await algorithm.newKeyPair();
   final operationalPair = await algorithm.newKeyPair();
   final operationalPublic = await operationalPair.extractPublicKey();
   final der = <int>[
@@ -55,14 +56,14 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
     'expires_at': expiresAt,
     'keys': keys,
   }));
-  final signature = await algorithm.sign(payload, keyPair: rootPair);
+  final signature = await algorithm.sign(payload, keyPair: signingRootPair);
   return (
     envelope: {
       'root_key_id': 'homi-root-1',
       'payload': base64Encode(payload),
       'signature': base64Encode(signature.bytes),
     },
-    rootPair: rootPair,
+    rootPair: signingRootPair,
   );
 }
 
@@ -172,6 +173,35 @@ void main() {
       throwsA(isA<FormatException>()),
     );
     expect((await trust.loadCached())?.version, 2);
+  });
+
+
+  test('يسمح بتجديد Keyset بعد انتهاء المخزن دون إسقاط رقم الإصدار الموثوق',
+      () async {
+    var now = _clockNow;
+    final initial = await _signedKeyset(
+      version: 1,
+      expiresAt: '2026-11-14T12:00:00.000Z',
+    );
+    final rootPublic = await initial.rootPair.extractPublicKey();
+    final store = MemorySecretStore();
+    final trust = PlatformSigningTrust(
+      store: store,
+      rootKeyId: 'homi-root-1',
+      rootPublicKeyBase64: base64Encode(rootPublic.bytes),
+      clock: () => now,
+    );
+    await trust.acceptSignedEnvelope(initial.envelope);
+
+    now = DateTime.utc(2026, 11, 15, 12);
+    final renewed = await _signedKeyset(
+      version: 2,
+      issuedAt: '2026-11-15T12:00:00.000Z',
+      expiresAt: '2026-12-15T12:00:00.000Z',
+      rootPair: initial.rootPair,
+    );
+    final accepted = await trust.acceptSignedEnvelope(renewed.envelope);
+    expect(accepted.version, 2);
   });
 
   test('يرفض معرفات المفاتيح المكررة والغرض غير المدعوم', () async {
