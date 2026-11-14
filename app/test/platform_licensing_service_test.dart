@@ -51,6 +51,8 @@ Future<Map<String, Object?>> signedKeyset({
   required SimpleKeyPair rootPair,
   required String keyId,
   required List<int> publicDer,
+  String status = 'active',
+  String? signingNotAfter,
 }) async {
   final payload = utf8.encode(jsonEncode({
     'schema_version': 1,
@@ -64,7 +66,8 @@ Future<Map<String, Object?>> signedKeyset({
       'public_key': base64Encode(publicDer),
       'not_before': '2026-11-01T00:00:00.000Z',
       'not_after': '2027-01-01T00:00:00.000Z',
-      'status': 'active',
+      'status': status,
+      if (signingNotAfter != null) 'signing_not_after': signingNotAfter,
     }],
   }));
   final signature = await Ed25519().sign(payload, keyPair: rootPair);
