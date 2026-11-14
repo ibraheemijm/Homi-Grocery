@@ -75,16 +75,15 @@ Future<Map<String, Object?>> signedKeyset({
   };
 }
 
-PlatformSigningTrust testTrust(
+Future<PlatformSigningTrust> testTrust(
   MemorySecretStore store,
   SimpleKeyPair rootPair,
-) {
+) async {
+  final publicKey = await rootPair.extractPublicKey();
   return PlatformSigningTrust(
     store: store,
     rootKeyId: 'homi-root-test',
-    rootPublicKeyBase64: base64Encode(
-      (rootPair as SimpleKeyPair).publicKey.bytes,
-    ),
+    rootPublicKeyBase64: base64Encode(publicKey.bytes),
   );
 }
 
@@ -94,8 +93,6 @@ void main() {
     const licenseId = 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
     final nonce = List<int>.generate(32, (index) => index + 1);
     final nonceText = base64UrlEncode(nonce).replaceAll('=', '');
-    final rootPair = await Ed25519().newKeyPair();
-    final store = MemorySecretStore();
     final transport = QueueTransport([
       success({'challenge_id': challengeId, 'nonce': nonceText}),
       success({'id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17'}),
@@ -109,7 +106,7 @@ void main() {
     final service = PlatformLicensingService(
       api: api,
       deviceIdentity: identity,
-      signingTrust: testTrust(MemorySecretStore(), rootPair),
+      signingTrust: await testTrust(MemorySecretStore(), rootPair),
     );
 
     final registered = await service.registerDevice(
@@ -177,6 +174,8 @@ void main() {
       'expires_at': null,
     }));
     final signature = await Ed25519().sign(payload, keyPair: signingKeyPair);
+    final rootPair = await Ed25519().newKeyPair();
+    final store = MemorySecretStore();
     final transport = QueueTransport([
       success({'challenge_id': challengeId, 'nonce': nonceText}),
       success({
@@ -201,7 +200,7 @@ void main() {
     final service = PlatformLicensingService(
       api: api,
       deviceIdentity: PlatformDeviceIdentity(MemorySecretStore(), isAndroid: () => true),
-      signingTrust: testTrust(store, rootPair),
+      signingTrust: await testTrust(store, rootPair),
     );
 
     final grant = await service.issueOfflineGrant(
