@@ -191,5 +191,13 @@ class PlatformLicensingService {
       entitlementVersion: entitlementVersion.toInt(),
     );
   }
-
+  
+  DateTime? _parseGrantTimestamp(Object? value) {
+    if (value is! String ||
+        !RegExp(r'^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?(?:Z|[+-]\\d\\d:\\d\\d)$')
+            .hasMatch(value)) {
+      return null;
+    }
+    return DateTime.tryParse(value)?.toUtc();
+  }
 }
