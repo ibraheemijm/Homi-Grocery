@@ -67,6 +67,8 @@ class IoPlatformHttpTransport implements PlatformHttpTransport {
     final request = await _client.openUrl(method, uri).timeout(
           const Duration(seconds: 15),
         );
+    // لا نتبع التحويلات حتى لا نعيد إرسال Authorization إلى وجهة غير متوقعة.
+    request.followRedirects = false;
     headers.forEach(request.headers.set);
     if (body != null) {
       final bytes = utf8.encode(body);
