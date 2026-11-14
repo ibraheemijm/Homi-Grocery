@@ -87,6 +87,63 @@ Future<PlatformSigningTrust> testTrust(
   );
 }
 
+
+Future<void> expectGrantRejected(Map<String, Object?> claims) async {
+  const licenseId = 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
+  const deviceId = 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
+  const challengeId = 'd5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
+  const grantId = 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
+  const keyId = 'license-key-test';
+  final nonce = List<int>.generate(32, (index) => 255 - index);
+  final nonceText = base64UrlEncode(nonce).replaceAll('=', '');
+  final signingKeyPair = await Ed25519().newKeyPair();
+  final signingPublicKey = await signingKeyPair.extractPublicKey();
+  final publicDer = <int>[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
+    0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+    ...signingPublicKey.bytes,
+  ];
+  final payload = utf8.encode(jsonEncode(claims));
+  final signature = await Ed25519().sign(payload, keyPair: signingKeyPair);
+  final rootPair = await Ed25519().newKeyPair();
+  final store = MemorySecretStore();
+  final transport = QueueTransport([
+    success({'challenge_id': challengeId, 'nonce': nonceText}),
+    success({
+      'id': grantId,
+      'key_id': keyId,
+      'payload': base64Encode(payload),
+      'signature': base64Encode(signature.bytes),
+      'issued_at': '2026-11-10T15:00:00.000000Z',
+      'expires_at': null,
+      'entitlement_version': 4,
+    }),
+    success(await signedKeyset(
+      rootPair: rootPair,
+      keyId: keyId,
+      publicDer: publicDer,
+    )),
+  ]);
+  final api = PlatformApiClient(
+    baseUri: Uri.parse('https://platform.example.test'),
+    transport: transport,
+  );
+  final service = PlatformLicensingService(
+    api: api,
+    deviceIdentity: PlatformDeviceIdentity(MemorySecretStore(), isAndroid: () => true),
+    signingTrust: await testTrust(store, rootPair),
+  );
+
+  await expectLater(
+    service.issueOfflineGrant(
+      accessToken: 'user-token',
+      licenseId: licenseId,
+      deviceId: deviceId,
+    ),
+    throwsA(isA<FormatException>()),
+  );
+}
+
 void main() {
   test('يسجل الجهاز بتحدٍ قصير العمر وتوقيع مفتاح الجهاز', () async {
     const challengeId = 'd5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
@@ -221,4 +278,53 @@ void main() {
       '/api/v1/signing-keyset',
     ]);
   });
+
+  test('يرفض entitlement_version غير الصحيح حتى لو كان رقمًا موجبًا', () async {
+    await expectGrantRejected({
+      'schema_version': 1,
+      'grant_id': 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'license_id': 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'user_id': 'user-1',
+      'product_id': 'product-1',
+      'device_id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'plan_key': 'monthly',
+      'key_id': 'license-key-test',
+      'entitlement_version': 4.5,
+      'issued_at': '2026-11-10T15:00:00.000000Z',
+      'expires_at': null,
+    });
+  });
+
+  test('يرفض issued_at الذي لا يتضمن منطقة زمنية', () async {
+    await expectGrantRejected({
+      'schema_version': 1,
+      'grant_id': 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'license_id': 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'user_id': 'user-1',
+      'product_id': 'product-1',
+      'device_id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'plan_key': 'monthly',
+      'key_id': 'license-key-test',
+      'entitlement_version': 4,
+      'issued_at': '2026-11-10T15:00:00',
+      'expires_at': null,
+    });
+  });
+
+  test('يرفض expires_at المساوي أو السابق لـ issued_at', () async {
+    await expectGrantRejected({
+      'schema_version': 1,
+      'grant_id': 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'license_id': 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'user_id': 'user-1',
+      'product_id': 'product-1',
+      'device_id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'plan_key': 'monthly',
+      'key_id': 'license-key-test',
+      'entitlement_version': 4,
+      'issued_at': '2026-11-10T15:00:00.000000Z',
+      'expires_at': '2026-11-10T15:00:00.000000Z',
+    });
+  });
+
 }
