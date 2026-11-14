@@ -178,6 +178,11 @@ class PlatformLicensingService {
         entitlementVersion < 1) {
       throw const FormatException('حقول صلاحية التصريح غير صالحة.');
     }
+    keyset.validateSignatureTime(
+      key: trustedKey,
+      signedAt: issuedAt,
+      now: DateTime.now().toUtc(),
+    );
 
     return VerifiedOfflineGrant(
       id: grantId,
