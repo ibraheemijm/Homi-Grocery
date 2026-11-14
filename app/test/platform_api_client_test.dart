@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/data/platform_api_client.dart';
@@ -72,6 +73,33 @@ void main() {
     expect(jsonDecode(transport.requestedBody!), {'plan_key': 'monthly'});
     api.close();
     expect(transport.closed, isTrue);
+  });
+
+
+  test('لا يتبع تحويلات HTTP إلى وجهة أخرى', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requestCount = 0;
+    final serving = server.listen((request) async {
+      requestCount++;
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set(HttpHeaders.locationHeader, '/redirect-target');
+      await request.response.close();
+    });
+    final transport = IoPlatformHttpTransport();
+    try {
+      final response = await transport.send(
+        method: 'GET',
+        uri: Uri.parse('http://127.0.0.1:${server.port}/api/v1/test'),
+        headers: const {'authorization': 'Bearer secret-test'},
+      );
+      expect(response.statusCode, HttpStatus.found);
+      expect(requestCount, 1);
+    } finally {
+      transport.close();
+      await serving.cancel();
+      await server.close(force: true);
+    }
   });
 
   test('يعرض رمز الخطأ ومعرف الطلب دون كشف تفاصيل داخلية', () async {
