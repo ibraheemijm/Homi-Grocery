@@ -29,6 +29,8 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
   bool invalidPurpose = false,
   String status = 'active',
   String? signingNotAfter,
+  String notBefore = '2026-11-01T00:00:00.000Z',
+  String notAfter = '2027-01-01T00:00:00.000Z',
   SimpleKeyPair? rootPair,
 }) async {
   final algorithm = Ed25519();
@@ -45,8 +47,8 @@ Future<({Map<String, Object?> envelope, SimpleKeyPair rootPair})>
     'purpose': invalidPurpose ? 'license' : 'update_manifest',
     'algorithm': 'Ed25519',
     'public_key': base64Encode(der),
-    'not_before': '2026-11-01T00:00:00.000Z',
-    'not_after': '2027-01-01T00:00:00.000Z',
+    'not_before': notBefore,
+    'not_after': notAfter,
     'status': status,
     if (signingNotAfter != null) 'signing_not_after': signingNotAfter,
   };
@@ -169,6 +171,36 @@ void main() {
       expiresAt: '2026-11-14T11:00:00.000Z',
     );
     for (final signed in [longLived, expired]) {
+      final trust = await _trust(MemorySecretStore(), signed.rootPair);
+      await expectLater(
+        trust.acceptSignedEnvelope(signed.envelope),
+        throwsA(isA<FormatException>()),
+      );
+    }
+  });
+
+
+  test('يرفض تواريخ Keyset غير الموجودة تقويميًا أو خارج نطاق الوقت', () async {
+    final invalidIssuedAt = await _signedKeyset(
+      issuedAt: '2026-02-30T12:00:00.000Z',
+    );
+    final invalidExpiresAt = await _signedKeyset(
+      expiresAt: '2026-13-14T12:00:00.000Z',
+    );
+    final invalidNotBefore = await _signedKeyset(
+      notBefore: '2026-11-01T25:00:00.000Z',
+    );
+    final invalidCutoff = await _signedKeyset(
+      status: 'verify_only',
+      signingNotAfter: '2026-11-14T12:00:00+25:00',
+    );
+
+    for (final signed in [
+      invalidIssuedAt,
+      invalidExpiresAt,
+      invalidNotBefore,
+      invalidCutoff,
+    ]) {
       final trust = await _trust(MemorySecretStore(), signed.rootPair);
       await expectLater(
         trust.acceptSignedEnvelope(signed.envelope),
