@@ -248,25 +248,26 @@ class PlatformUpdateService {
       throw const FormatException('بيانات manifest لا تطابق الإصدار المطلوب.');
     }
 
-    final payload = base64Decode(payloadText);
-    final signature = base64Decode(signatureText);
-    final claims = jsonDecode(utf8.decode(payload));
-    if (claims is! Map<String, dynamic>) {
-      throw const FormatException('محتوى manifest غير صالح.');
+    late final List<int> payload;
+    late final List<int> signature;
+    try {
+      payload = base64Decode(payloadText);
+      signature = base64Decode(signatureText);
+      if (base64Encode(payload) != payloadText ||
+          base64Encode(signature) != signatureText ||
+          payload.isEmpty ||
+          payload.length > 64 * 1024 ||
+          signature.length != 64) {
+        throw const FormatException();
+      }
+    } on FormatException {
+      throw const FormatException('ترميز manifest أو توقيعه غير صالح.');
     }
 
-    _validateClaims(
-      claims,
-      update: update,
-      productKey: productKey,
-      platform: platform,
-      architecture: architecture,
-      channel: channel,
-    );
-
+    // لا نفك JSON ولا نستخدم أي مطالبة قبل التحقق من التوقيع التشغيلي.
     final keyset = await _signingTrust.fetchAndAccept(_api);
     final trustedKey = keyset.keyForVerification(
-      keyId: keyId as String,
+      keyId: keyId,
       purpose: 'update_manifest',
       at: DateTime.now().toUtc(),
     );
@@ -277,6 +278,20 @@ class PlatformUpdateService {
     if (!verified) {
       throw const FormatException('فشل التحقق من توقيع تحديث Homi.');
     }
+
+    final claimsValue = jsonDecode(utf8.decode(payload));
+    if (claimsValue is! Map<String, dynamic>) {
+      throw const FormatException('محتوى manifest غير صالح.');
+    }
+    final claims = claimsValue;
+    _validateClaims(
+      claims,
+      update: update,
+      productKey: productKey,
+      platform: platform,
+      architecture: architecture,
+      channel: channel,
+    );
 
     return VerifiedPlatformUpdateManifest(
       publicationId: update.publicationId,
