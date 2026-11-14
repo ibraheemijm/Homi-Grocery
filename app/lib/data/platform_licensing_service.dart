@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'platform_api_client.dart';
 import 'platform_device_identity.dart';
+import 'platform_signing_trust.dart';
 
 class VerifiedOfflineGrant {
   const VerifiedOfflineGrant({
@@ -34,11 +35,14 @@ class PlatformLicensingService {
   PlatformLicensingService({
     required PlatformApiClient api,
     required PlatformDeviceIdentity deviceIdentity,
+    required PlatformSigningTrust signingTrust,
   })  : _api = api,
-        _deviceIdentity = deviceIdentity;
+        _deviceIdentity = deviceIdentity,
+        _signingTrust = signingTrust;
 
   final PlatformApiClient _api;
   final PlatformDeviceIdentity _deviceIdentity;
+  final PlatformSigningTrust _signingTrust;
   final Ed25519 _ed25519 = Ed25519();
 
   /// يسجل الجهاز بمفتاحه العام؛ لا يغادر المفتاح الخاص التخزين الآمن.
@@ -131,40 +135,15 @@ class PlatformLicensingService {
       throw const FormatException('بيانات التصريح لا تطابق الجهاز أو الترخيص.');
     }
 
-    final keysResponse = await _api.getJson('/api/v1/license-signing-keys');
-    final keys = keysResponse['items'];
-    if (keys is! List) {
-      throw const FormatException('تعذر قراءة مفاتيح التحقق من التراخيص.');
-    }
-    final matchingKey = keys.cast<Object?>().whereType<Map>().where(
-          (item) => item['key_id'] == keyId &&
-              (item['status'] == 'active' || item['status'] == 'verify_only'),
-        );
-    if (matchingKey.isEmpty) {
-      throw const FormatException('مفتاح توقيع التصريح غير معروف لهذا التطبيق.');
-    }
-
-    final publicDerText = matchingKey.first['public_key'];
-    if (publicDerText is! String) {
-      throw const FormatException('المفتاح العام للتصريح غير صالح.');
-    }
-    final publicDer = base64Decode(publicDerText);
-    const spkiPrefix = <int>[
-      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
-      0x70, 0x03, 0x21, 0x00,
-    ];
-    if (publicDer.length != 44 ||
-        !_sameBytes(publicDer.take(12).toList(), spkiPrefix)) {
-      throw const FormatException('صيغة مفتاح Ed25519 العام غير مدعومة.');
-    }
-
-    final publicKey = SimplePublicKey(
-      publicDer.sublist(12),
-      type: KeyPairType.ed25519,
+    final keyset = await _signingTrust.fetchAndAccept(_api);
+    final trustedKey = keyset.keyForVerification(
+      keyId: keyId,
+      purpose: 'offline_license_grant',
+      at: DateTime.now().toUtc(),
     );
     final isValid = await _ed25519.verify(
       payload,
-      signature: Signature(signature, publicKey: publicKey),
+      signature: Signature(signature, publicKey: trustedKey.publicKey),
     );
     if (!isValid) {
       throw const FormatException('فشل التحقق من توقيع تصريح offline.');
@@ -196,12 +175,4 @@ class PlatformLicensingService {
     );
   }
 
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
-    }
-    return difference == 0;
-  }
 }
