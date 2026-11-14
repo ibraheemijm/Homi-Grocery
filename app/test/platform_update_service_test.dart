@@ -79,6 +79,45 @@ void main() {
     expect(transport.requestedUris.single.queryParameters['current_version_code'], '101');
   });
 
+  test('يرفض version_code وsize_bytes الكسريين أو خارج الحدود', () async {
+    final base = <String, Object?>{
+      'available': true,
+      'publication_id': 'publication-1',
+      'version': '1.0.0',
+      'version_code': 10,
+      'file_name': 'homi-grocery.apk',
+      'size_bytes': 1024,
+      'sha256_hex': 'a' * 64,
+      'signing_key_id': 'ota-key',
+    };
+
+    for (final invalid in [
+      {...base, 'version_code': 10.5},
+      {...base, 'version_code': 0},
+      {...base, 'size_bytes': 1024.5},
+      {...base, 'size_bytes': 0},
+      {...base, 'size_bytes': 1024 * 1024 * 1024 + 1},
+    ]) {
+      final service = PlatformUpdateService(PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: QueueTransport([success(invalid)]),
+      ));
+      await expectLater(
+        service.checkForUpdate(
+          accessToken: 'access-test',
+          productKey: 'homi-grocery',
+          platform: 'android',
+          architecture: 'universal',
+          channel: 'stable',
+          currentVersionCode: 9,
+          licenseId: 'license-1',
+          deviceId: 'device-1',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    }
+  });
+
   test('يتحقق من manifest ومفتاح OTA قبل إرجاع بيانات التحديث', () async {
     const publicationId = 'publication-1';
     const keyId = 'ota-test-key';
