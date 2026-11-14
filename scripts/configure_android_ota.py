@@ -108,13 +108,13 @@ if "com.homi.grocery/apk_installer" not in source:
                         result.success(null)
                     }
                     "installedVersionCode" -> {
+                        @Suppress("DEPRECATION")
                         val info = if (Build.VERSION.SDK_INT >= 33) {
                             packageManager.getPackageInfo(
                                 packageName,
                                 PackageManager.PackageInfoFlags.of(0)
                             )
                         } else {
-                            @Suppress("DEPRECATION")
                             packageManager.getPackageInfo(packageName, 0)
                         }
                         @Suppress("DEPRECATION")
