@@ -265,6 +265,7 @@ void main() {
       'key_id': 'ota-test-key',
     }));
     final signature = await Ed25519().sign(payload, keyPair: keyPair);
+    final rootPair = await Ed25519().newKeyPair();
     final transport = QueueTransport([
       success({
         'publication_id': 'publication-1',
