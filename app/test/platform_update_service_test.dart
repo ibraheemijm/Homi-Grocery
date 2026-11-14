@@ -107,6 +107,80 @@ Future<Map<String, Object?>> signedKeyset({
   };
 }
 
+Future<void> expectManifestTimestampRejected(String publishedAt) async {
+  const publicationId = 'publication-invalid-time';
+  const keyId = 'ota-invalid-time-key';
+  final keyPair = await Ed25519().newKeyPair();
+  final publicKey = await keyPair.extractPublicKey();
+  final publicDer = <int>[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
+    0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+    ...publicKey.bytes,
+  ];
+  final claims = <String, Object?>{
+    'schema_version': 1,
+    'publication_id': publicationId,
+    'product_key': 'homi-grocery',
+    'platform': 'android',
+    'architecture': 'universal',
+    'channel': 'stable',
+    'version': '1.0.2',
+    'version_code': 102,
+    'file_name': 'homi-grocery.apk',
+    'size_bytes': 123456,
+    'sha256': 'a' * 64,
+    'release_notes': null,
+    'published_at': publishedAt,
+    'download_url': '/api/v1/updates/$publicationId/download',
+    'key_id': keyId,
+  };
+  final payload = utf8.encode(jsonEncode(claims));
+  final signature = await Ed25519().sign(payload, keyPair: keyPair);
+  final rootPair = await Ed25519().newKeyPair();
+  final transport = QueueTransport([
+    success({
+      'publication_id': publicationId,
+      'key_id': keyId,
+      'manifest': base64Encode(payload),
+      'signature': base64Encode(signature.bytes),
+    }),
+    success(await signedKeyset(
+      rootPair: rootPair,
+      keyId: keyId,
+      publicDer: publicDer,
+    )),
+  ]);
+  final service = PlatformUpdateService(
+    PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: transport,
+    ),
+    signingTrust: await testTrust(rootPair),
+  );
+
+  await expectLater(
+    service.fetchVerifiedManifest(
+      accessToken: 'access-test',
+      update: const PlatformUpdateInfo(
+        publicationId: publicationId,
+        version: '1.0.2',
+        versionCode: 102,
+        fileName: 'homi-grocery.apk',
+        sizeBytes: 123456,
+        sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        signingKeyId: keyId,
+      ),
+      licenseId: 'license-1',
+      deviceId: 'device-1',
+      productKey: 'homi-grocery',
+      platform: 'android',
+      architecture: 'arm64-v8a',
+      channel: 'stable',
+    ),
+    throwsA(isA<FormatException>()),
+  );
+}
+
 void main() {
   test('يعيد null عندما لا يوجد إصدار أحدث', () async {
     final transport = QueueTransport([success({'available': false})]);
@@ -371,6 +445,20 @@ void main() {
     );
     expect(transport.requestedUris, hasLength(2));
     expect(transport.requestedUris.last.path, '/api/v1/signing-keyset');
+  });
+
+
+  test('يرفض تواريخ manifest غير الموجودة تقويميًا أو خارج نطاق الوقت والمنطقة الزمنية', () async {
+    for (final timestamp in [
+      '2026-02-30T12:00:00.000Z',
+      '2026-13-10T12:00:00.000Z',
+      '2026-11-10T25:00:00.000Z',
+      '2026-11-10T12:60:00.000Z',
+      '2026-11-10T12:00:00+25:00',
+      '2026-11-10T12:00:00',
+    ]) {
+      await expectManifestTimestampRejected(timestamp);
+    }
   });
 
   test('ينزل حزمة OTA ويتحقق من الحجم وبصمة SHA-256 قبل إرجاعها', () async {
