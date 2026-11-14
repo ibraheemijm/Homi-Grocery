@@ -14,6 +14,7 @@ class TrustedPlatformSigningKey {
     required this.status,
     required this.notBefore,
     required this.notAfter,
+    required this.signingNotAfter,
   });
 
   final String keyId;
@@ -22,6 +23,8 @@ class TrustedPlatformSigningKey {
   final String status;
   final DateTime notBefore;
   final DateTime notAfter;
+  /// آخر وقت مسموح لإنشاء توقيع جديد بهذا المفتاح؛ null للمفتاح النشط.
+  final DateTime? signingNotAfter;
 }
 
 class VerifiedPlatformKeyset {
@@ -58,6 +61,25 @@ class VerifiedPlatformKeyset {
       );
     }
     return matches.single;
+  }
+
+  /// يُستدعى بعد نجاح التحقق الرياضي من التوقيع وتحليل تاريخ الإصدار الموقّع.
+  /// مفتاح verify_only يتحقق من التواقيع السابقة لوقت إيقاف التوقيع فقط.
+  void validateSignatureTime({
+    required TrustedPlatformSigningKey key,
+    required DateTime signedAt,
+    required DateTime now,
+  }) {
+    final timestamp = signedAt.toUtc();
+    final current = now.toUtc();
+    if (timestamp.isBefore(key.notBefore) ||
+        timestamp.isAfter(current.add(PlatformSigningTrust.clockSkew)) ||
+        (key.signingNotAfter != null &&
+            timestamp.isAfter(key.signingNotAfter!))) {
+      throw const FormatException(
+        'تاريخ التوقيع خارج الفترة المسموح بها لهذا المفتاح.',
+      );
+    }
   }
 }
 
@@ -268,7 +290,15 @@ class PlatformSigningTrust {
 
       final notBefore = _parseTimestamp(raw['not_before']);
       final notAfter = _parseTimestamp(raw['not_after']);
-      if (!notAfter.isAfter(notBefore)) {
+      final signingNotAfterValue = raw['signing_not_after'];
+      final signingNotAfter = signingNotAfterValue == null
+          ? null
+          : _parseTimestamp(signingNotAfterValue);
+      if ((status == 'verify_only' && signingNotAfter == null) ||
+          (signingNotAfter != null &&
+              (signingNotAfter.isBefore(notBefore) ||
+                  signingNotAfter.isAfter(notAfter))) ||
+          !notAfter.isAfter(notBefore)) {
         throw const FormatException('فترة صلاحية المفتاح غير صحيحة.');
       }
 
@@ -293,6 +323,7 @@ class PlatformSigningTrust {
         status: status as String,
         notBefore: notBefore,
         notAfter: notAfter,
+        signingNotAfter: signingNotAfter,
       ));
     }
 
