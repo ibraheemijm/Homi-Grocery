@@ -88,7 +88,12 @@ Future<PlatformSigningTrust> testTrust(
 }
 
 
-Future<void> expectGrantRejected(Map<String, Object?> claims) async {
+Future<void> expectGrantRejected(
+  Map<String, Object?> claims, {
+  String? payloadOverride,
+  String? signatureOverride,
+  int expectedRequestCount = 3,
+}) async {
   const licenseId = 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
   const deviceId = 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
   const challengeId = 'd5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
@@ -112,8 +117,8 @@ Future<void> expectGrantRejected(Map<String, Object?> claims) async {
     success({
       'id': grantId,
       'key_id': keyId,
-      'payload': base64Encode(payload),
-      'signature': base64Encode(signature.bytes),
+      'payload': payloadOverride ?? base64Encode(payload),
+      'signature': signatureOverride ?? base64Encode(signature.bytes),
       'issued_at': '2026-11-10T15:00:00.000000Z',
       'expires_at': null,
       'entitlement_version': 4,
@@ -142,6 +147,7 @@ Future<void> expectGrantRejected(Map<String, Object?> claims) async {
     ),
     throwsA(isA<FormatException>()),
   );
+  expect(transport.requests, hasLength(expectedRequestCount));
 }
 
 void main() {
@@ -325,6 +331,41 @@ void main() {
       'issued_at': '2026-11-10T15:00:00.000000Z',
       'expires_at': '2026-11-10T15:00:00.000000Z',
     });
+  });
+
+
+  test('يرفض توقيع Ed25519 بطول غير صحيح قبل طلب Keyset', () async {
+    await expectGrantRejected({
+      'schema_version': 1,
+      'grant_id': 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'license_id': 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'user_id': 'user-1',
+      'product_id': 'product-1',
+      'device_id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'plan_key': 'monthly',
+      'key_id': 'license-key-test',
+      'entitlement_version': 4,
+      'issued_at': '2026-11-10T15:00:00.000000Z',
+      'expires_at': null,
+    }, signatureOverride: base64Encode(List<int>.filled(63, 0)),
+      expectedRequestCount: 2);
+  });
+
+  test('يرفض Base64 غير صالح قبل طلب Keyset', () async {
+    await expectGrantRejected({
+      'schema_version': 1,
+      'grant_id': 'a5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'license_id': 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'user_id': 'user-1',
+      'product_id': 'product-1',
+      'device_id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17',
+      'plan_key': 'monthly',
+      'key_id': 'license-key-test',
+      'entitlement_version': 4,
+      'issued_at': '2026-11-10T15:00:00.000000Z',
+      'expires_at': null,
+    }, signatureOverride: 'not-base64!',
+      expectedRequestCount: 2);
   });
 
 }
