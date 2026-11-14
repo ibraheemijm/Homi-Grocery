@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'platform_api_client.dart';
 import 'platform_device_identity.dart';
 
 class TrustedPlatformSigningKey {
@@ -138,6 +139,12 @@ class PlatformSigningTrust {
 
     await _store.write(_storageKey, jsonEncode(verified.signedEnvelope));
     return verified;
+  }
+
+  /// يجلب الغلاف الموقّع من المنصة ولا يقبله إلا بعد تحقق الجذر المضمّن.
+  Future<VerifiedPlatformKeyset> fetchAndAccept(PlatformApiClient api) async {
+    final envelope = await api.getJson('/api/v1/signing-keyset');
+    return acceptSignedEnvelope(envelope);
   }
 
   /// يستعيد النسخة المخبأة مع إعادة التحقق من التوقيع والصلاحية الحالية.
