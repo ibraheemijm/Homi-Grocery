@@ -73,6 +73,7 @@ class VerifiedPlatformKeyset {
     final timestamp = signedAt.toUtc();
     final current = now.toUtc();
     if (timestamp.isBefore(key.notBefore) ||
+        timestamp.isAfter(key.notAfter) ||
         timestamp.isAfter(current.add(PlatformSigningTrust.clockSkew)) ||
         (key.signingNotAfter != null &&
             timestamp.isAfter(key.signingNotAfter!))) {
