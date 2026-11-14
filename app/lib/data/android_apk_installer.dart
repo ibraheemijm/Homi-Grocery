@@ -4,13 +4,15 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class AndroidApkInstaller {
-  AndroidApkInstaller({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('com.homi.grocery/apk_installer');
+  AndroidApkInstaller({MethodChannel? channel, bool? isAndroid})
+      : _channel = channel ?? const MethodChannel('com.homi.grocery/apk_installer'),
+        _isAndroid = isAndroid ?? Platform.isAndroid;
 
   final MethodChannel _channel;
+  final bool _isAndroid;
 
   Future<bool> canRequestPackageInstalls() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       throw UnsupportedError('تثبيت APK متاح على Android فقط.');
     }
     return await _channel.invokeMethod<bool>('canRequestPackageInstalls') ?? false;
