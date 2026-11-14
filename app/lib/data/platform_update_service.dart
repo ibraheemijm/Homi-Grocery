@@ -191,9 +191,15 @@ class PlatformUpdateService {
         version is! String ||
         versionCode is! num ||
         !versionCode.isFinite ||
+        versionCode < 1 ||
+        versionCode > 0x7fffffff ||
+        versionCode.toInt() != versionCode ||
         fileName is! String ||
         sizeBytes is! num ||
         !sizeBytes.isFinite ||
+        sizeBytes < 1 ||
+        sizeBytes > 1024 * 1024 * 1024 ||
+        sizeBytes.toInt() != sizeBytes ||
         sha256 is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) ||
         signingKeyId is! String) {
