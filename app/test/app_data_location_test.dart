@@ -167,5 +167,46 @@ void main() {
     expect(restoredProducts, hasLength(1));
     expect(restoredProducts.single['name'], 'صنف النقل');
     await rollbackParent.delete(recursive: true);
+
+    // يجب أن يمكن إعادة الربط حتى عندما يكون المسار المحفوظ نفسه غير متاح.
+    await GroceryDatabase.closeForMaintenance();
+    final disconnectedTarget = Directory('${target.path}.disconnected');
+    await target.rename(disconnectedTarget.path);
+    final recoveryParent = await Directory.systemTemp.createTemp('homi-data-reconnect-');
+    final recoveryTarget = Directory(p.join(recoveryParent.path, 'Homi Grocery Data'));
+    await recoveryTarget.create(recursive: true);
+    await for (final entity in disconnectedTarget.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      final relative = p.relative(entity.path, from: disconnectedTarget.path);
+      final destination = p.join(recoveryTarget.path, relative);
+      if (entity is Directory) {
+        await Directory(destination).create(recursive: true);
+      } else if (entity is File) {
+        await Directory(p.dirname(destination)).create(recursive: true);
+        await entity.copy(destination);
+      }
+    }
+
+    final fallbackDatabase = await databaseFactory.openDatabase(
+      p.join(supportDirectory.path, 'homi_grocery.db'),
+    );
+    final reconnectedAfterDisconnect = await AppDataLocation.connectExisting(
+      currentDatabase: fallbackDatabase,
+      closeDatabase: () async {
+        if (fallbackDatabase.isOpen) await fallbackDatabase.close();
+      },
+      reopenDatabase: GroceryDatabase.open,
+      selectedParentPath: recoveryParent.path,
+    );
+    expect(reconnectedAfterDisconnect.path, recoveryTarget.path);
+    final databaseAfterReconnect = await GroceryDatabase.open();
+    final productsAfterReconnect = await databaseAfterReconnect.query('products');
+    expect(productsAfterReconnect, hasLength(1));
+    expect(productsAfterReconnect.single['name'], 'صنف النقل');
+    await GroceryDatabase.closeForMaintenance();
+    await disconnectedTarget.rename(target.path);
+    await recoveryParent.delete(recursive: true);
   });
 }
