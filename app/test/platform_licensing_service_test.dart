@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/data/platform_api_client.dart';
 import 'package:homi_grocery/data/platform_device_identity.dart';
 import 'package:homi_grocery/data/platform_licensing_service.dart';
+import 'package:homi_grocery/data/platform_signing_trust.dart';
 
 class MemorySecretStore implements PlatformSecretStore {
   final Map<String, String> values = {};
@@ -45,12 +46,56 @@ PlatformHttpResponse success(Map<String, Object?> data) => PlatformHttpResponse(
       body: jsonEncode({'success': true, 'data': data}),
     );
 
+
+Future<Map<String, Object?>> signedKeyset({
+  required SimpleKeyPair rootPair,
+  required String keyId,
+  required List<int> publicDer,
+}) async {
+  final payload = utf8.encode(jsonEncode({
+    'schema_version': 1,
+    'keyset_version': 1,
+    'issued_at': '2026-11-10T12:00:00.000Z',
+    'expires_at': '2026-12-10T12:00:00.000Z',
+    'keys': [{
+      'key_id': keyId,
+      'purpose': 'offline_license_grant',
+      'algorithm': 'Ed25519',
+      'public_key': base64Encode(publicDer),
+      'not_before': '2026-11-01T00:00:00.000Z',
+      'not_after': '2027-01-01T00:00:00.000Z',
+      'status': 'active',
+    }],
+  }));
+  final signature = await Ed25519().sign(payload, keyPair: rootPair);
+  return {
+    'root_key_id': 'homi-root-test',
+    'payload': base64Encode(payload),
+    'signature': base64Encode(signature.bytes),
+  };
+}
+
+PlatformSigningTrust testTrust(
+  MemorySecretStore store,
+  SimpleKeyPair rootPair,
+) {
+  return PlatformSigningTrust(
+    store: store,
+    rootKeyId: 'homi-root-test',
+    rootPublicKeyBase64: base64Encode(
+      (rootPair as SimpleKeyPair).publicKey.bytes,
+    ),
+  );
+}
+
 void main() {
   test('يسجل الجهاز بتحدٍ قصير العمر وتوقيع مفتاح الجهاز', () async {
     const challengeId = 'd5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
     const licenseId = 'e5a1e20a-5c30-4b58-a430-1cb2c4bbef17';
     final nonce = List<int>.generate(32, (index) => index + 1);
     final nonceText = base64UrlEncode(nonce).replaceAll('=', '');
+    final rootPair = await Ed25519().newKeyPair();
+    final store = MemorySecretStore();
     final transport = QueueTransport([
       success({'challenge_id': challengeId, 'nonce': nonceText}),
       success({'id': 'f5a1e20a-5c30-4b58-a430-1cb2c4bbef17'}),
@@ -60,7 +105,12 @@ void main() {
       baseUri: Uri.parse('https://platform.example.test'),
       transport: transport,
     );
-    final service = PlatformLicensingService(api: api, deviceIdentity: identity);
+    final rootPair = await Ed25519().newKeyPair();
+    final service = PlatformLicensingService(
+      api: api,
+      deviceIdentity: identity,
+      signingTrust: testTrust(MemorySecretStore(), rootPair),
+    );
 
     final registered = await service.registerDevice(
       accessToken: 'user-token',
@@ -138,13 +188,11 @@ void main() {
         'expires_at': null,
         'entitlement_version': 4,
       }),
-      success({
-        'items': [{
-          'key_id': keyId,
-          'public_key': base64Encode(publicDer),
-          'status': 'active',
-        }],
-      }),
+      success(await signedKeyset(
+        rootPair: rootPair,
+        keyId: keyId,
+        publicDer: publicDer,
+      )),
     ]);
     final api = PlatformApiClient(
       baseUri: Uri.parse('https://platform.example.test'),
@@ -153,6 +201,7 @@ void main() {
     final service = PlatformLicensingService(
       api: api,
       deviceIdentity: PlatformDeviceIdentity(MemorySecretStore(), isAndroid: () => true),
+      signingTrust: testTrust(store, rootPair),
     );
 
     final grant = await service.issueOfflineGrant(
@@ -170,7 +219,7 @@ void main() {
     expect(transport.requests.map((request) => request.uri.path), [
       '/api/v1/devices/$deviceId/challenges',
       '/api/v1/licenses/$licenseId/offline-grants',
-      '/api/v1/license-signing-keys',
+      '/api/v1/signing-keyset',
     ]);
   });
 }
