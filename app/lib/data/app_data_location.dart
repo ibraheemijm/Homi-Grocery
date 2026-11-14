@@ -19,15 +19,21 @@ class AppDataLocation {
   static Future<File> _config() async =>
       File(p.join((await _support()).path, _configName));
 
-  /// لا يرجع إلى قاعدة افتراضية فارغة إذا تعذر الوصول إلى القرص المحدد.
-  static Future<Directory> resolveDataDirectory() async {
-    final file = await _config();
-    if (!await file.exists()) return _support();
+  /// يقرأ المسار المحفوظ حتى إذا كان القرص غير متصل؛ نحتاجه لاستعادة الربط.
+  static Future<String> _configuredPath() async {
+    final support = await _support();
+    final file = File(p.join(support.path, _configName));
+    if (!await file.exists()) return support.absolute.path;
     final value = (await file.readAsString()).trim();
     if (value.isEmpty || !p.isAbsolute(value)) {
       throw const FormatException('مسار بيانات Homi المحفوظ غير صالح.');
     }
-    final dir = Directory(p.normalize(value));
+    return p.normalize(value);
+  }
+
+  /// لا يرجع إلى قاعدة افتراضية فارغة إذا تعذر الوصول إلى القرص المحدد.
+  static Future<Directory> resolveDataDirectory() async {
+    final dir = Directory(await _configuredPath());
     if (!await dir.exists()) {
       throw FileSystemException(
         'مجلد بيانات Homi غير متاح. أعد توصيل القرص أو القسم المحدد.',
@@ -70,7 +76,7 @@ class AppDataLocation {
       if (candidate != null && candidate.isOpen) await candidate.close();
     }
 
-    final previousPath = await currentPath();
+    final previousPath = await _configuredPath();
     final targetPath = p.normalize(target.absolute.path);
     if (p.equals(p.normalize(previousPath), targetPath)) return target;
 
