@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homi_grocery/data/platform_api_client.dart';
@@ -67,11 +68,38 @@ void main() {
     expect(result['created'], isTrue);
     expect(transport.requestedMethod, 'POST');
     expect(transport.requestedUri!.path, '/api/v1/subscription-requests');
-    expect(transport.requestedHeaders!['Authorization'], 'Bearer access-token');
+    expect(transport.requestedHeaders!['authorization'], 'Bearer access-token');
     expect(transport.requestedHeaders!['Idempotency-Key'], 'request-key-0001');
     expect(jsonDecode(transport.requestedBody!), {'plan_key': 'monthly'});
     api.close();
     expect(transport.closed, isTrue);
+  });
+
+
+  test('لا يتبع تحويلات HTTP إلى وجهة أخرى', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requestCount = 0;
+    final serving = server.listen((request) async {
+      requestCount++;
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set(HttpHeaders.locationHeader, '/redirect-target');
+      await request.response.close();
+    });
+    final transport = IoPlatformHttpTransport();
+    try {
+      final response = await transport.send(
+        method: 'GET',
+        uri: Uri.parse('http://127.0.0.1:${server.port}/api/v1/test'),
+        headers: const {'authorization': 'Bearer secret-test'},
+      );
+      expect(response.statusCode, HttpStatus.found);
+      expect(requestCount, 1);
+    } finally {
+      transport.close();
+      await serving.cancel();
+      await server.close(force: true);
+    }
   });
 
   test('يعرض رمز الخطأ ومعرف الطلب دون كشف تفاصيل داخلية', () async {
@@ -118,4 +146,63 @@ void main() {
       throwsA(isA<PlatformApiConfigurationException>()),
     );
   });
+
+  test('يرفض مسارات API الملتبسة وطرق HTTP غير المدعومة', () async {
+    final api = PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: FakeTransport(const PlatformHttpResponse(
+        statusCode: 200,
+        body: '{"success":true,"data":{}}',
+      )),
+    );
+
+    for (final path in [
+      '/api/v10/users',
+      '/api/v1/users?admin=true',
+      '/api/v1/../admin',
+      '/api/v1/users/encoded%2fadmin',
+    ]) {
+      await expectLater(
+        api.getJson(path),
+        throwsA(isA<PlatformApiConfigurationException>()),
+      );
+    }
+    expect(
+      () => api.resolveApiUri('/api/v1/../admin'),
+      throwsA(isA<PlatformApiConfigurationException>()),
+    );
+    await expectLater(
+      api.requestJson(method: 'TRACE', path: '/api/v1/test'),
+      throwsA(isA<PlatformApiConfigurationException>()),
+    );
+  });
+
+  test('يوقف قراءة استجابة HTTP التي تتجاوز الحد الأقصى', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serving = server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..contentLength = PlatformApiClient.maxResponseBytes + 1;
+      request.response.add(
+        List<int>.filled(PlatformApiClient.maxResponseBytes + 1, 65),
+      );
+      await request.response.close();
+    });
+    final transport = IoPlatformHttpTransport();
+    try {
+      await expectLater(
+        transport.send(
+          method: 'GET',
+          uri: Uri.parse('http://127.0.0.1:${server.port}/api/v1/test'),
+          headers: const {},
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    } finally {
+      transport.close();
+      await serving.cancel();
+      await server.close(force: true);
+    }
+  });
+
 }

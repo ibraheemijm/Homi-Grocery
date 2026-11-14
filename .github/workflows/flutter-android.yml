@@ -3,9 +3,9 @@ name: Flutter Android checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/flutter-foundation]
+    branches: [feature/flutter-foundation, feature/windows-ota-foundation]
   pull_request:
-    branches: [main]
+    branches: [main, feature/flutter-foundation]
 
 concurrency:
   group: flutter-android-${{ github.workflow }}-${{ github.ref }}
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.44.9'
           cache: true
       - name: Install dependencies
         run: flutter pub get
@@ -144,6 +144,8 @@ jobs:
                       source = source[:insert_at] + '\n            signingConfig signingConfigs.debug' + source[insert_at:]
               gradle.write_text(source)
           PY
+      - name: Configure Android APK installer bridge
+        run: python3 ../scripts/configure_android_ota.py
       - name: Analyze
         run: flutter analyze
       - name: Install system SQLite for FFI tests

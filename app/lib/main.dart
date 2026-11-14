@@ -1,5 +1,6 @@
 // المكتبة الأساسية لبناء واجهات Flutter وعناصر Material Design.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
@@ -27,7 +28,7 @@ import 'screens/backup_screen.dart';
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
 
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   AndroidDiagnosticLog.initialize();
   try {
@@ -35,10 +36,34 @@ Future<void> main() async {
   } catch (_) {
     // تبقى الواجهة على الخط الافتراضي إذا تعذر تحميل التفضيلات.
   }
-  runApp(const HomiGroceryApp());
+  final healthOptions = _parseUpdateHealthArguments(args);
+  runApp(HomiGroceryApp(
+    healthMarkerPath: healthOptions?['marker'],
+    healthNonce: healthOptions?['nonce'],
+  ));
 }
 
-// ألوان الهوية البصرية موحّدة هنا لتسهيل تعديل التصميم مستقبلًا.
+Map<String, String>? _parseUpdateHealthArguments(List<String> args) {
+  String? marker;
+  String? nonce;
+  for (var index = 0; index < args.length; index++) {
+    final argument = args[index];
+    if (argument == '--homi-update-health-marker' && index + 1 < args.length) {
+      marker = args[++index];
+    } else if (argument == '--homi-update-health-nonce' && index + 1 < args.length) {
+      nonce = args[++index];
+    }
+  }
+  if (defaultTargetPlatform != TargetPlatform.windows || marker == null || nonce == null) {
+    return null;
+  }
+  if (nonce.length != 64 ||
+      nonce.runes.any((code) => !((code >= 48 && code <= 57) || (code >= 65 && code <= 70)))) {
+    return null;
+  }
+  return {'marker': marker, 'nonce': nonce};
+}
+
 const Color brandGreen = Color(0xFF173D32);
 const Color brandCream = Color(0xFFF7F4EA);
 const Color brandGold = Color(0xFFC7A35A);
@@ -46,7 +71,9 @@ const Color brandMint = Color(0xFFDCE9DF);
 
 // الجذر الرئيسي للتطبيق؛ يحتفظ بحالة المظهر الفاتح أو الداكن.
 class HomiGroceryApp extends StatefulWidget {
-  const HomiGroceryApp({super.key});
+  const HomiGroceryApp({this.healthMarkerPath, this.healthNonce, super.key});
+  final String? healthMarkerPath;
+  final String? healthNonce;
 
   @override
   State<HomiGroceryApp> createState() => _HomiGroceryAppState();
@@ -74,6 +101,14 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
+          onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
+              ? null
+              : () async {
+                  final marker = File(widget.healthMarkerPath!);
+                  final temporary = File('${widget.healthMarkerPath!}.tmp');
+                  await temporary.writeAsString(widget.healthNonce!, flush: true);
+                  await temporary.rename(marker.path);
+                },
           authenticatedBuilder: (user, shiftId, onLogout) => user.isManager
               ? DashboardScreen(
                   isDark: _themeMode == ThemeMode.dark,

@@ -1,8 +1,11 @@
 name: Flutter Windows checks
 
 on:
-  # تشغيل Windows يدويًا فقط؛ تعديلات Android لا تطلق بناء Windows تلقائيًا.
   workflow_dispatch:
+  push:
+    branches: [feature/windows-ota-foundation]
+  pull_request:
+    branches: [main, feature/flutter-foundation]
 
 concurrency:
   group: flutter-windows-${{ github.workflow }}-${{ github.ref }}
@@ -21,22 +24,92 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.44.9'
           cache: true
       - name: Install dependencies
         run: flutter pub get
       - name: Generate Windows platform
         run: flutter create --platforms=windows .
+      # يعالج تحذير MSVC STL1011 داخل local_auth_windows مع Visual Studio 2026.
+      - name: Apply Windows MSVC compatibility definition
+        shell: pwsh
+        run: |
+          $cmake = "windows/CMakeLists.txt"
+          $source = [System.IO.File]::ReadAllText($cmake)
+          $definition = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+          if (-not $source.Contains($definition)) {
+            # Flutter قد يولد اسم المشروع بصيغة مختلفة؛ ندرج التعريف بعد cmake_minimum_required بدل الاعتماد على اسم المشروع.
+            $match = [regex]::Match($source, '(?m)^cmake_minimum_required\([^\r\n]*\)\s*')
+            if (-not $match.Success) {
+              throw "لم يتم العثور على cmake_minimum_required في ملف Windows CMake."
+            }
+            $source = $source.Insert($match.Index + $match.Length, "`r`n$definition`r`n")
+            [System.IO.File]::WriteAllText($cmake, $source, [System.Text.UTF8Encoding]::new($false))
+          }
       - name: Analyze
         run: flutter analyze
       - name: Run tests
         run: flutter test
       - name: Build Windows desktop
         run: flutter build windows --release
-      - name: Upload Windows bundle
+      - name: Build standalone Windows updater
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater/HomiUpdater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/updater
+          if (-not (Test-Path "build/windows/updater/HomiUpdater.exe")) {
+            throw "لم يتم إنشاء مساعد تحديث Windows."
+          }
+      - name: Build unelevated Windows update launcher
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater-launcher/HomiUpdateLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/updater-launcher
+          if (-not (Test-Path "build/windows/updater-launcher/HomiUpdateLauncher.exe")) {
+            throw "لم يتم إنشاء منسق تحديث Windows."
+          }
+      - name: Build Windows updater test application
+        shell: pwsh
+        run: |
+          dotnet publish ../installer/windows-updater/tests/FakeHomiApp.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o build/windows/fake-app
+      - name: Test Windows updater replacement and integrity checks
+        shell: pwsh
+        run: |
+          $updaterPath = (Resolve-Path "build/windows/updater/HomiUpdater.exe").Path
+          $fakeAppPath = (Resolve-Path "build/windows/fake-app").Path
+          & ../installer/windows-updater/tests/UpdaterSmokeTest.ps1 -UpdaterExe $updaterPath -FakeAppDir $fakeAppPath
+      - name: Package Windows update bundle
+        shell: pwsh
+        run: |
+          $bundle = Resolve-Path "build/windows/x64/runner/Release"
+          Compress-Archive -Path "$($bundle.Path)/*" -DestinationPath "build/windows/homi-grocery-windows-x64.zip" -Force
+      - name: Build Windows installer with Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)'
+          if (-not $versionLine) {
+            throw "تعذر قراءة إصدار التطبيق من pubspec.yaml."
+          }
+          $version = $versionLine.Matches[0].Groups[1].Value.Split('+')[0]
+          $sourceDir = (Resolve-Path "build/windows/x64/runner/Release").Path
+          $updaterPath = (Resolve-Path "build/windows/updater/HomiUpdater.exe").Path
+          $launcherPath = (Resolve-Path "build/windows/updater-launcher/HomiUpdateLauncher.exe").Path
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$sourceDir" "/DUpdaterPath=$updaterPath" "/DLauncherPath=$launcherPath" "../installer/windows/HomiGrocery.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "فشل إنشاء مثبت Homi Grocery باستخدام Inno Setup."
+          }
+          if (-not (Test-Path "build/windows/installer/Homi-Grocery-Setup-x64.exe")) {
+            throw "لم يتم إنشاء ملف المثبت المتوقع."
+          }
+      - name: Upload Windows bundle and update package
         uses: actions/upload-artifact@v4
         with:
           name: homi-grocery-windows-x64
-          path: app/build/windows/x64/runner/Release/
+          path: |
+            app/build/windows/x64/runner/Release/
+            app/build/windows/homi-grocery-windows-x64.zip
+            app/build/windows/updater/HomiUpdater.exe
+            app/build/windows/updater-launcher/HomiUpdateLauncher.exe
+            app/build/windows/installer/Homi-Grocery-Setup-x64.exe
           if-no-files-found: error
           retention-days: 14
