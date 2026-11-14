@@ -397,7 +397,7 @@ class PlatformUpdateService {
 
   DateTime _parseManifestTimestamp(Object? value) {
     if (value is! String ||
-        !RegExp(r'^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?(?:Z|[+-]\\d\\d:\\d\\d)$')
+        !RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$')
             .hasMatch(value)) {
       throw const FormatException('تاريخ توقيع manifest يجب أن يتضمن منطقة زمنية.');
     }
@@ -602,7 +602,7 @@ class PlatformUpdateService {
 
   DateTime _parseManifestTimestamp(Object? value) {
     if (value is! String ||
-        !RegExp(r'^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?(?:Z|[+-]\\d\\d:\\d\\d)$')
+        !RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$')
             .hasMatch(value)) {
       throw const FormatException('تاريخ توقيع manifest يجب أن يتضمن منطقة زمنية.');
     }
