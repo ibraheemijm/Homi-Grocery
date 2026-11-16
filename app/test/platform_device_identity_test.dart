@@ -95,7 +95,9 @@ void main() {
     expect(data.platform, 'linux');
     expect(data.architecture, isNotEmpty);
     expect(data.publicKeyDer, hasLength(44));
-    expect(await identity.loadOrCreate(), isNot(same(data)));
+    final again = await identity.loadOrCreate();
+    expect(again.deviceKey, data.deviceKey);
+    expect(again.publicKeyDer, data.publicKeyDer);
   });
 
   test('يرفض nonce غير صحيح قبل إجراء التوقيع', () async {
