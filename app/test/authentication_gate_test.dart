@@ -21,9 +21,6 @@ Future<void> _pumpGate(WidgetTester tester) async {
 
 // يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
 class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
-  _GateTestDeviceLinkService({this.license});
-
-  final PlatformLinkedLicense? license;
   String? requestedEmail;
 
   @override
@@ -36,7 +33,7 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
       PlatformDeviceLinkStatus.linked;
 
   @override
-  Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
 }
 
 class _GateTestAuthRepository extends AuthRepository {
