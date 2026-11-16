@@ -248,7 +248,6 @@ void main() {
       'entitlement_version': 1,
       'key_id': 'homi-license-test-key',
     }));
-    final signature = await Ed25519().sign(payload, keyPair: keyPair);
     final transport = QueueTransport([
       success({
         'accepted': true,
