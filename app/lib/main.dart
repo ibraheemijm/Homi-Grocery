@@ -10,6 +10,9 @@ import 'data/android_diagnostic_log.dart';
 import 'data/grocery_database.dart';
 import 'data/font_preferences.dart';
 import 'data/auth_repository.dart';
+import 'data/platform_api_client.dart';
+import 'data/platform_device_identity.dart';
+import 'data/platform_device_link_service.dart';
 import 'screens/authentication_gate.dart';
 import 'screens/cashier_management_screen.dart';
 
@@ -69,6 +72,20 @@ const Color brandCream = Color(0xFFF7F4EA);
 const Color brandGold = Color(0xFFC7A35A);
 const Color brandMint = Color(0xFFDCE9DF);
 
+PlatformDeviceLinkOperations _createPlatformDeviceLinkService() {
+  final store = FlutterPlatformSecretStore();
+  try {
+    return PlatformDeviceLinkService(
+      api: PlatformApiClient.fromEnvironment(),
+      deviceIdentity: PlatformDeviceIdentity(store),
+      store: store,
+    );
+  } on PlatformApiConfigurationException catch (error) {
+    // يفشل الربط بأمان إذا لم يُضبط عنوان المنصة في بناء التطبيق.
+    return UnavailablePlatformDeviceLinkService(error.message);
+  }
+}
+
 // الجذر الرئيسي للتطبيق؛ يحتفظ بحالة المظهر الفاتح أو الداكن.
 class HomiGroceryApp extends StatefulWidget {
   const HomiGroceryApp({this.healthMarkerPath, this.healthNonce, super.key});
@@ -81,6 +98,8 @@ class HomiGroceryApp extends StatefulWidget {
 
 class _HomiGroceryAppState extends State<HomiGroceryApp> {
   ThemeMode _themeMode = ThemeMode.light;
+  late final PlatformDeviceLinkOperations _platformDeviceLinkService =
+      _createPlatformDeviceLinkService();
 
   // تبديل المظهر مع إعادة بناء الواجهة لتطبيق الألوان الجديدة.
   void _toggleTheme() {
@@ -101,6 +120,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
+          platformDeviceLinkService: _platformDeviceLinkService,
           onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
               ? null
               : () async {
