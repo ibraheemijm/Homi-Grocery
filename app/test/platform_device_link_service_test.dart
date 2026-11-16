@@ -237,6 +237,55 @@ void main() {
     expect(storedLicense.containsKey('public_key'), isFalse);
   });
 
+  test('يرفض مفتاح توقيع غير مثبت دون جلب مفتاح بديل من الخادم', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(
+      store,
+      platformOverride: () => 'android',
+    );
+    final nonce = base64UrlEncode(List<int>.generate(32, (i) => i + 1))
+        .replaceAll('=', '');
+    final transport = QueueTransport([
+      success({
+        'accepted': true,
+        'challenge_id': '123e4567-e89b-42d3-a456-426614174030',
+        'nonce': nonce,
+        'expires_at': DateTime.now().toUtc().add(const Duration(minutes: 5)).toIso8601String(),
+      }, statusCode: 202),
+      success({
+        'status': 'active',
+        'license': {
+          'id': '123e4567-e89b-42d3-a456-426614174031',
+          'key_id': 'unknown-key',
+          'payload': base64Encode([1, 2, 3]),
+          'signature': base64Encode(List<int>.filled(64, 0)),
+        }
+      }),
+    ]);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {},
+    );
+
+    await service.requestLink('customer@example.test');
+    await expectLater(
+      service.completePendingLink(),
+      throwsA(isA<FormatException>()),
+    );
+
+    expect(transport.requests, hasLength(2));
+    expect(
+      transport.requests.map((request) => request.uri.path),
+      isNot(contains('/api/v1/license-signing-keys')),
+    );
+    expect(store.values['homi_platform_signed_license_v1'], isNull);
+  });
+
   test('يرفض توقيع ترخيص معدل قبل اعتباره مرتبطًا', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(
