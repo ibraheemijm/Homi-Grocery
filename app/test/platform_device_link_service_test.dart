@@ -88,6 +88,7 @@ void main() {
       ),
       deviceIdentity: identity,
       store: store,
+      trustedPublicKeys: {keyId: base64Encode(publicDer)},
     );
 
     await service.requestLink(' Customer@example.test ');
@@ -127,6 +128,7 @@ void main() {
       ),
       deviceIdentity: identity,
       store: store,
+      trustedPublicKeys: { 'homi-license-test-key': base64Encode(publicDer) },
     );
 
     await service.requestLink('customer@example.test');
@@ -210,6 +212,7 @@ void main() {
       ),
       deviceIdentity: identity,
       store: store,
+      trustedPublicKeys: {},
     );
 
     await service.requestLink('customer@example.test');
@@ -280,6 +283,7 @@ void main() {
       ),
       deviceIdentity: identity,
       store: store,
+      trustedPublicKeys: {},
     );
 
     await service.requestLink('customer@example.test');
