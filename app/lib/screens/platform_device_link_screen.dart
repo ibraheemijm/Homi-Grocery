@@ -160,8 +160,11 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                           keyboardType: TextInputType.emailAddress,
                           textDirection: TextDirection.ltr,
                           textInputAction: TextInputAction.done,
-                          onSubmitted: (_) =>
-                              _working || _completed ? null : _requestLink(),
+                          onSubmitted: (_) {
+                            if (!_working && !_completed) {
+                              _requestLink();
+                            }
+                          },
                           decoration: const InputDecoration(
                             labelText: 'البريد الإلكتروني',
                             prefixIcon: Icon(Icons.email_outlined),
