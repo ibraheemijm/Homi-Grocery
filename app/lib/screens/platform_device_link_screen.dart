@@ -69,9 +69,11 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
         case PlatformDeviceLinkStatus.waitingForEmail:
           setState(() => _message =
               'لم يتم تأكيد البريد بعد. افتح رسالة Homi واضغط رابط التأكيد، ثم حاول مرة أخرى.');
+          break;
         case PlatformDeviceLinkStatus.licensePending:
           setState(() => _message =
               'تم إثبات البريد والجهاز وبدأت الفترة التجريبية. يجري تجهيز الترخيص الموقّع؛ اضغط تحقق مرة أخرى بعد قليل.');
+          break;
         case PlatformDeviceLinkStatus.linked:
           setState(() {
             _completed = true;
@@ -79,6 +81,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                 'اكتمل ربط هذا الجهاز بنجاح وأصبح ترخيص Homi جاهزًا.';
           });
           widget.onLinked?.call();
+          break;
       }
     } catch (error) {
       if (mounted) setState(() => _message = _friendlyError(error));
