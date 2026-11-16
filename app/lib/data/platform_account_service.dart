@@ -128,6 +128,33 @@ class PlatformAccountService {
     );
   }
 
+  Future<Map<String, Object?>> resendEmailVerification(String email) {
+    return _api.postJson(
+      '/api/v1/auth/email-verifications/resend',
+      body: {'email': email.trim()},
+    );
+  }
+
+  Future<Map<String, Object?>> requestPasswordReset(String email) {
+    return _api.postJson(
+      '/api/v1/auth/password-resets/request',
+      body: {'email': email.trim()},
+    );
+  }
+
+  Future<Map<String, Object?>> confirmPasswordReset({
+    required String token,
+    required String newPassword,
+  }) {
+    return _api.postJson(
+      '/api/v1/auth/password-resets/confirm',
+      body: {
+        'token': token,
+        'new_password': newPassword,
+      },
+    );
+  }
+
   Future<void> login({
     required String email,
     required String password,
