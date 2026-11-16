@@ -84,8 +84,8 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   static const _pendingKey = 'homi_platform_pending_device_link_v1';
   static const _licenseKey = 'homi_platform_signed_license_v1';
-  static const _trustedKeysEnvironment =
-      String.fromEnvironment('HOMI_LICENSE_TRUSTED_PUBLIC_KEYS');
+  static const _trustedKeysEnvironmentBase64 =
+      String.fromEnvironment('HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64');
   static const _spkiPrefix = <int>[
     0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
     0x70, 0x03, 0x21, 0x00,
@@ -98,10 +98,14 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     if (supplied != null) {
       source = supplied;
     } else {
-      if (_trustedKeysEnvironment.trim().isEmpty) {
+      if (_trustedKeysEnvironmentBase64.trim().isEmpty) {
         return const {};
       }
-      final decoded = jsonDecode(_trustedKeysEnvironment);
+      final encoded = base64Decode(_trustedKeysEnvironmentBase64);
+      if (base64Encode(encoded) != _trustedKeysEnvironmentBase64) {
+        throw const FormatException('ترميز إعداد مفاتيح الثقة غير صالح.');
+      }
+      final decoded = jsonDecode(utf8.decode(encoded));
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException(
           'إعداد مفاتيح الثقة المضمّنة في التطبيق غير صالح.',
