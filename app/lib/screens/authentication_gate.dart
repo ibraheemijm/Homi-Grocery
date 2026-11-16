@@ -18,6 +18,10 @@ typedef AuthenticatedBuilder = Widget Function(
   int shiftId,
   VoidCallback onLogout,
 );
+typedef ReadOnlyBuilder = Widget Function(
+  AuthUser user,
+  VoidCallback onLogout,
+);
 
 class AuthenticationGate extends StatefulWidget {
   const AuthenticationGate({
@@ -27,6 +31,7 @@ class AuthenticationGate extends StatefulWidget {
     this.useBiometrics = true,
     this.onInitialized,
     this.platformDeviceLinkService,
+    this.readOnlyBuilder,
     super.key,
   });
 
@@ -37,6 +42,7 @@ class AuthenticationGate extends StatefulWidget {
   final bool useBiometrics;
   final Future<void> Function()? onInitialized;
   final PlatformDeviceLinkOperations? platformDeviceLinkService;
+  final ReadOnlyBuilder? readOnlyBuilder;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -54,6 +60,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   bool _biometricReady = false;
   String? _error;
   AuthUser? _pendingDeviceLinkUser;
+  AuthUser? _readOnlyUser;
   bool _cashierNeedsManagerLink = false;
 
   @override
@@ -112,6 +119,20 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         if (mounted) {
           setState(() {
             _pendingDeviceLinkUser = user;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      final now = DateTime.now().toUtc();
+      if (license.startsAt.isAfter(now) ||
+          (license.endsAt != null && !license.endsAt!.isAfter(now))) {
+        if (mounted) {
+          setState(() {
+            _readOnlyUser = user;
+            _pendingDeviceLinkUser = null;
             _cashierNeedsManagerLink = false;
             _user = null;
             _shift = null;
@@ -388,6 +409,19 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     }
     if (_error != null) {
       return _GateError(message: _error!, onRetry: _initialize);
+    }
+    final readOnlyUser = _readOnlyUser;
+    if (readOnlyUser != null) {
+      final builder = widget.readOnlyBuilder;
+      if (builder == null) {
+        return const _GateError(
+          message: 'انتهت صلاحية الترخيص. يلزم تفعيل وضع القراءة فقط قبل متابعة الاستخدام.',
+          onRetry: _noop,
+        );
+      }
+      return builder(readOnlyUser, () {
+        if (mounted) setState(() => _readOnlyUser = null);
+      });
     }
     final pendingDeviceLinkUser = _pendingDeviceLinkUser;
     if (pendingDeviceLinkUser != null) {
