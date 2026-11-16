@@ -36,7 +36,12 @@ class PlatformLinkedLicense {
   final List<int> publicKeyDer;
 }
 
-class PlatformDeviceLinkService {
+abstract interface class PlatformDeviceLinkOperations {
+  Future<void> requestLink(String email);
+  Future<PlatformDeviceLinkStatus> completePendingLink();
+}
+
+class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   PlatformDeviceLinkService({
     required PlatformApiClient api,
     required PlatformDeviceIdentity deviceIdentity,
