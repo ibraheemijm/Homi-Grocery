@@ -3,7 +3,7 @@ name: Flutter Android checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/flutter-foundation]
+    branches: [feature/flutter-foundation, feature/platform-account-onboarding]
   pull_request:
     branches: [main]
 
