@@ -72,7 +72,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
           break;
         case PlatformDeviceLinkStatus.licensePending:
           setState(() => _message =
-              'تم إثبات البريد والجهاز وبدأت الفترة التجريبية. يجري تجهيز الترخيص الموقّع؛ اضغط تحقق مرة أخرى بعد قليل.');
+              'تم إثبات البريد والجهاز. يجري تجهيز الترخيص الموقّع؛ إذا كان الحساب مؤهلًا للتجربة فستبدأ بعد نجاح الربط. اضغط تحقق مرة أخرى بعد قليل.');
           break;
         case PlatformDeviceLinkStatus.linked:
           setState(() {
