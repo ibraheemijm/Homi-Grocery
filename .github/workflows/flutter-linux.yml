@@ -3,9 +3,9 @@ name: Flutter Linux checks
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/windows-ota-foundation]
+    branches: [main, feature/windows-ota-foundation, feature/device-link-onboarding]
   pull_request:
-    branches: [main, feature/flutter-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation]
 
 # إلغاء الفحوصات الأقدم عند وصول تعديل أحدث إلى الفرع نفسه.
 concurrency:
