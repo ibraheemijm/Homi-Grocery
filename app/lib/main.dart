@@ -83,6 +83,11 @@ PlatformDeviceLinkOperations _createPlatformDeviceLinkService() {
   } on PlatformApiConfigurationException catch (error) {
     // يفشل الربط بأمان إذا لم يُضبط عنوان المنصة في بناء التطبيق.
     return UnavailablePlatformDeviceLinkService(error.message);
+  } on FormatException catch (error) {
+    // لا نسمح لإعداد مفتاح ثقة تالف بإسقاط التطبيق عند بدء التشغيل.
+    return UnavailablePlatformDeviceLinkService(
+      'إعداد مفاتيح الثقة للترخيص غير صالح: ${error.message}',
+    );
   }
 }
 
