@@ -144,4 +144,36 @@ void main() {
     expect(transport.requests, hasLength(1));
     expect((await store.read())!.refreshToken, 'refresh-after-concurrent-refresh');
   });
+  test('يدعم إعادة إرسال التفعيل وطلب استعادة كلمة مرور المنصة وتأكيدها', () async {
+    final transport = QueueTransport([
+      success({'accepted': true}),
+      success({'accepted': true}),
+      success({'password_reset': true, 'sessions_revoked': true}),
+    ]);
+    final service = PlatformAccountService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      sessions: PlatformSessionStore(MemorySessionStore()),
+    );
+
+    await service.resendEmailVerification(' customer@example.test ');
+    await service.requestPasswordReset('customer@example.test');
+    await service.confirmPasswordReset(
+      token: 'one-time-reset-token-value',
+      newPassword: 'new-strong-password-2026',
+    );
+
+    expect(transport.requests.map((request) => request.uri.path), [
+      '/api/v1/auth/email-verifications/resend',
+      '/api/v1/auth/password-resets/request',
+      '/api/v1/auth/password-resets/confirm',
+    ]);
+    expect(jsonDecode(transport.requests[0].body!)['email'], 'customer@example.test');
+    expect(jsonDecode(transport.requests[1].body!)['email'], 'customer@example.test');
+    expect(jsonDecode(transport.requests[2].body!)['token'], 'one-time-reset-token-value');
+    expect(jsonDecode(transport.requests[2].body!)['new_password'], 'new-strong-password-2026');
+  });
+
 }
