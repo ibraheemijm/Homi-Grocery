@@ -5,7 +5,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
+import 'package:homi_grocery/data/platform_device_link_service.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
+import 'package:homi_grocery/screens/platform_device_link_screen.dart';
 
 // ينتظر عمليات قاعدة البيانات والانتقالات دون انتظار مؤشر التحميل الدوار.
 Future<void> _pumpGate(WidgetTester tester) async {
@@ -18,6 +20,25 @@ Future<void> _pumpGate(WidgetTester tester) async {
 }
 
 // يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
+class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
+  _GateTestDeviceLinkService({this.license});
+
+  final PlatformLinkedLicense? license;
+  String? requestedEmail;
+
+  @override
+  Future<void> requestLink(String email) async {
+    requestedEmail = email;
+  }
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingLink() async =>
+      PlatformDeviceLinkStatus.linked;
+
+  @override
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
+}
+
 class _GateTestAuthRepository extends AuthRepository {
   _GateTestAuthRepository(super._database, {required this.users});
 
@@ -88,6 +109,58 @@ void main() {
     await _pumpGate(tester);
     expect(initialized, isTrue);
     expect(find.text('تسجيل الدخول'), findsOneWidget);
+  });
+
+  testWidgets('يطلب ربط الجهاز من المدير قبل فتح مساحة المتجر', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: _GateTestDeviceLinkService(),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('authenticated'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.byType(PlatformDeviceLinkScreen), findsOneWidget);
+    expect(find.text('ربط Homi Grocery بحسابك'), findsOneWidget);
+    expect(find.text('authenticated'), findsNothing);
+  });
+
+  testWidgets('لا يسمح للكاشير ببدء ربط الجهاز بدل المدير', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: _GateTestDeviceLinkService(),
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('authenticated'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, cashier.username);
+    await tester.enterText(find.byType(TextField).last, 'CashierPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('يجب ربط الجهاز بحساب المدير أولًا'), findsOneWidget);
+    expect(find.byType(PlatformDeviceLinkScreen), findsNothing);
+    expect(find.text('authenticated'), findsNothing);
   });
 
   testWidgets('يمسح جلسة الكاشير ويفتح جلسة المدير دون نقل حالة الحساب السابق',
