@@ -3,9 +3,9 @@ name: Flutter Android checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/flutter-foundation, feature/windows-ota-foundation]
+    branches: [feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding]
   pull_request:
-    branches: [main, feature/flutter-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation]
 
 concurrency:
   group: flutter-android-${{ github.workflow }}-${{ github.ref }}
