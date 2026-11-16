@@ -116,6 +116,10 @@ void main() {
           databaseProvider: () async => database,
           useBiometrics: false,
           platformDeviceLinkService: _GateTestDeviceLinkService(),
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
           authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
             body: Text('authenticated'),
           ),
@@ -154,6 +158,10 @@ void main() {
           databaseProvider: () async => database,
           useBiometrics: false,
           platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
           readOnlyBuilder: (user, onLogout) => Scaffold(
             body: Text('read-only ${user.username}'),
           ),
