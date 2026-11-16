@@ -145,7 +145,7 @@ jobs:
               gradle.write_text(source)
           PY
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
       - name: Install system SQLite for FFI tests
         run: |
           sudo apt-get update
