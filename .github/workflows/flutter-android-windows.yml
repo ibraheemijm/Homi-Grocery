@@ -51,7 +51,7 @@ jobs:
       - name: Run tests
         run: flutter test
       - name: Build Windows desktop
-        run: flutter build windows --release --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }}
+        run: flutter build windows --release --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }}
       - name: Build standalone Windows updater
         shell: pwsh
         run: |
