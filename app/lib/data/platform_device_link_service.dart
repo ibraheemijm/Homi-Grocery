@@ -1,0 +1,372 @@
+// ربط البريد المؤكد بهوية الجهاز دون طلب كلمة مرور Homi Platform.
+import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
+
+import 'platform_api_client.dart';
+import 'platform_device_identity.dart';
+
+enum PlatformDeviceLinkStatus {
+  waitingForEmail,
+  licensePending,
+  linked,
+}
+
+class PlatformLinkedLicense {
+  const PlatformLinkedLicense({
+    required this.licenseId,
+    required this.keyId,
+    required this.startsAt,
+    required this.endsAt,
+    required this.planKey,
+    required this.entitlementVersion,
+    required this.signedPayload,
+    required this.signature,
+    required this.publicKeyDer,
+  });
+
+  final String licenseId;
+  final String keyId;
+  final DateTime startsAt;
+  final DateTime? endsAt;
+  final String planKey;
+  final int entitlementVersion;
+  final List<int> signedPayload;
+  final List<int> signature;
+  final List<int> publicKeyDer;
+}
+
+class PlatformDeviceLinkService {
+  PlatformDeviceLinkService({
+    required PlatformApiClient api,
+    required PlatformDeviceIdentity deviceIdentity,
+    required PlatformSecretStore store,
+    DateTime Function()? clock,
+  })  : _api = api,
+        _deviceIdentity = deviceIdentity,
+        _store = store,
+        _clock = clock ?? DateTime.now;
+
+  final PlatformApiClient _api;
+  final PlatformDeviceIdentity _deviceIdentity;
+  final PlatformSecretStore _store;
+  final DateTime Function() _clock;
+  final Ed25519 _ed25519 = Ed25519();
+
+  static const _pendingKey = 'homi_platform_pending_device_link_v1';
+  static const _licenseKey = 'homi_platform_signed_license_v1';
+  static const _spkiPrefix = <int>[
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+    0x70, 0x03, 0x21, 0x00,
+  ];
+
+  /// يطلب إرسال رابط إثبات البريد. لا يرسل كلمة مرور أو رمز جلسة للمنصة.
+  Future<void> requestLink(String email) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+            .hasMatch(normalizedEmail) ||
+        normalizedEmail.length > 254) {
+      throw const FormatException('أدخل بريدًا إلكترونيًا صحيحًا.');
+    }
+
+    final identity = await _deviceIdentity.loadOrCreate();
+    final response = await _api.postJson(
+      '/api/v1/products/homi-grocery/device-links',
+      body: {
+        'email': normalizedEmail,
+        'device_key': identity.deviceKey,
+        'public_key': identity.publicKeyBase64,
+        'platform': identity.platform,
+        'architecture': identity.architecture,
+      },
+    );
+    final challengeId = response['challenge_id'];
+    final nonce = response['nonce'];
+    final expiresAtText = response['expires_at'];
+    final expiresAt = expiresAtText is String
+        ? DateTime.tryParse(expiresAtText)
+        : null;
+    if (challengeId is! String ||
+        !_isUuid(challengeId) ||
+        nonce is! String ||
+        !_isValidNonce(nonce) ||
+        expiresAt == null ||
+        !expiresAt.isAfter(_clock().toUtc())) {
+      throw const FormatException('استجابة ربط الجهاز من المنصة غير صالحة.');
+    }
+
+    await _store.write(
+      _pendingKey,
+      jsonEncode({
+        'email': normalizedEmail,
+        'challenge_id': challengeId,
+        'nonce': nonce,
+        'expires_at': expiresAt.toUtc().toIso8601String(),
+        'device_key': identity.deviceKey,
+      }),
+    );
+  }
+
+  Future<PlatformDeviceLinkStatus> completePendingLink() async {
+    final pending = await _readPending();
+    if (pending == null) {
+      throw const PlatformApiException(
+        statusCode: 400,
+        code: 'DEVICE_LINK_NOT_REQUESTED',
+        message: 'اطلب رابط ربط الجهاز أولًا.',
+      );
+    }
+    final expiresAt = DateTime.parse(pending['expires_at']!);
+    if (!expiresAt.isAfter(_clock().toUtc())) {
+      await clearPendingLink();
+      throw const PlatformApiException(
+        statusCode: 410,
+        code: 'DEVICE_LINK_EXPIRED',
+        message: 'انتهت صلاحية رابط ربط الجهاز. اطلب رابطًا جديدًا.',
+      );
+    }
+
+    final identity = await _deviceIdentity.loadOrCreate();
+    if (identity.deviceKey != pending['device_key']) {
+      await clearPendingLink();
+      throw const StateError(
+        'هوية الجهاز المحفوظة تغيرت؛ أوقف الربط واطلب رابطًا جديدًا.',
+      );
+    }
+    final signature = await _deviceIdentity.signNonce(pending['nonce']!);
+
+    late final Map<String, Object?> response;
+    try {
+      response = await _api.postJson(
+        '/api/v1/device-links/complete',
+        body: {
+          'challenge_id': pending['challenge_id'],
+          'nonce': pending['nonce'],
+          'signature': signature,
+        },
+      );
+    } on PlatformApiException catch (error) {
+      if (error.code == 'DEVICE_LINK_NOT_READY') {
+        return PlatformDeviceLinkStatus.waitingForEmail;
+      }
+      rethrow;
+    }
+
+    if (response['status'] == 'pending') {
+      return PlatformDeviceLinkStatus.licensePending;
+    }
+    if (response['status'] != 'active' || response['license'] is! Map) {
+      throw const FormatException('حالة ربط الجهاز أو الترخيص غير معروفة.');
+    }
+
+    final license = Map<String, Object?>.from(response['license'] as Map);
+    final verified = await _verifyIssuedLicense(license);
+    await _store.write(_licenseKey, jsonEncode({
+      'license_id': verified.licenseId,
+      'key_id': verified.keyId,
+      'starts_at': verified.startsAt.toUtc().toIso8601String(),
+      'ends_at': verified.endsAt?.toUtc().toIso8601String(),
+      'plan_key': verified.planKey,
+      'entitlement_version': verified.entitlementVersion,
+      'payload': base64Encode(verified.signedPayload),
+      'signature': base64Encode(verified.signature),
+      'public_key': base64Encode(verified.publicKeyDer),
+    }));
+    await clearPendingLink();
+    return PlatformDeviceLinkStatus.linked;
+  }
+
+  Future<PlatformLinkedLicense?> readLinkedLicense() async {
+    final stored = await _store.read(_licenseKey);
+    if (stored == null || stored.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      final license = Map<String, Object?>.from(decoded);
+      final payload = base64Decode(license['payload'] as String);
+      final signature = base64Decode(license['signature'] as String);
+      final publicDer = base64Decode(license['public_key'] as String);
+      return _verifyLicenseMaterial(
+        licenseId: license['license_id'] as String,
+        keyId: license['key_id'] as String,
+        payload: payload,
+        signature: signature,
+        publicDer: publicDer,
+      );
+    } on Object {
+      // لا نعيد إنشاء هوية أو ترخيص عند تلف السجل؛ نوقف التشغيل الآمن.
+      rethrow;
+    }
+  }
+
+  Future<void> clearPendingLink() => _store.write(_pendingKey, '');
+
+  Future<Map<String, String>?> _readPending() async {
+    final stored = await _store.read(_pendingKey);
+    if (stored == null || stored.isEmpty) return null;
+    final decoded = jsonDecode(stored);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('سجل طلب ربط الجهاز تالف.');
+    }
+    final email = decoded['email'];
+    final challengeId = decoded['challenge_id'];
+    final nonce = decoded['nonce'];
+    final expiresAt = decoded['expires_at'];
+    final deviceKey = decoded['device_key'];
+    if (email is! String ||
+        challengeId is! String ||
+        nonce is! String ||
+        expiresAt is! String ||
+        deviceKey is! String ||
+        !_isUuid(challengeId) ||
+        !_isUuid(deviceKey) ||
+        !_isValidNonce(nonce) ||
+        DateTime.tryParse(expiresAt) == null) {
+      throw StateError('حقول طلب ربط الجهاز المحفوظ غير صالحة.');
+    }
+    return {
+      'email': email,
+      'challenge_id': challengeId,
+      'nonce': nonce,
+      'expires_at': expiresAt,
+      'device_key': deviceKey,
+    };
+  }
+
+  Future<PlatformLinkedLicense> _verifyIssuedLicense(
+    Map<String, Object?> license,
+  ) async {
+    final licenseId = license['id'];
+    final keyId = license['key_id'];
+    final payloadText = license['payload'];
+    final signatureText = license['signature'];
+    if (licenseId is! String ||
+        keyId is! String ||
+        payloadText is! String ||
+        signatureText is! String) {
+      throw const FormatException('بيانات الترخيص الموقّع غير مكتملة.');
+    }
+
+    final keysResponse = await _api.getJson('/api/v1/license-signing-keys');
+    final items = keysResponse['items'];
+    if (items is! List) {
+      throw const FormatException('تعذر قراءة مفاتيح توقيع التراخيص.');
+    }
+    final matches = items.whereType<Map>().where((item) =>
+        item['key_id'] == keyId &&
+        (item['status'] == 'active' || item['status'] == 'verify_only'));
+    if (matches.length != 1) {
+      throw const FormatException('مفتاح توقيع الترخيص غير معروف أو غير صالح.');
+    }
+    final publicText = matches.single['public_key'];
+    if (publicText is! String) {
+      throw const FormatException('المفتاح العام للترخيص غير صالح.');
+    }
+
+    final payload = _decodeCanonicalBase64(payloadText);
+    final signature = _decodeCanonicalBase64(signatureText);
+    final publicDer = _decodeCanonicalBase64(publicText);
+    return _verifyLicenseMaterial(
+      licenseId: licenseId,
+      keyId: keyId,
+      payload: payload,
+      signature: signature,
+      publicDer: publicDer,
+    );
+  }
+
+  Future<PlatformLinkedLicense> _verifyLicenseMaterial({
+    required String licenseId,
+    required String keyId,
+    required List<int> payload,
+    required List<int> signature,
+    required List<int> publicDer,
+  }) async {
+    if (signature.length != 64 ||
+        publicDer.length != 44 ||
+        !_sameBytes(publicDer.sublist(0, 12), _spkiPrefix)) {
+      throw const FormatException('صيغة توقيع أو مفتاح Ed25519 غير صالحة.');
+    }
+    final publicKey = SimplePublicKey(
+      publicDer.sublist(12),
+      type: KeyPairType.ed25519,
+    );
+    final valid = await _ed25519.verify(
+      payload,
+      signature: Signature(signature, publicKey: publicKey),
+    );
+    if (!valid) {
+      throw const FormatException('فشل التحقق من توقيع ترخيص Homi.');
+    }
+
+    final claims = jsonDecode(utf8.decode(payload));
+    if (claims is! Map<String, dynamic> ||
+        claims['schema_version'] != 1 ||
+        claims['license_id'] != licenseId ||
+        claims['key_id'] != keyId ||
+        claims['product_id'] is! String ||
+        claims['organization_id'] is! String ||
+        claims['user_id'] is! String ||
+        claims['plan_key'] is! String ||
+        claims['entitlement_version'] is! num) {
+      throw const FormatException('مطالبات الترخيص الموقّع غير صالحة.');
+    }
+    final startsAt = DateTime.tryParse(claims['starts_at'] as String? ?? '');
+    final issuedAt = DateTime.tryParse(claims['issued_at'] as String? ?? '');
+    final endsAtText = claims['ends_at'];
+    final endsAt = endsAtText == null
+        ? null
+        : DateTime.tryParse(endsAtText as String);
+    if (startsAt == null ||
+        issuedAt == null ||
+        (endsAtText != null && endsAt == null) ||
+        startsAt.isAfter(issuedAt.add(const Duration(minutes: 5))) ||
+        (endsAt != null && !endsAt.isAfter(startsAt))) {
+      throw const FormatException('تواريخ صلاحية الترخيص غير صالحة.');
+    }
+    return PlatformLinkedLicense(
+      licenseId: licenseId,
+      keyId: keyId,
+      startsAt: startsAt.toUtc(),
+      endsAt: endsAt?.toUtc(),
+      planKey: claims['plan_key'] as String,
+      entitlementVersion: (claims['entitlement_version'] as num).toInt(),
+      signedPayload: payload,
+      signature: signature,
+      publicKeyDer: publicDer,
+    );
+  }
+
+  List<int> _decodeCanonicalBase64(String value) {
+    final decoded = base64Decode(value);
+    if (base64Encode(decoded) != value) {
+      throw const FormatException('ترميز Base64 غير قياسي.');
+    }
+    return decoded;
+  }
+
+  bool _isValidNonce(String value) {
+    try {
+      final decoded = base64Url.decode(base64Url.normalize(value));
+      return decoded.length == 32 &&
+          base64UrlEncode(decoded).replaceAll('=', '') == value;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  bool _isUuid(String value) =>
+      RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', caseSensitive: false)
+          .hasMatch(value);
+
+  bool _sameBytes(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    var difference = 0;
+    for (var index = 0; index < left.length; index++) {
+      difference |= left[index] ^ right[index];
+    }
+    return difference == 0;
+  }
+}
