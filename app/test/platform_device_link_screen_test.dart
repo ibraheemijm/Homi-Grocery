@@ -63,7 +63,7 @@ void main() {
 
     await tester.tap(find.text('أكدت البريد، أكمل الربط'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('بدأت الفترة التجريبية'), findsOneWidget);
+    expect(find.textContaining('يجري تجهيز الترخيص الموقّع'), findsOneWidget);
 
     await tester.tap(find.text('أكدت البريد، أكمل الربط'));
     await tester.pumpAndSettle();
