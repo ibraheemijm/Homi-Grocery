@@ -194,6 +194,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     return PlatformDeviceLinkStatus.linked;
   }
 
+  @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async {
     final stored = await _store.read(_licenseKey);
     if (stored == null || stored.isEmpty) return null;
