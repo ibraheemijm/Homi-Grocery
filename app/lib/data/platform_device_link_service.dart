@@ -66,6 +66,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   ];
 
   /// يطلب إرسال رابط إثبات البريد. لا يرسل كلمة مرور أو رمز جلسة للمنصة.
+  @override
   Future<void> requestLink(String email) async {
     final normalizedEmail = email.trim().toLowerCase();
     if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
@@ -112,6 +113,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     );
   }
 
+  @override
   Future<PlatformDeviceLinkStatus> completePendingLink() async {
     final pending = await _readPending();
     if (pending == null) {
@@ -124,7 +126,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     final identity = await _deviceIdentity.loadOrCreate();
     if (identity.deviceKey != pending['device_key']) {
       await clearPendingLink();
-      throw const StateError(
+      throw StateError(
         'هوية الجهاز المحفوظة تغيرت؛ أوقف الربط واطلب رابطًا جديدًا.',
       );
     }
