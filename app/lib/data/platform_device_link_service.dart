@@ -39,6 +39,27 @@ class PlatformLinkedLicense {
 abstract interface class PlatformDeviceLinkOperations {
   Future<void> requestLink(String email);
   Future<PlatformDeviceLinkStatus> completePendingLink();
+  Future<PlatformLinkedLicense?> readLinkedLicense();
+}
+
+class UnavailablePlatformDeviceLinkService
+    implements PlatformDeviceLinkOperations {
+  const UnavailablePlatformDeviceLinkService(this.reason);
+
+  final String reason;
+
+  @override
+  Future<void> requestLink(String email) async {
+    throw PlatformApiConfigurationException(reason);
+  }
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingLink() async {
+    throw PlatformApiConfigurationException(reason);
+  }
+
+  @override
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
 }
 
 class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
