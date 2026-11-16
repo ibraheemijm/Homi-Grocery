@@ -226,6 +226,15 @@ void main() {
     expect(saved.planKey, 'trial');
     expect(saved.endsAt, endsAt);
     expect(store.values['homi_platform_pending_device_link_v1'], '');
+    expect(transport.requests, hasLength(2));
+    expect(
+      transport.requests.map((request) => request.uri.path),
+      isNot(contains('/api/v1/license-signing-keys')),
+    );
+    final storedLicense = jsonDecode(
+      store.values['homi_platform_signed_license_v1']!,
+    ) as Map<String, dynamic>;
+    expect(storedLicense.containsKey('public_key'), isFalse);
   });
 
   test('يرفض توقيع ترخيص معدل قبل اعتباره مرتبطًا', () async {
