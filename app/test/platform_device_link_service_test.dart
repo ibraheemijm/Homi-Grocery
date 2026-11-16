@@ -212,7 +212,7 @@ void main() {
       ),
       deviceIdentity: identity,
       store: store,
-      trustedPublicKeys: {},
+      trustedPublicKeys: {keyId: base64Encode(publicDer)},
     );
 
     await service.requestLink('customer@example.test');
