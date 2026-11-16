@@ -18,6 +18,9 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
     completeCalls++;
     return statuses.removeAt(0);
   }
+
+  @override
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
 }
 
 void main() {
