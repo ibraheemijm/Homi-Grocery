@@ -121,16 +121,6 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         message: 'اطلب رابط ربط الجهاز أولًا.',
       );
     }
-    final expiresAt = DateTime.parse(pending['expires_at']!);
-    if (!expiresAt.isAfter(_clock().toUtc())) {
-      await clearPendingLink();
-      throw const PlatformApiException(
-        statusCode: 410,
-        code: 'DEVICE_LINK_EXPIRED',
-        message: 'انتهت صلاحية رابط ربط الجهاز. اطلب رابطًا جديدًا.',
-      );
-    }
-
     final identity = await _deviceIdentity.loadOrCreate();
     if (identity.deviceKey != pending['device_key']) {
       await clearPendingLink();
