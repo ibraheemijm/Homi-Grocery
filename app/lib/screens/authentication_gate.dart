@@ -7,6 +7,8 @@ import '../data/auth_repository.dart';
 import '../data/android_biometric_login.dart';
 import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
+import '../data/platform_device_link_service.dart';
+import 'platform_device_link_screen.dart';
 
 typedef GroceryDatabaseProvider = Future<Database> Function();
 typedef AuthRepositoryProvider = AuthRepository Function(Database database);
@@ -24,6 +26,7 @@ class AuthenticationGate extends StatefulWidget {
     this.authRepositoryProvider,
     this.useBiometrics = true,
     this.onInitialized,
+    this.platformDeviceLinkService,
     super.key,
   });
 
@@ -33,6 +36,7 @@ class AuthenticationGate extends StatefulWidget {
   // يتيح تعطيل تكامل الجهاز في الاختبارات التي لا تختبر الدخول الحيوي.
   final bool useBiometrics;
   final Future<void> Function()? onInitialized;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -49,6 +53,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   bool _loading = true;
   bool _biometricReady = false;
   String? _error;
+  AuthUser? _pendingDeviceLinkUser;
+  bool _cashierNeedsManagerLink = false;
 
   @override
   void initState() {
@@ -88,6 +94,32 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   }
 
   Future<void> _activateUser(AuthUser user) async {
+    final deviceLink = widget.platformDeviceLinkService;
+    if (deviceLink != null) {
+      final license = await deviceLink.readLinkedLicense();
+      if (license == null) {
+        if (!user.isManager) {
+          if (mounted) {
+            setState(() {
+              _cashierNeedsManagerLink = true;
+              _pendingDeviceLinkUser = null;
+              _user = null;
+              _shift = null;
+            });
+          }
+          return;
+        }
+        if (mounted) {
+          setState(() {
+            _pendingDeviceLinkUser = user;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+    }
     final database = await widget._openDatabase();
     final shifts = CashShiftRepository(database);
     final openShift = await shifts.getOpenShift(userId: user.id);
@@ -357,6 +389,29 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     if (_error != null) {
       return _GateError(message: _error!, onRetry: _initialize);
     }
+    final pendingDeviceLinkUser = _pendingDeviceLinkUser;
+    if (pendingDeviceLinkUser != null) {
+      final service = widget.platformDeviceLinkService;
+      if (service == null) {
+        return const _GateError(
+          message: 'خدمة ربط Homi Platform غير متاحة في هذا الإصدار.',
+          onRetry: _noop,
+        );
+      }
+      return PlatformDeviceLinkScreen(
+        service: service,
+        onLinked: () {
+          if (!mounted) return;
+          setState(() => _pendingDeviceLinkUser = null);
+          _activateUser(pendingDeviceLinkUser);
+        },
+      );
+    }
+    if (_cashierNeedsManagerLink) {
+      return _GateManagerLinkRequired(
+        onBack: () => setState(() => _cashierNeedsManagerLink = false),
+      );
+    }
     final repository = _repository!;
     if (_needsSetup) {
       return _CreateManagerScreen(
@@ -451,6 +506,51 @@ class AndroidStartupScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+void _noop() {}
+
+class _GateManagerLinkRequired extends StatelessWidget {
+  const _GateManagerLinkRequired({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.admin_panel_settings_outlined, size: 52),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'يجب ربط الجهاز بحساب المدير أولًا',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'اطلب من مدير المتجر تسجيل الدخول وربط هذا الجهاز بحساب Homi Platform. لن تُطلب كلمة مرور المنصة من الكاشير.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: onBack,
+                      child: const Text('العودة إلى تسجيل الدخول'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
