@@ -304,7 +304,6 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
     final payload = _decodeCanonicalBase64(payloadText);
     final signature = _decodeCanonicalBase64(signatureText);
-    final publicDer = _decodeCanonicalBase64(publicText);
     return _verifyLicenseMaterial(
       licenseId: licenseId,
       keyId: keyId,
