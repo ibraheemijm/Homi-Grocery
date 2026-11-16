@@ -121,6 +121,10 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
           platformDeviceLinkService: _platformDeviceLinkService,
+          readOnlyBuilder: (user, onLogout) => ReadOnlyWorkspaceScreen(
+            user: user,
+            onLogout: onLogout,
+          ),
           onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
               ? null
               : () async {
@@ -186,6 +190,64 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
       dividerColor: isDark
           ? Colors.white.withValues(alpha: 0.10)
           : brandGreen.withValues(alpha: 0.10),
+    );
+  }
+}
+
+// مساحة آمنة بعد انتهاء الترخيص: تقارير وتصدير ونسخ احتياطي فقط.
+class ReadOnlyWorkspaceScreen extends StatelessWidget {
+  const ReadOnlyWorkspaceScreen({
+    required this.user,
+    required this.onLogout,
+    super.key,
+  });
+
+  final AuthUser user;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final isManager = user.isManager;
+    return DefaultTabController(
+      length: isManager ? 2 : 1,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Homi Grocery'),
+                Text(
+                  'وضع القراءة فقط',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'تسجيل الخروج',
+                onPressed: onLogout,
+                icon: const Icon(Icons.logout_rounded),
+              ),
+            ],
+            bottom: TabBar(
+              tabs: [
+                const Tab(icon: Icon(Icons.analytics_outlined), text: 'التقارير'),
+                if (isManager)
+                  const Tab(icon: Icon(Icons.backup_outlined), text: 'النسخ الاحتياطي'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              ReportsScreen(userId: user.id),
+              if (isManager)
+                BackupScreen(managerUserId: user.id, readOnly: true),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
