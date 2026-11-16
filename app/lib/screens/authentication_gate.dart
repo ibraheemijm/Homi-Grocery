@@ -400,10 +400,16 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       }
       return PlatformDeviceLinkScreen(
         service: service,
-        onLinked: () {
+        onLinked: () async {
           if (!mounted) return;
           setState(() => _pendingDeviceLinkUser = null);
-          _activateUser(pendingDeviceLinkUser);
+          try {
+            await _activateUser(pendingDeviceLinkUser);
+          } catch (error) {
+            if (mounted) {
+              setState(() => _error = 'اكتمل ربط الجهاز، لكن تعذر فتح المتجر: $error');
+            }
+          }
         },
       );
     }
