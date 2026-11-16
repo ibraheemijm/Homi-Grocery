@@ -22,6 +22,7 @@ Future<void> _pumpGate(WidgetTester tester) async {
 // يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
 class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
   String? requestedEmail;
+  PlatformLinkedLicense? license;
 
   @override
   Future<void> requestLink(String email) async {
@@ -33,7 +34,7 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
       PlatformDeviceLinkStatus.linked;
 
   @override
-  Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
 }
 
 class _GateTestAuthRepository extends AuthRepository {
@@ -130,6 +131,47 @@ void main() {
     expect(find.byType(PlatformDeviceLinkScreen), findsOneWidget);
     expect(find.text('ربط Homi Grocery بحسابك'), findsOneWidget);
     expect(find.text('authenticated'), findsNothing);
+  });
+
+  testWidgets('يعرض مساحة القراءة فقط عند انتهاء الترخيص', (tester) async {
+    final now = DateTime.now().toUtc();
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174030',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 15)),
+        endsAt: now.subtract(const Duration(days: 1)),
+        planKey: 'trial',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          readOnlyBuilder: (user, onLogout) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('operational workspace'), findsNothing);
+    expect(find.text('فتح الوردية'), findsNothing);
   });
 
   testWidgets('لا يسمح للكاشير ببدء ربط الجهاز بدل المدير', (tester) async {
