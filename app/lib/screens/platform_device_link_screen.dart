@@ -104,6 +104,12 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
     if (text.contains('DEVICE_LINK_CONFLICT')) {
       return 'تعذر ربط هذا الجهاز بسبب تعارض في هوية الجهاز أو ارتباطه بترخيص آخر.';
     }
+    if (text.contains('DEVICE_LIMIT_REACHED')) {
+      return 'وصل الترخيص إلى الحد الأقصى لعدد الأجهزة المسموح بها.';
+    }
+    if (text.contains('SUBSCRIPTION_LICENSE_UNAVAILABLE')) {
+      return 'الاشتراك نشط لكن الترخيص لم يصبح جاهزًا بعد. أعد المحاولة أو تواصل مع إدارة Homi.';
+    }
     if (text.contains('PlatformApiConfigurationException')) {
       return 'لم يتم إعداد الاتصال بمنصة Homi في هذا الإصدار.';
     }
