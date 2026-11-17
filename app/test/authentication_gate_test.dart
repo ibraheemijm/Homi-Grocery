@@ -23,6 +23,7 @@ Future<void> _pumpGate(WidgetTester tester) async {
 class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
   String? requestedEmail;
   PlatformLinkedLicense? license;
+  PlatformLinkedLicense? grant;
 
   @override
   Future<void> requestLink(String email) async {
@@ -35,6 +36,12 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
+
+  @override
+  Future<PlatformLinkedLicense?> refreshOfflineGrant() async => grant ?? license;
+
+  @override
+  Future<PlatformLinkedLicense?> readOfflineGrant() async => grant ?? license;
 }
 
 class _GateTestAuthRepository extends AuthRepository {
