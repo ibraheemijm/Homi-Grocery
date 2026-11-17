@@ -15,6 +15,7 @@ enum PlatformDeviceLinkStatus {
 class PlatformLinkedLicense {
   const PlatformLinkedLicense({
     required this.licenseId,
+    required this.deviceId,
     required this.keyId,
     required this.startsAt,
     required this.endsAt,
@@ -31,6 +32,7 @@ class PlatformLinkedLicense {
   });
 
   final String licenseId;
+  final String deviceId;
   final String keyId;
   final DateTime startsAt;
   final DateTime? endsAt;
@@ -50,6 +52,8 @@ abstract interface class PlatformDeviceLinkOperations {
   Future<void> requestLink(String email);
   Future<PlatformDeviceLinkStatus> completePendingLink();
   Future<PlatformLinkedLicense?> readLinkedLicense();
+  Future<PlatformLinkedLicense?> refreshOfflineGrant();
+  Future<PlatformLinkedLicense?> readOfflineGrant();
 }
 
 class UnavailablePlatformDeviceLinkService
@@ -70,6 +74,14 @@ class UnavailablePlatformDeviceLinkService
 
   @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
+
+  @override
+  Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
+    throw PlatformApiConfigurationException(reason);
+  }
+
+  @override
+  Future<PlatformLinkedLicense?> readOfflineGrant() async => null;
 }
 
 class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
@@ -94,6 +106,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   static const _pendingKey = 'homi_platform_pending_device_link_v1';
   static const _licenseKey = 'homi_platform_signed_license_v1';
+  static const _offlineGrantKey = 'homi_platform_signed_offline_grant_v1';
   static const _trustedKeysEnvironmentBase64 =
       String.fromEnvironment('HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64');
   static const _spkiPrefix = <int>[
@@ -248,6 +261,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     final verified = await _verifyIssuedLicense(license);
     await _store.write(_licenseKey, jsonEncode({
       'license_id': verified.licenseId,
+      'device_id': verified.deviceId,
       'key_id': verified.keyId,
       'starts_at': verified.startsAt.toUtc().toIso8601String(),
       'ends_at': verified.endsAt?.toUtc().toIso8601String(),
@@ -272,8 +286,13 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
       final license = Map<String, Object?>.from(decoded);
       final payload = base64Decode(license['payload'] as String);
       final signature = base64Decode(license['signature'] as String);
+      final deviceId = license['device_id'];
+      if (deviceId is! String || !_isUuid(deviceId)) {
+        throw const FormatException('هوية الجهاز المرتبطة بالترخيص غير صالحة.');
+      }
       return _verifyLicenseMaterial(
         licenseId: license['license_id'] as String,
+        deviceId: deviceId,
         keyId: license['key_id'] as String,
         payload: payload,
         signature: signature,
@@ -340,8 +359,13 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
     final payload = _decodeCanonicalBase64(payloadText);
     final signature = _decodeCanonicalBase64(signatureText);
+    final deviceId = license['device_id'];
+    if (deviceId is! String || !_isUuid(deviceId)) {
+      throw const FormatException('استجابة ربط الجهاز لا تحتوي على معرّف جهاز صالح.');
+    }
     return _verifyLicenseMaterial(
       licenseId: licenseId,
+      deviceId: deviceId,
       keyId: keyId,
       payload: payload,
       signature: signature,
@@ -350,6 +374,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   Future<PlatformLinkedLicense> _verifyLicenseMaterial({
     required String licenseId,
+    required String deviceId,
     required String keyId,
     required List<int> payload,
     required List<int> signature,
@@ -378,6 +403,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     if (claims is! Map<String, dynamic> ||
         claims['schema_version'] != 1 ||
         claims['license_id'] != licenseId ||
+        (claims['device_id'] != null && claims['device_id'] != deviceId) ||
         claims['key_id'] != keyId ||
         claims['product_id'] is! String ||
         claims['organization_id'] is! String ||
@@ -459,6 +485,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
     return PlatformLinkedLicense(
       licenseId: licenseId,
+      deviceId: deviceId,
       keyId: keyId,
       startsAt: startsAt.toUtc(),
       endsAt: endsAt,
