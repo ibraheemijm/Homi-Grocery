@@ -187,6 +187,57 @@ void main() {
     expect(find.text('فتح الوردية'), findsNothing);
   });
 
+  testWidgets('يحوّل التجربة إلى القراءة فقط بعد سبعة أيام دون اتصال', (tester) async {
+    final now = DateTime.now().toUtc();
+    final trialEndsAt = now.add(const Duration(days: 7));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174031',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 1)),
+        endsAt: now.add(const Duration(days: 7)),
+        trialEndsAt: trialEndsAt,
+        subscriptionEndsAt: null,
+        offlineExpiresAt: now.subtract(const Duration(minutes: 1)),
+        graceEndsAt: null,
+        accessPolicy: 'full_until_offline_expiry_or_trial_end_then_read_export',
+        planKey: 'trial',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('operational workspace'), findsNothing);
+    expect(find.text('فتح الوردية'), findsNothing);
+  });
+
   testWidgets('لا يسمح للكاشير ببدء ربط الجهاز بدل المدير', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
