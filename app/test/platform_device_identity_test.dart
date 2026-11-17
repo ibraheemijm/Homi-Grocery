@@ -86,6 +86,20 @@ void main() {
     expect(data.publicKeyDer, hasLength(44));
   });
 
+  test('ينشئ هوية Linux مستقرة بمعمارية الجهاز', () async {
+    final identity = PlatformDeviceIdentity(
+      MemorySecretStore(),
+      platformOverride: () => 'linux',
+    );
+    final data = await identity.loadOrCreate();
+    expect(data.platform, 'linux');
+    expect(data.architecture, isNotEmpty);
+    expect(data.publicKeyDer, hasLength(44));
+    final again = await identity.loadOrCreate();
+    expect(again.deviceKey, data.deviceKey);
+    expect(again.publicKeyDer, data.publicKeyDer);
+  });
+
   test('يرفض nonce غير صحيح قبل إجراء التوقيع', () async {
     final identity = PlatformDeviceIdentity(
       MemorySecretStore(),

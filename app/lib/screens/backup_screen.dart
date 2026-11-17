@@ -5,9 +5,14 @@ import '../data/backup_repository.dart';
 import '../data/grocery_database.dart';
 
 class BackupScreen extends StatefulWidget {
-  const BackupScreen({super.key, required this.managerUserId});
+  const BackupScreen({
+    super.key,
+    required this.managerUserId,
+    this.readOnly = false,
+  });
 
   final int managerUserId;
+  final bool readOnly;
   @override
   State<BackupScreen> createState() => _BackupScreenState();
 }
@@ -147,7 +152,8 @@ class _BackupScreenState extends State<BackupScreen> {
           const SizedBox(height: 16),
           FilledButton.icon(onPressed: _working ? null : _createBackup, icon: const Icon(Icons.backup_rounded), label: const Text('إنشاء نسخة احتياطية الآن')),
           const SizedBox(height: 8),
-          OutlinedButton.icon(onPressed: _working ? null : _restore, icon: const Icon(Icons.settings_backup_restore_rounded), label: const Text('اختيار نسخة واستعادتها')),
+          if (!widget.readOnly)
+            OutlinedButton.icon(onPressed: _working ? null : _restore, icon: const Icon(Icons.settings_backup_restore_rounded), label: const Text('اختيار نسخة واستعادتها')),
           TextButton.icon(onPressed: _working ? null : _showFolder, icon: const Icon(Icons.folder_open_rounded), label: const Text('عرض مجلد النسخ')),
         ]))),
         if (_working) const LinearProgressIndicator(),
@@ -204,21 +210,23 @@ class _BackupScreenState extends State<BackupScreen> {
                       leading: const Icon(Icons.backup_rounded),
                       title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text('$stamp • ${(file.lengthSync() / 1024).toStringAsFixed(1)} KB'),
-                      trailing: Wrap(
-                        spacing: 0,
-                        children: [
-                          IconButton(
-                            tooltip: 'استعادة هذه النسخة',
-                            onPressed: _working ? null : () => _restorePath(file.path),
-                            icon: const Icon(Icons.settings_backup_restore_rounded),
-                          ),
-                          IconButton(
-                            tooltip: 'حذف هذه النسخة',
-                            onPressed: _working ? null : () => _deleteBackup(file),
-                            icon: const Icon(Icons.delete_outline_rounded),
-                          ),
-                        ],
-                      ),
+                      trailing: widget.readOnly
+                          ? null
+                          : Wrap(
+                              spacing: 0,
+                              children: [
+                                IconButton(
+                                  tooltip: 'استعادة هذه النسخة',
+                                  onPressed: _working ? null : () => _restorePath(file.path),
+                                  icon: const Icon(Icons.settings_backup_restore_rounded),
+                                ),
+                                IconButton(
+                                  tooltip: 'حذف هذه النسخة',
+                                  onPressed: _working ? null : () => _deleteBackup(file),
+                                  icon: const Icon(Icons.delete_outline_rounded),
+                                ),
+                              ],
+                            ),
                     );
                   }),
               ],
