@@ -151,6 +151,7 @@ void main() {
       platformOverride: () => 'android',
     );
     const licenseId = '123e4567-e89b-42d3-a456-426614174010';
+    const deviceId = '123e4567-e89b-42d3-a456-426614174016';
     const keyId = 'homi-license-test-key';
     final keyPair = await Ed25519().newKeyPair();
     final publicKey = await keyPair.extractPublicKey();
@@ -193,6 +194,7 @@ void main() {
         'status': 'active',
         'license': {
           'id': licenseId,
+          'device_id': deviceId,
           'status': 'active',
           'key_id': keyId,
           'payload': base64Encode(payload),
