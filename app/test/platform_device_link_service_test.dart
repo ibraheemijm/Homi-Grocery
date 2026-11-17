@@ -367,6 +367,9 @@ void main() {
     expect(grant!.deviceId, deviceId);
     expect(grant.offlineExpiresAt, grantOfflineExpiry);
     expect(await service.readOfflineGrant(), isNotNull);
+    // تعذر الاتصال في المحاولة التالية؛ يجب استخدام التصريح الموقّع المحفوظ دون تمديده.
+    final cachedGrant = await service.refreshOfflineGrant();
+    expect(cachedGrant?.offlineExpiresAt, grantOfflineExpiry);
     expect(
       transport.requests.map((request) => request.uri.path),
       contains('/api/v1/devices/$deviceId/challenges'),
