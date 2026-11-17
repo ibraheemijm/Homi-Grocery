@@ -127,8 +127,13 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         return;
       }
       final now = DateTime.now().toUtc();
+      // التجربة تحتاج تحققًا عبر الإنترنت بعد سبعة أيام دون اتصال؛
+      // أما الاشتراك المدفوع فينتقل إلى القراءة والتصدير عند تاريخ انتهائه.
+      final fullAccessUntil = license.planKey == 'trial'
+          ? license.offlineExpiresAt
+          : license.endsAt;
       if (license.startsAt.isAfter(now) ||
-          (license.endsAt != null && !license.endsAt!.isAfter(now))) {
+          (fullAccessUntil != null && !fullAccessUntil.isAfter(now))) {
         if (mounted) {
           setState(() {
             _readOnlyUser = user;
