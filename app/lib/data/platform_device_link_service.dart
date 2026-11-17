@@ -450,8 +450,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
           subscriptionEndsAt != null ||
           offlineExpiresAt != null ||
           graceEndsAt != null ||
-          accessPolicy !=
-              'full_until_subscription_end_then_read_export_until_grace_end') {
+          accessPolicy != 'full_forever') {
         throw const FormatException('سياسة الترخيص الدائم غير صالحة.');
       }
     } else {
