@@ -248,6 +248,140 @@ void main() {
     expect(storedLicense.containsKey('public_key'), isFalse);
   });
 
+  test('يجدد تصريح العمل دون اتصال بإثبات الجهاز ويتحقق من توقيعه', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(
+      store,
+      platformOverride: () => 'android',
+    );
+    const licenseId = '123e4567-e89b-42d3-a456-426614174040';
+    const deviceId = '123e4567-e89b-42d3-a456-426614174041';
+    const keyId = 'homi-license-grant-test-key';
+    final keyPair = await Ed25519().newKeyPair();
+    final publicKey = await keyPair.extractPublicKey();
+    final publicDer = <int>[...spkiPrefix, ...publicKey.bytes];
+    final issuedAt = DateTime.now().toUtc();
+    final startsAt = issuedAt.subtract(const Duration(minutes: 1));
+    final trialEndsAt = issuedAt.add(const Duration(days: 13));
+    final licensePayload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174042',
+      'user_id': '123e4567-e89b-42d3-a456-426614174043',
+      'product_id': '123e4567-e89b-42d3-a456-426614174044',
+      'origin_trial_id': '123e4567-e89b-42d3-a456-426614174045',
+      'subscription_id': null,
+      'trial_id': '123e4567-e89b-42d3-a456-426614174045',
+      'plan_key': 'trial',
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': trialEndsAt.toIso8601String(),
+      'trial_ends_at': trialEndsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
+      'grace_ends_at': null,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'max_devices': 2,
+      'entitlement_version': 1,
+      'issued_at': issuedAt.toIso8601String(),
+      'key_id': keyId,
+    }));
+    final licenseSignature = await Ed25519().sign(licensePayload, keyPair: keyPair);
+    final grantIssuedAt = issuedAt.add(const Duration(seconds: 1));
+    final grantOfflineExpiry = grantIssuedAt.add(const Duration(days: 7));
+    final grantPayload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'grant_id': '123e4567-e89b-42d3-a456-426614174046',
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174042',
+      'user_id': '123e4567-e89b-42d3-a456-426614174043',
+      'product_id': '123e4567-e89b-42d3-a456-426614174044',
+      'device_id': deviceId,
+      'plan_key': 'trial',
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': trialEndsAt.toIso8601String(),
+      'trial_ends_at': trialEndsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': grantOfflineExpiry.toIso8601String(),
+      'grace_ends_at': null,
+      'grace_period_days': 0,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'key_id': keyId,
+      'entitlement_version': 1,
+      'issued_at': grantIssuedAt.toIso8601String(),
+      'expires_at': grantOfflineExpiry.toIso8601String(),
+    }));
+    final grantSignature = await Ed25519().sign(grantPayload, keyPair: keyPair);
+    final linkNonce = base64UrlEncode(List<int>.generate(32, (i) => i + 1)).replaceAll('=', '');
+    final grantNonce = base64UrlEncode(List<int>.generate(32, (i) => 32 - i)).replaceAll('=', '');
+    final transport = QueueTransport([
+      success({
+        'accepted': true,
+        'challenge_id': '123e4567-e89b-42d3-a456-426614174047',
+        'nonce': linkNonce,
+        'expires_at': issuedAt.add(const Duration(minutes: 5)).toIso8601String(),
+      }, statusCode: 202),
+      success({
+        'status': 'active',
+        'license': {
+          'id': licenseId,
+          'device_id': deviceId,
+          'status': 'active',
+          'key_id': keyId,
+          'payload': base64Encode(licensePayload),
+          'signature': base64Encode(licenseSignature.bytes),
+        }
+      }),
+      success({
+        'challenge_id': '123e4567-e89b-42d3-a456-426614174048',
+        'nonce': grantNonce,
+        'expires_at': issuedAt.add(const Duration(minutes: 5)).toIso8601String(),
+      }, statusCode: 201),
+      success({
+        'id': '123e4567-e89b-42d3-a456-426614174046',
+        'key_id': keyId,
+        'payload': base64Encode(grantPayload),
+        'signature': base64Encode(grantSignature.bytes),
+        'issued_at': grantIssuedAt.toIso8601String(),
+        'expires_at': grantOfflineExpiry.toIso8601String(),
+        'entitlement_version': 1,
+      }, statusCode: 201),
+    ]);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {keyId: base64Encode(publicDer)},
+      clock: () => issuedAt,
+    );
+
+    await service.requestLink('customer@example.test');
+    expect(
+      await service.completePendingLink(),
+      PlatformDeviceLinkStatus.linked,
+    );
+    final grant = await service.refreshOfflineGrant();
+    expect(grant, isNotNull);
+    expect(grant!.deviceId, deviceId);
+    expect(grant.offlineExpiresAt, grantOfflineExpiry);
+    expect(await service.readOfflineGrant(), isNotNull);
+    expect(
+      transport.requests.map((request) => request.uri.path),
+      contains('/api/v1/devices/$deviceId/challenges'),
+    );
+    expect(
+      transport.requests.map((request) => request.uri.path),
+      contains('/api/v1/licenses/$licenseId/offline-grants'),
+    );
+    final challengeBody = jsonDecode(transport.requests[2].body!) as Map<String, dynamic>;
+    expect(challengeBody['purpose'], 'offline_grant');
+    final issueBody = jsonDecode(transport.requests[3].body!) as Map<String, dynamic>;
+    expect(issueBody['challenge_id'], '123e4567-e89b-42d3-a456-426614174048');
+    expect(issueBody['signature'], isNotEmpty);
+  });
+
   test('يرفض مفتاح توقيع غير مثبت دون جلب مفتاح بديل من الخادم', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(
