@@ -18,6 +18,11 @@ class PlatformLinkedLicense {
     required this.keyId,
     required this.startsAt,
     required this.endsAt,
+    required this.trialEndsAt,
+    required this.subscriptionEndsAt,
+    required this.offlineExpiresAt,
+    required this.graceEndsAt,
+    required this.accessPolicy,
     required this.planKey,
     required this.entitlementVersion,
     required this.signedPayload,
@@ -29,6 +34,11 @@ class PlatformLinkedLicense {
   final String keyId;
   final DateTime startsAt;
   final DateTime? endsAt;
+  final DateTime? trialEndsAt;
+  final DateTime? subscriptionEndsAt;
+  final DateTime? offlineExpiresAt;
+  final DateTime? graceEndsAt;
+  final String accessPolicy;
   final String planKey;
   final int entitlementVersion;
   final List<int> signedPayload;
@@ -376,25 +386,89 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         claims['entitlement_version'] is! num) {
       throw const FormatException('مطالبات الترخيص الموقّع غير صالحة.');
     }
+    DateTime? parseOptionalDate(String key) {
+      final value = claims[key];
+      if (value == null) return null;
+      if (value is! String) {
+        throw FormatException('قيمة التاريخ $key غير صالحة.');
+      }
+      final parsed = DateTime.tryParse(value);
+      if (parsed == null) {
+        throw FormatException('قيمة التاريخ $key غير صالحة.');
+      }
+      return parsed.toUtc();
+    }
+
     final startsAt = DateTime.tryParse(claims['starts_at'] as String? ?? '');
     final issuedAt = DateTime.tryParse(claims['issued_at'] as String? ?? '');
-    final endsAtText = claims['ends_at'];
-    final endsAt = endsAtText == null
-        ? null
-        : DateTime.tryParse(endsAtText as String);
+    final endsAt = parseOptionalDate('ends_at');
+    final trialEndsAt = parseOptionalDate('trial_ends_at');
+    final subscriptionEndsAt = parseOptionalDate('subscription_ends_at');
+    final offlineExpiresAt = parseOptionalDate('offline_expires_at');
+    final graceEndsAt = parseOptionalDate('grace_ends_at');
+    final planKey = claims['plan_key'] as String;
+    final accessPolicy = claims['access_policy'];
     if (startsAt == null ||
         issuedAt == null ||
-        (endsAtText != null && endsAt == null) ||
         startsAt.isAfter(issuedAt.add(const Duration(minutes: 5))) ||
         (endsAt != null && !endsAt.isAfter(startsAt))) {
       throw const FormatException('تواريخ صلاحية الترخيص غير صالحة.');
     }
+
+    final issuedUtc = issuedAt.toUtc();
+    if (planKey == 'trial') {
+      if (trialEndsAt == null ||
+          subscriptionEndsAt != null ||
+          graceEndsAt != null ||
+          offlineExpiresAt == null ||
+          endsAt != trialEndsAt ||
+          accessPolicy !=
+              'full_until_offline_expiry_or_trial_end_then_read_export' ||
+          !offlineExpiresAt.isAfter(issuedUtc) ||
+          offlineExpiresAt.isAfter(
+            issuedUtc.add(const Duration(days: 7)),
+          ) ||
+          offlineExpiresAt.isAfter(trialEndsAt)) {
+        throw const FormatException('سياسة العمل دون اتصال للتجربة غير صالحة.');
+      }
+    } else if (planKey == 'monthly' || planKey == 'annual') {
+      final expectedGraceEnd = endsAt?.add(const Duration(days: 7));
+      if (trialEndsAt != null ||
+          subscriptionEndsAt == null ||
+          subscriptionEndsAt != endsAt ||
+          offlineExpiresAt == null ||
+          graceEndsAt == null ||
+          graceEndsAt != expectedGraceEnd ||
+          offlineExpiresAt != graceEndsAt ||
+          accessPolicy !=
+              'full_until_subscription_end_then_read_export_until_grace_end') {
+        throw const FormatException('سياسة مهلة الاشتراك المدفوع غير صالحة.');
+      }
+    } else if (planKey == 'lifetime') {
+      if (endsAt != null ||
+          trialEndsAt != null ||
+          subscriptionEndsAt != null ||
+          offlineExpiresAt != null ||
+          graceEndsAt != null ||
+          accessPolicy !=
+              'full_until_subscription_end_then_read_export_until_grace_end') {
+        throw const FormatException('سياسة الترخيص الدائم غير صالحة.');
+      }
+    } else {
+      throw const FormatException('نوع خطة الترخيص غير مدعوم.');
+    }
+
     return PlatformLinkedLicense(
       licenseId: licenseId,
       keyId: keyId,
       startsAt: startsAt.toUtc(),
-      endsAt: endsAt?.toUtc(),
-      planKey: claims['plan_key'] as String,
+      endsAt: endsAt,
+      trialEndsAt: trialEndsAt,
+      subscriptionEndsAt: subscriptionEndsAt,
+      offlineExpiresAt: offlineExpiresAt,
+      graceEndsAt: graceEndsAt,
+      accessPolicy: accessPolicy as String,
+      planKey: planKey,
       entitlementVersion: (claims['entitlement_version'] as num).toInt(),
       signedPayload: payload,
       signature: signature,
