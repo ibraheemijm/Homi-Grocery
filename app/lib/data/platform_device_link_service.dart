@@ -363,7 +363,8 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     } on PlatformApiException catch (error) {
       if (error.code == 'DEVICE_NOT_LINKED' ||
           error.code == 'DEVICE_PROOF_INVALID' ||
-          error.code == 'LICENSE_REVOKED') {
+          error.code == 'LICENSE_REVOKED' ||
+          error.code == 'LICENSE_SUSPENDED') {
         await _store.write(_offlineGrantKey, '');
         return null;
       }
