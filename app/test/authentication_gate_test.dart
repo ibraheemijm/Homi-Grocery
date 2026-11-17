@@ -149,6 +149,7 @@ void main() {
     final deviceLink = _GateTestDeviceLinkService()
       ..license = PlatformLinkedLicense(
         licenseId: '123e4567-e89b-42d3-a456-426614174030',
+        deviceId: '123e4567-e89b-42d3-a456-426614174032',
         keyId: 'homi-test-key',
         startsAt: now.subtract(const Duration(days: 15)),
         endsAt: now.subtract(const Duration(days: 1)),
@@ -200,6 +201,7 @@ void main() {
     final deviceLink = _GateTestDeviceLinkService()
       ..license = PlatformLinkedLicense(
         licenseId: '123e4567-e89b-42d3-a456-426614174031',
+        deviceId: '123e4567-e89b-42d3-a456-426614174033',
         keyId: 'homi-test-key',
         startsAt: now.subtract(const Duration(days: 1)),
         endsAt: now.add(const Duration(days: 7)),
