@@ -170,6 +170,11 @@ void main() {
       'plan_key': 'trial',
       'starts_at': startsAt.toIso8601String(),
       'ends_at': endsAt.toIso8601String(),
+      'trial_ends_at': endsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
+      'grace_ends_at': null,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
@@ -225,6 +230,10 @@ void main() {
     expect(saved.keyId, keyId);
     expect(saved.planKey, 'trial');
     expect(saved.endsAt, endsAt);
+    expect(saved.trialEndsAt, endsAt);
+    expect(saved.offlineExpiresAt, issuedAt.add(const Duration(days: 7)));
+    expect(saved.graceEndsAt, isNull);
+    expect(saved.accessPolicy, 'full_until_offline_expiry_or_trial_end_then_read_export');
     expect(store.values['homi_platform_pending_device_link_v1'], '');
     expect(transport.requests, hasLength(2));
     expect(
