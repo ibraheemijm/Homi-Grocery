@@ -126,13 +126,27 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         }
         return;
       }
+      // يجدد التصريح الموقّع عند توفر الشبكة، ويستخدم آخر تصريح محفوظ عند انقطاعها.
+      final accessGrant = await deviceLink.refreshOfflineGrant();
+      if (accessGrant == null) {
+        if (mounted) {
+          setState(() {
+            _readOnlyUser = user;
+            _pendingDeviceLinkUser = null;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
       final now = DateTime.now().toUtc();
-      // التجربة تحتاج تحققًا عبر الإنترنت بعد سبعة أيام دون اتصال؛
-      // أما الاشتراك المدفوع فينتقل إلى القراءة والتصدير عند تاريخ انتهائه.
-      final fullAccessUntil = license.planKey == 'trial'
-          ? license.offlineExpiresAt
-          : license.endsAt;
-      if (license.startsAt.isAfter(now) ||
+      // بعد سبعة أيام دون اتصال بالتجربة، أو عند انتهاء الاشتراك المدفوع،
+      // لا تُفتح عمليات البيع والتحرير وتبقى مساحة القراءة والتصدير متاحة.
+      final fullAccessUntil = accessGrant.planKey == 'trial'
+          ? accessGrant.offlineExpiresAt
+          : accessGrant.endsAt;
+      if (accessGrant.startsAt.isAfter(now) ||
           (fullAccessUntil != null && !fullAccessUntil.isAfter(now))) {
         if (mounted) {
           setState(() {
