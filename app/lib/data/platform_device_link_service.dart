@@ -303,6 +303,107 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }
   }
 
+  @override
+  Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
+    final license = await readLinkedLicense();
+    if (license == null) return null;
+
+    try {
+      final challenge = await _api.postJson(
+        '/api/v1/devices/${license.deviceId}/challenges',
+        body: {
+          'license_id': license.licenseId,
+          'purpose': 'offline_grant',
+        },
+      );
+      final challengeId = challenge['challenge_id'];
+      final nonce = challenge['nonce'];
+      final expiresAt = DateTime.tryParse(challenge['expires_at'] as String? ?? '');
+      if (challengeId is! String ||
+          !_isUuid(challengeId) ||
+          nonce is! String ||
+          !_isValidNonce(nonce) ||
+          expiresAt == null ||
+          !expiresAt.isAfter(_clock().toUtc())) {
+        throw const FormatException('تحدي تجديد تصريح العمل دون اتصال غير صالح.');
+      }
+
+      final deviceSignature = await _deviceIdentity.signNonce(nonce);
+      final response = await _api.postJson(
+        '/api/v1/licenses/${license.licenseId}/offline-grants',
+        body: {
+          'challenge_id': challengeId,
+          'nonce': nonce,
+          'signature': deviceSignature,
+        },
+      );
+      final keyId = response['key_id'];
+      final payloadText = response['payload'];
+      final signatureText = response['signature'];
+      if (keyId is! String ||
+          payloadText is! String ||
+          signatureText is! String) {
+        throw const FormatException('استجابة تصريح العمل دون اتصال غير مكتملة.');
+      }
+      final verified = await _verifyLicenseMaterial(
+        licenseId: license.licenseId,
+        deviceId: license.deviceId,
+        keyId: keyId,
+        payload: _decodeCanonicalBase64(payloadText),
+        signature: _decodeCanonicalBase64(signatureText),
+      );
+      await _store.write(_offlineGrantKey, jsonEncode({
+        'license_id': verified.licenseId,
+        'device_id': verified.deviceId,
+        'key_id': verified.keyId,
+        'payload': base64Encode(verified.signedPayload),
+        'signature': base64Encode(verified.signature),
+      }));
+      return verified;
+    } on PlatformApiException catch (error) {
+      if (error.code == 'DEVICE_NOT_LINKED' ||
+          error.code == 'DEVICE_PROOF_INVALID' ||
+          error.code == 'LICENSE_REVOKED') {
+        await _store.write(_offlineGrantKey, '');
+        return null;
+      }
+      return readOfflineGrant();
+    } on Object {
+      // عند انقطاع الشبكة نستخدم آخر تصريح موقّع محفوظ، ولا نمدد صلاحيته محليًا.
+      return readOfflineGrant();
+    }
+  }
+
+  @override
+  Future<PlatformLinkedLicense?> readOfflineGrant() async {
+    final stored = await _store.read(_offlineGrantKey);
+    if (stored == null || stored.isEmpty) return null;
+    final linkedLicense = await readLinkedLicense();
+    if (linkedLicense == null) return null;
+    final decoded = jsonDecode(stored);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('سجل تصريح العمل دون اتصال تالف.');
+    }
+    final grant = Map<String, Object?>.from(decoded);
+    if (grant['license_id'] != linkedLicense.licenseId ||
+        grant['device_id'] != linkedLicense.deviceId) {
+      throw const FormatException('تصريح العمل دون اتصال لا يطابق الجهاز والترخيص المرتبطين.');
+    }
+    final keyId = grant['key_id'];
+    final payloadText = grant['payload'];
+    final signatureText = grant['signature'];
+    if (keyId is! String || payloadText is! String || signatureText is! String) {
+      throw const FormatException('بيانات تصريح العمل دون اتصال غير مكتملة.');
+    }
+    return _verifyLicenseMaterial(
+      licenseId: linkedLicense.licenseId,
+      deviceId: linkedLicense.deviceId,
+      keyId: keyId,
+      payload: _decodeCanonicalBase64(payloadText),
+      signature: _decodeCanonicalBase64(signatureText),
+    );
+  }
+
   Future<void> clearPendingLink() => _store.write(_pendingKey, '');
 
   Future<Map<String, String>?> _readPending() async {
