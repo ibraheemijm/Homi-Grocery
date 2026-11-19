@@ -61,7 +61,7 @@ void main() {
       data.publicKeyDer.sublist(12),
       type: KeyPairType.ed25519,
     );
-    expect(base64Url.decode(base64Url.normalize(identity.publicKeyRawBase64Url)), hasLength(32));
+    expect(base64Url.decode(base64Url.normalize(data.publicKeyRawBase64Url)), hasLength(32));
     expect(
       await Ed25519().verify(
         utf8.encode(message),
