@@ -696,6 +696,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         (claims['device_id'] != null && claims['device_id'] != deviceId) ||
         claims['key_id'] != keyId ||
         claims['product_id'] is! String ||
+        claims['product_key'] != 'homi-grocery' ||
         claims['organization_id'] is! String ||
         claims['user_id'] is! String ||
         claims['plan_key'] is! String ||
