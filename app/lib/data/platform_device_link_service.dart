@@ -426,6 +426,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     );
 
     // لا نغيّر الترخيص الحالي أو طلب التفعيل إلا بعد نجاح جميع عمليات التحقق.
+    await _store.write(_offlineGrantKey, '');
     await _store.write(_licenseKey, jsonEncode({
       'license_id': verified.licenseId,
       'device_id': verified.deviceId,
@@ -437,8 +438,12 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
       'payload': base64Encode(verified.signedPayload),
       'signature': base64Encode(verified.signature),
     }));
-    await _store.write(_offlineGrantKey, '');
-    await clearPendingLink();
+    // فشل تنظيف الطلب القديم لا يبطل استيراد الترخيص الذي تم التحقق منه وحفظه.
+    try {
+      await clearPendingLink();
+    } on Object {
+      // سيُعاد تنظيفه عند المزامنة التالية.
+    }
     return verified;
   }
 
