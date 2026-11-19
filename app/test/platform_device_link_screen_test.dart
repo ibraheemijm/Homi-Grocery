@@ -55,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.requestCalls, 1);
-    expect(find.textContaining('رقم الطلب'), findsOneWidget);
+    expect(find.text('رقم الطلب'), findsOneWidget);
     expect(find.textContaining('بصمة الجهاز'), findsOneWidget);
     expect(find.text('نسخ بيانات طلب التفعيل'), findsOneWidget);
     expect(find.text('مشاركة الطلب (اختر WhatsApp)'), findsOneWidget);
@@ -80,10 +80,13 @@ void main() {
     await tester.tap(find.text('إنشاء طلب تفعيل'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('إثبات ملكية الجهاز والتحقق'));
     await tester.tap(find.text('إثبات ملكية الجهاز والتحقق'));
     await tester.pumpAndSettle();
     expect(find.textContaining('تم إثبات امتلاك الجهاز بنجاح'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('التحقق من حالة التفعيل'));
+    await tester.ensureVisible(find.text('التحقق من حالة التفعيل'));
     await tester.tap(find.text('التحقق من حالة التفعيل'));
     await tester.pumpAndSettle();
     expect(find.textContaining('يجري تجهيز ملف الترخيص الموقّع'), findsOneWidget);
