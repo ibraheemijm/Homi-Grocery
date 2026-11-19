@@ -291,6 +291,10 @@ void main() {
     expect(imported.licenseId, licenseId);
     expect(imported.deviceId, deviceId);
     expect(imported.planKey, 'trial');
+    final offlineAccess = await service.refreshOfflineGrant();
+    expect(offlineAccess, isNotNull);
+    expect(offlineAccess!.licenseId, licenseId);
+    expect(offlineAccess.planKey, 'trial');
     expect(await service.readLinkedLicense(), isNotNull);
     expect(store.values['homi_platform_signed_license_v1'], contains(licenseId));
   });
