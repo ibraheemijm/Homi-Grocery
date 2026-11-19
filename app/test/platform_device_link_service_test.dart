@@ -48,7 +48,7 @@ const spkiPrefix = <int>[
 
 String _b64url(List<int> bytes) => base64UrlEncode(bytes).replaceAll('=', '');
 String _fingerprint(PlatformDeviceIdentityData identity) {
-  final raw = base64Url.decode(base64Url.normalize(identityData.publicKeyRawBase64Url));
+  final raw = base64Url.decode(base64Url.normalize(identity.publicKeyRawBase64Url));
   return crypto.sha256.convert(raw).toString();
 }
 
@@ -60,7 +60,7 @@ Map<String, Object?> _activationCreated(
   'activation_request_id': requestId,
   'challenge': challenge,
   'challenge_expires_at': DateTime.now().toUtc().add(const Duration(minutes: 5)).toIso8601String(),
-  'key_fingerprint': _fingerprint(identityData),
+  'key_fingerprint': _fingerprint(identity),
   'support_whatsapp': '249900000000',
   'status': 'pending_proof',
 };
