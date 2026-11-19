@@ -478,7 +478,11 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
-    if (apiUnavailableReason != null) return readOfflineGrant();
+    if (apiUnavailableReason != null) {
+      // ملف الترخيص الموقع نفسه يمنح صلاحية Offline محددة المدة؛ لا نشترط وجود
+      // تصريح تجديد منفصل قبل أول تشغيل بعد الاستيراد اليدوي.
+      return await readOfflineGrant() ?? await readLinkedLicense();
+    }
     final license = await readLinkedLicense();
     if (license == null) return null;
 
@@ -543,10 +547,11 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         await _store.write(_offlineGrantKey, '');
         return null;
       }
-      return readOfflineGrant();
+      return await readOfflineGrant() ?? license;
     } on Object {
-      // عند انقطاع الشبكة نستخدم آخر تصريح موقّع محفوظ، ولا نمدد صلاحيته محليًا.
-      return readOfflineGrant();
+      // عند انقطاع الشبكة نستخدم آخر تصريح محفوظ، أو الترخيص الموقع المستورد
+      // بصلاحيته الأصلية؛ لا نمدد أي تاريخ صلاحية محليًا.
+      return await readOfflineGrant() ?? license;
     }
   }
 
