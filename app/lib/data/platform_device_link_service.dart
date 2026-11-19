@@ -131,6 +131,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     required PlatformSecretStore store,
     Map<String, String>? trustedPublicKeys,
     DateTime Function()? clock,
+    this.apiUnavailableReason,
   })  : _api = api,
         _deviceIdentity = deviceIdentity,
         _store = store,
@@ -142,6 +143,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   final PlatformSecretStore _store;
   final Map<String, List<int>> _trustedPublicKeys;
   final DateTime Function() _clock;
+  final String? apiUnavailableReason;
   final Ed25519 _ed25519 = Ed25519();
 
   static const _pendingKey = 'homi_platform_pending_device_link_v1';
@@ -210,6 +212,9 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformActivationRequest> requestActivation() async {
+    if (apiUnavailableReason != null) {
+      throw PlatformApiConfigurationException(apiUnavailableReason!);
+    }
     final identity = await _deviceIdentity.loadOrCreate();
     final response = await _api.postJson(
       '/api/v1/public/activation-requests',
@@ -282,6 +287,9 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformDeviceLinkStatus> completePendingActivation() async {
+    if (apiUnavailableReason != null) {
+      throw PlatformApiConfigurationException(apiUnavailableReason!);
+    }
     final pending = await _readPending();
     if (pending == null) {
       throw const PlatformApiException(
@@ -465,6 +473,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
+    if (apiUnavailableReason != null) return readOfflineGrant();
     final license = await readLinkedLicense();
     if (license == null) return null;
 
