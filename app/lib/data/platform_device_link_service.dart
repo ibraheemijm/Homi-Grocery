@@ -614,7 +614,11 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         claims['entitlement_version'] is! num) {
       throw const FormatException('مطالبات الترخيص الموقّع غير صالحة.');
     }
-    if (claims['license_id'] is String) {
+    if (claims['grant_id'] is String) {
+      if (claims['device_id'] != deviceId) {
+        throw const FormatException('تصريح العمل دون اتصال لا يخص هذا الجهاز.');
+      }
+    } else if (claims['license_id'] is String) {
       final localIdentity = await _deviceIdentity.loadOrCreate();
       final localFingerprint = crypto.sha256
           .convert(localIdentity.publicKeyDer.sublist(12))
@@ -627,8 +631,6 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
           'ملف الترخيص لا يتضمن بصمة مفتاح هذا الجهاز؛ لا يمكن نقله إلى جهاز آخر.',
         );
       }
-    } else if (claims['grant_id'] is String && claims['device_id'] != deviceId) {
-      throw const FormatException('تصريح العمل دون اتصال لا يخص هذا الجهاز.');
     }
     DateTime? parseOptionalDate(String key) {
       final value = claims[key];
