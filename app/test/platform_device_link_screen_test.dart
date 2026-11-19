@@ -32,6 +32,11 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
   }
 
   @override
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
 
   @override
