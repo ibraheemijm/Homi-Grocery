@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/platform_device_link_service.dart';
 
@@ -126,6 +127,11 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
 
   Future<void> _shareRequest() async {
     if (_supportMessage.isEmpty) return;
+    final number = _request?.supportWhatsApp;
+    if (number != null && number.isNotEmpty) {
+      final uri = Uri.https('wa.me', '/$number', {'text': _supportMessage});
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    }
     await Share.share(
       _supportMessage,
       subject: 'طلب تفعيل Homi Grocery',
@@ -226,6 +232,8 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                                 _detail('رقم الطلب', request.requestId),
                                 _detail('المنصة', '${request.platform} · ${request.architecture}'),
                                 _detail('بصمة الجهاز', request.keyFingerprint),
+                                if (request.supportWhatsApp != null)
+                                  _detail('رقم دعم WhatsApp', request.supportWhatsApp!),
                                 _detail('إثبات الملكية', _proofVerified ? 'مكتمل' : 'بانتظار الإكمال'),
                                 const SizedBox(height: 10),
                                 SelectableText(
@@ -243,8 +251,10 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                           ),
                           OutlinedButton.icon(
                             onPressed: _working ? null : _shareRequest,
-                            icon: const Icon(Icons.share),
-                            label: const Text('مشاركة الطلب (اختر WhatsApp)'),
+                            icon: const Icon(Icons.chat),
+                            label: Text(request.supportWhatsApp == null
+                                ? 'مشاركة الطلب (اختر WhatsApp)'
+                                : 'التواصل مع دعم WhatsApp'),
                           ),
                           const SizedBox(height: 8),
                           FilledButton.icon(
