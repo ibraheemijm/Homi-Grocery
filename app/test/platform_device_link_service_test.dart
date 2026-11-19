@@ -180,7 +180,7 @@ void main() {
       'ends_at': endsAt.toIso8601String(),
       'trial_ends_at': endsAt.toIso8601String(),
       'subscription_ends_at': null,
-      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
+      'offline_expires_at': issuedAt.add(const Duration(days: 14)).toIso8601String(),
       'grace_ends_at': null,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
@@ -227,6 +227,71 @@ void main() {
     expect(transport.requests.map((request) => request.uri.path), isNot(contains('/api/v1/license-signing-keys')));
   });
 
+  test('يستورد ملف Homi موقعًا ويربطه بالجهاز دون اتصال بالمنصة', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    final identityData = await identity.loadOrCreate();
+    const licenseId = '123e4567-e89b-42d3-a456-426614174041';
+    const deviceId = '123e4567-e89b-42d3-a456-426614174042';
+    const keyId = 'homi-license-file-test';
+    final keyPair = await Ed25519().newKeyPair();
+    final signingPublicKey = await keyPair.extractPublicKey();
+    final publicDer = <int>[...spkiPrefix, ...signingPublicKey.bytes];
+    final issuedAt = DateTime.now().toUtc();
+    final endsAt = issuedAt.add(const Duration(days: 14));
+    final payload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174043',
+      'user_id': '123e4567-e89b-42d3-a456-426614174044',
+      'product_id': '123e4567-e89b-42d3-a456-426614174045',
+      'origin_trial_id': '123e4567-e89b-42d3-a456-426614174046',
+      'subscription_id': null,
+      'trial_id': '123e4567-e89b-42d3-a456-426614174046',
+      'plan_key': 'trial',
+      'starts_at': issuedAt.toIso8601String(),
+      'ends_at': endsAt.toIso8601String(),
+      'trial_ends_at': endsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': endsAt.toIso8601String(),
+      'grace_ends_at': null,
+      'grace_period_days': 0,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'max_devices': 2,
+      'device_fingerprints': [_fingerprint(identityData)],
+      'entitlement_version': 1,
+      'issued_at': issuedAt.toIso8601String(),
+      'key_id': keyId,
+    }));
+    final signature = await Ed25519().sign(payload, keyPair: keyPair);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: QueueTransport([]),
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {keyId: base64Encode(publicDer)},
+    );
+
+    final imported = await service.importLicenseFile(utf8.encode(jsonEncode({
+      'format': 'HOMI_LICENSE_FILE',
+      'format_version': 1,
+      'status': 'active',
+      'license_id': licenseId,
+      'device_id': deviceId,
+      'key_id': keyId,
+      'payload': base64Encode(payload),
+      'signature': base64Encode(signature.bytes),
+    })));
+
+    expect(imported.licenseId, licenseId);
+    expect(imported.deviceId, deviceId);
+    expect(imported.planKey, 'trial');
+    expect(await service.readLinkedLicense(), isNotNull);
+    expect(store.values['homi_platform_signed_license_v1'], contains(licenseId));
+  });
+
   test('يرفض ملف ترخيص صحيح التوقيع لكنه لا يتضمن بصمة هذا الجهاز', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
@@ -249,7 +314,7 @@ void main() {
       'plan_key': 'trial',
       'starts_at': issuedAt.toIso8601String(),
       'ends_at': issuedAt.add(const Duration(days: 14)).toIso8601String(),
-      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
+      'offline_expires_at': issuedAt.add(const Duration(days: 14)).toIso8601String(),
       'device_fingerprints': [List.filled(64, 'f').join()],
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
@@ -304,7 +369,7 @@ void main() {
     final issuedAt = DateTime.now().toUtc();
     final startsAt = issuedAt.subtract(const Duration(minutes: 1));
     final trialEndsAt = issuedAt.add(const Duration(days: 14));
-    final offlineExpiresAt = issuedAt.add(const Duration(days: 7));
+    final offlineExpiresAt = issuedAt.add(const Duration(days: 14));
     final licensePayload = utf8.encode(jsonEncode({
       'schema_version': 1,
       'license_id': licenseId,
