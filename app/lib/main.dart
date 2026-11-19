@@ -26,6 +26,7 @@ import 'screens/stock_movements_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/suppliers_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/platform_device_link_screen.dart';
 import 'screens/backup_screen.dart';
 
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
@@ -140,9 +141,11 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
           platformDeviceLinkService: _platformDeviceLinkService,
-          readOnlyBuilder: (user, onLogout) => ReadOnlyWorkspaceScreen(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => ReadOnlyWorkspaceScreen(
             user: user,
             onLogout: onLogout,
+            platformDeviceLinkService: _platformDeviceLinkService,
+            onLicenseImported: onLicenseImported,
           ),
           onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
               ? null
@@ -219,11 +222,15 @@ class ReadOnlyWorkspaceScreen extends StatelessWidget {
   const ReadOnlyWorkspaceScreen({
     required this.user,
     required this.onLogout,
+    required this.platformDeviceLinkService,
+    required this.onLicenseImported,
     super.key,
   });
 
   final AuthUser user;
   final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations platformDeviceLinkService;
+  final VoidCallback onLicenseImported;
 
   @override
   Widget build(BuildContext context) {
@@ -245,6 +252,23 @@ class ReadOnlyWorkspaceScreen extends StatelessWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'استيراد ملف الترخيص أو تجديده',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (routeContext) => PlatformDeviceLinkScreen(
+                        service: platformDeviceLinkService,
+                        onLinked: () {
+                          Navigator.of(routeContext).pop();
+                          onLicenseImported();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.file_open_outlined),
+              ),
               IconButton(
                 tooltip: 'تسجيل الخروج',
                 onPressed: onLogout,
