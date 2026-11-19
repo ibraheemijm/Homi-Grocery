@@ -53,7 +53,7 @@ void main() {
       'android',
       'universal',
       base64UrlEncode(List<int>.generate(32, (index) => index)).replaceAll('=', ''),
-    ].join('\\n');
+    ].join('\n');
 
     final signatureText = await identity.signMessage(message);
     final signature = base64Url.decode(base64Url.normalize(signatureText));
