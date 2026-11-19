@@ -254,6 +254,112 @@ void main() {
     expect(find.text('فتح الوردية'), findsNothing);
   });
 
+  testWidgets('يبقي الاشتراك المدفوع في القراءة فقط خلال مهلة السماح', (tester) async {
+    final now = DateTime.now().toUtc();
+    final endsAt = now.subtract(const Duration(days: 1));
+    final graceEndsAt = now.add(const Duration(days: 6));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174034',
+        deviceId: '123e4567-e89b-42d3-a456-426614174035',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 31)),
+        endsAt: endsAt,
+        trialEndsAt: null,
+        subscriptionEndsAt: endsAt,
+        offlineExpiresAt: graceEndsAt,
+        graceEndsAt: graceEndsAt,
+        accessPolicy: 'full_until_subscription_end_then_read_export_until_grace_end',
+        planKey: 'monthly',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('انتهت مهلة الترخيص'), findsNothing);
+    expect(find.text('operational workspace'), findsNothing);
+  });
+
+  testWidgets('يمنع استخدام التطبيق بعد انتهاء مهلة الاشتراك المدفوع', (tester) async {
+    final now = DateTime.now().toUtc();
+    final endsAt = now.subtract(const Duration(days: 8));
+    final graceEndsAt = now.subtract(const Duration(minutes: 1));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174036',
+        deviceId: '123e4567-e89b-42d3-a456-426614174037',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 38)),
+        endsAt: endsAt,
+        trialEndsAt: null,
+        subscriptionEndsAt: endsAt,
+        offlineExpiresAt: graceEndsAt,
+        graceEndsAt: graceEndsAt,
+        accessPolicy: 'full_until_subscription_end_then_read_export_until_grace_end',
+        planKey: 'monthly',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('انتهت مهلة الترخيص'), findsOneWidget);
+    expect(find.text('read-only store_admin'), findsNothing);
+    expect(find.text('operational workspace'), findsNothing);
+  });
+
   testWidgets('لا يسمح للكاشير ببدء ربط الجهاز بدل المدير', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
