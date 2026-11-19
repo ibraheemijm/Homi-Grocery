@@ -3,9 +3,9 @@ name: Flutter Windows checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/windows-ota-foundation, feature/device-link-onboarding]
+    branches: [feature/windows-ota-foundation, feature/device-link-onboarding, feature/manual-activation-no-account]
   pull_request:
-    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding]
 
 concurrency:
   group: flutter-windows-${{ github.workflow }}-${{ github.ref }}

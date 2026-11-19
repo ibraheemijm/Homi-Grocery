@@ -26,6 +26,7 @@ import 'screens/stock_movements_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/suppliers_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/platform_device_link_screen.dart';
 import 'screens/backup_screen.dart';
 
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
@@ -74,15 +75,29 @@ const Color brandMint = Color(0xFFDCE9DF);
 
 PlatformDeviceLinkOperations _createPlatformDeviceLinkService() {
   final store = FlutterPlatformSecretStore();
+  final identity = PlatformDeviceIdentity(store);
   try {
+    final api = PlatformApiClient.fromEnvironment();
     return PlatformDeviceLinkService(
-      api: PlatformApiClient.fromEnvironment(),
-      deviceIdentity: PlatformDeviceIdentity(store),
+      api: api,
+      deviceIdentity: identity,
       store: store,
     );
   } on PlatformApiConfigurationException catch (error) {
-    // يفشل الربط بأمان إذا لم يُضبط عنوان المنصة في بناء التطبيق.
-    return UnavailablePlatformDeviceLinkService(error.message);
+    // يظل استيراد ملف الترخيص المحلي متاحًا حتى دون إعداد عنوان API.
+    // لا تستخدم هذه الوجهة لأي طلب شبكة؛ يمنعها apiUnavailableReason داخل الخدمة.
+    try {
+      return PlatformDeviceLinkService(
+        api: PlatformApiClient(baseUri: Uri.parse('https://offline.invalid')),
+        deviceIdentity: identity,
+        store: store,
+        apiUnavailableReason: error.message,
+      );
+    } on FormatException catch (trustError) {
+      return UnavailablePlatformDeviceLinkService(
+        'إعداد مفاتيح الثقة للترخيص غير صالح: ${trustError.message}',
+      );
+    }
   } on FormatException catch (error) {
     // لا نسمح لإعداد مفتاح ثقة تالف بإسقاط التطبيق عند بدء التشغيل.
     return UnavailablePlatformDeviceLinkService(
@@ -126,9 +141,11 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
           platformDeviceLinkService: _platformDeviceLinkService,
-          readOnlyBuilder: (user, onLogout) => ReadOnlyWorkspaceScreen(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => ReadOnlyWorkspaceScreen(
             user: user,
             onLogout: onLogout,
+            platformDeviceLinkService: _platformDeviceLinkService,
+            onLicenseImported: onLicenseImported,
           ),
           onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
               ? null
@@ -145,6 +162,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
                   user: user,
                   shiftId: shiftId,
                   onLogout: onLogout,
+                  platformDeviceLinkService: _platformDeviceLinkService,
                 )
               : CashierWorkspaceScreen(
                   cashier: user,
@@ -204,11 +222,15 @@ class ReadOnlyWorkspaceScreen extends StatelessWidget {
   const ReadOnlyWorkspaceScreen({
     required this.user,
     required this.onLogout,
+    required this.platformDeviceLinkService,
+    required this.onLicenseImported,
     super.key,
   });
 
   final AuthUser user;
   final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations platformDeviceLinkService;
+  final VoidCallback onLicenseImported;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +252,23 @@ class ReadOnlyWorkspaceScreen extends StatelessWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'استيراد ملف الترخيص أو تجديده',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (routeContext) => PlatformDeviceLinkScreen(
+                        service: platformDeviceLinkService,
+                        onLinked: () {
+                          Navigator.of(routeContext).pop();
+                          onLicenseImported();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.file_open_outlined),
+              ),
               IconButton(
                 tooltip: 'تسجيل الخروج',
                 onPressed: onLogout,
@@ -265,6 +304,7 @@ class DashboardScreen extends StatefulWidget {
     required this.user,
     required this.shiftId,
     required this.onLogout,
+    this.platformDeviceLinkService,
     this.reportsScreenBuilder,
     this.backupScreenBuilder,
     super.key,
@@ -275,6 +315,7 @@ class DashboardScreen extends StatefulWidget {
   final AuthUser user;
   final int shiftId;
   final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
   // تسمح ببناء شاشات بديلة في اختبارات التنقل دون تشغيل قواعد بياناتها.
   final Widget Function(int userId)? reportsScreenBuilder;
   final Widget Function(int managerUserId)? backupScreenBuilder;
@@ -501,7 +542,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             : _selectedIndex == 7
                                                 ? (widget.reportsScreenBuilder?.call(widget.user.id) ?? ReportsScreen(userId: widget.user.id))
                                                 : _selectedIndex == 8
-                                                    ? SettingsScreen(canManageSystemSettings: widget.user.isManager)
+                                                    ? SettingsScreen(
+                                                        canManageSystemSettings: widget.user.isManager,
+                                                        platformDeviceLinkService: widget.platformDeviceLinkService,
+                                                      )
                                                     : _selectedIndex == 9
                                         ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
