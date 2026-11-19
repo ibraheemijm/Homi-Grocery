@@ -82,6 +82,7 @@ abstract interface class PlatformDeviceLinkOperations {
   Future<PlatformActivationRequest> requestActivation();
   Future<PlatformActivationRequest?> readPendingActivationRequest();
   Future<PlatformDeviceLinkStatus> completePendingActivation();
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes);
   Future<PlatformLinkedLicense?> readLinkedLicense();
   Future<PlatformLinkedLicense?> refreshOfflineGrant();
   Future<PlatformLinkedLicense?> readOfflineGrant();
@@ -103,6 +104,11 @@ class UnavailablePlatformDeviceLinkService
 
   @override
   Future<PlatformDeviceLinkStatus> completePendingActivation() async {
+    throw PlatformApiConfigurationException(reason);
+  }
+
+  @override
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes) async {
     throw PlatformApiConfigurationException(reason);
   }
 
@@ -369,6 +375,63 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }));
     await clearPendingLink();
     return PlatformDeviceLinkStatus.linked;
+  }
+
+  /// يستورد ملف ترخيص Homi المرسل من الإدارة، ويتحقق من التوقيع وربط الجهاز محليًا.
+  @override
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes) async {
+    if (fileBytes.isEmpty || fileBytes.length > 128 * 1024) {
+      throw const FormatException('حجم ملف الترخيص غير صالح.');
+    }
+
+    late final Map<String, dynamic> envelope;
+    try {
+      final decoded = jsonDecode(utf8.decode(fileBytes));
+      if (decoded is! Map<String, dynamic>) throw const FormatException();
+      envelope = decoded;
+    } on Object {
+      throw const FormatException('ملف الترخيص ليس ملف Homi صالحًا.');
+    }
+
+    final licenseId = envelope['license_id'];
+    final deviceId = envelope['device_id'];
+    final keyId = envelope['key_id'];
+    final payloadText = envelope['payload'];
+    final signatureText = envelope['signature'];
+    if (envelope['format'] != 'HOMI_LICENSE_FILE' ||
+        envelope['format_version'] != 1 ||
+        envelope['status'] != 'active' ||
+        licenseId is! String || !_isUuid(licenseId) ||
+        deviceId is! String || !_isUuid(deviceId) ||
+        keyId is! String ||
+        !RegExp(r'^[A-Za-z0-9._-]{1,64}$').hasMatch(keyId) ||
+        payloadText is! String || signatureText is! String) {
+      throw const FormatException('بنية ملف الترخيص أو بياناته غير صالحة.');
+    }
+
+    final verified = await _verifyLicenseMaterial(
+      licenseId: licenseId,
+      deviceId: deviceId,
+      keyId: keyId,
+      payload: _decodeCanonicalBase64(payloadText),
+      signature: _decodeCanonicalBase64(signatureText),
+    );
+
+    // لا نغيّر الترخيص الحالي أو طلب التفعيل إلا بعد نجاح جميع عمليات التحقق.
+    await _store.write(_licenseKey, jsonEncode({
+      'license_id': verified.licenseId,
+      'device_id': verified.deviceId,
+      'key_id': verified.keyId,
+      'starts_at': verified.startsAt.toUtc().toIso8601String(),
+      'ends_at': verified.endsAt?.toUtc().toIso8601String(),
+      'plan_key': verified.planKey,
+      'entitlement_version': verified.entitlementVersion,
+      'payload': base64Encode(verified.signedPayload),
+      'signature': base64Encode(verified.signature),
+    }));
+    await _store.write(_offlineGrantKey, '');
+    await clearPendingLink();
+    return verified;
   }
 
   @override
