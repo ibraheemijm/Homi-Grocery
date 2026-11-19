@@ -10,11 +10,17 @@ import '../data/grocery_database.dart';
 import '../data/app_data_location.dart';
 import '../data/font_preferences.dart';
 import '../data/android_diagnostic_log.dart';
+import '../data/platform_device_link_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.canManageSystemSettings = false});
+  const SettingsScreen({
+    super.key,
+    this.canManageSystemSettings = false,
+    this.platformDeviceLinkService,
+  });
 
   final bool canManageSystemSettings;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -31,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _salesViewMode = 'grid';
   String _pdfFilenameLanguage = 'both';
   bool _importingFont = false;
+  bool _importingLicense = false;
   bool _occasionEnabled = false;
   DateTime _systemStartDate = DateTime(DateTime.now().year, 1, 1);
   DateTime _savedSystemStartDate = DateTime(DateTime.now().year, 1, 1);
@@ -117,6 +124,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _message = 'تعذر تحميل الإعدادات: $error';
         });
       }
+    }
+  }
+
+  Future<void> _importLicenseFile() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null || _importingLicense) return;
+    setState(() => _importingLicense = true);
+    try {
+      final selection = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['hlic'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (selection == null) return;
+      final bytes = selection.files.single.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw const FormatException('تعذر قراءة محتوى ملف الترخيص المحدد.');
+      }
+      final license = await service.importLicenseFile(bytes);
+      if (!mounted) return;
+      final expiry = license.endsAt == null
+          ? 'دائم'
+          : 'حتى ${license.endsAt!.toLocal().toString().split(' ').first}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم استيراد الترخيص والتحقق منه بنجاح — ${license.planKey}، ${expiry}.'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر استيراد ملف الترخيص: $error'),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _importingLicense = false);
     }
   }
 
@@ -432,6 +479,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  if (widget.canManageSystemSettings &&
+                      widget.platformDeviceLinkService != null) ...[
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'ترخيص Homi Grocery',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'استورد ملف الترخيص الذي أرسلته إدارة Homi. يتحقق التطبيق من توقيعه وبصمة هذا الجهاز قبل استبدال الترخيص الحالي.',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _importingLicense ? null : _importLicenseFile,
+                              icon: _importingLicense
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.file_open_outlined),
+                              label: Text(
+                                _importingLicense
+                                    ? 'جارٍ التحقق من ملف الترخيص…'
+                                    : 'استيراد ملف الترخيص (.hlic)',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(18),
