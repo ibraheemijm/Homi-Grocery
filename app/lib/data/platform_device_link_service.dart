@@ -487,30 +487,42 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     if (stored == null || stored.isEmpty) return null;
     final decoded = jsonDecode(stored);
     if (decoded is! Map<String, dynamic>) {
-      throw StateError('سجل طلب ربط الجهاز تالف.');
+      throw StateError('سجل طلب تفعيل الجهاز تالف.');
     }
-    final email = decoded['email'];
-    final challengeId = decoded['challenge_id'];
-    final nonce = decoded['nonce'];
-    final expiresAt = decoded['expires_at'];
+    final requestId = decoded['request_id'];
+    final challenge = decoded['challenge'];
+    final expiresAt = decoded['challenge_expires_at'];
     final deviceKey = decoded['device_key'];
-    if (email is! String ||
-        challengeId is! String ||
-        nonce is! String ||
+    final platform = decoded['platform'];
+    final architecture = decoded['architecture'];
+    final fingerprint = decoded['key_fingerprint'];
+    final proofCompleted = decoded['proof_completed'];
+    if (requestId is! String ||
+        challenge is! String ||
         expiresAt is! String ||
         deviceKey is! String ||
-        !_isUuid(challengeId) ||
+        platform is! String ||
+        architecture is! String ||
+        fingerprint is! String ||
+        proofCompleted is! bool ||
+        !_isUuid(requestId) ||
         !_isUuid(deviceKey) ||
-        !_isValidNonce(nonce) ||
+        !_isValidNonce(challenge) ||
+        !RegExp(r'^[a-z0-9][a-z0-9._-]{1,31}$').hasMatch(platform) ||
+        !RegExp(r'^[a-z0-9][a-z0-9._-]{1,31}$').hasMatch(architecture) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(fingerprint) ||
         DateTime.tryParse(expiresAt) == null) {
-      throw StateError('حقول طلب ربط الجهاز المحفوظ غير صالحة.');
+      throw StateError('حقول طلب تفعيل الجهاز المحفوظ غير صالحة.');
     }
     return {
-      'email': email,
-      'challenge_id': challengeId,
-      'nonce': nonce,
-      'expires_at': expiresAt,
+      'request_id': requestId,
+      'challenge': challenge,
+      'challenge_expires_at': expiresAt,
       'device_key': deviceKey,
+      'platform': platform,
+      'architecture': architecture,
+      'key_fingerprint': fingerprint,
+      'proof_completed': proofCompleted.toString(),
     };
   }
 
@@ -588,6 +600,18 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         claims['plan_key'] is! String ||
         claims['entitlement_version'] is! num) {
       throw const FormatException('مطالبات الترخيص الموقّع غير صالحة.');
+    }
+    final localIdentity = await _deviceIdentity.loadOrCreate();
+    final localFingerprint = crypto.sha256
+        .convert(localIdentity.publicKeyDer.sublist(12))
+        .toString();
+    final deviceFingerprints = claims['device_fingerprints'];
+    if (deviceFingerprints is! List ||
+        deviceFingerprints.any((value) => value is! String) ||
+        !deviceFingerprints.contains(localFingerprint)) {
+      throw const FormatException(
+        'ملف الترخيص لا يتضمن بصمة مفتاح هذا الجهاز؛ لا يمكن نقله إلى جهاز آخر.',
+      );
     }
     DateTime? parseOptionalDate(String key) {
       final value = claims[key];
