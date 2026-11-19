@@ -318,7 +318,9 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         body: {'challenge': challenge, 'signature': signature},
       );
       pending['proof_completed'] = 'true';
-      await _store.write(_pendingKey, jsonEncode(pending));
+      final updatedPending = Map<String, Object?>.from(pending)
+        ..['proof_completed'] = true;
+      await _store.write(_pendingKey, jsonEncode(updatedPending));
     }
 
     final requestId = pending['request_id']!;
