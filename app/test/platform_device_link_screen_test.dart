@@ -5,16 +5,28 @@ import 'package:homi_grocery/screens/platform_device_link_screen.dart';
 
 class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
   final List<PlatformDeviceLinkStatus> statuses = [];
-  String? requestedEmail;
+  var requestCalls = 0;
   var completeCalls = 0;
+  PlatformActivationRequest? pending;
 
   @override
-  Future<void> requestLink(String email) async {
-    requestedEmail = email;
+  Future<PlatformActivationRequest> requestActivation() async {
+    requestCalls++;
+    pending = PlatformActivationRequest(
+      requestId: '123e4567-e89b-42d3-a456-426614174000',
+      keyFingerprint: 'a' * 64,
+      platform: 'android',
+      architecture: 'arm64-v8a',
+      challengeExpiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+    return pending!;
   }
 
   @override
-  Future<PlatformDeviceLinkStatus> completePendingLink() async {
+  Future<PlatformActivationRequest?> readPendingActivationRequest() async => pending;
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingActivation() async {
     completeCalls++;
     return statuses.removeAt(0);
   }
@@ -30,27 +42,30 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
 }
 
 void main() {
-  testWidgets('يطلب البريد فقط ولا يعرض حقل كلمة مرور منصة Homi', (tester) async {
+  testWidgets('لا يطلب بريدًا أو كلمة مرور وينشئ طلب تفعيل مرتبطًا بالجهاز', (tester) async {
     final service = FakeDeviceLinkOperations();
     await tester.pumpWidget(MaterialApp(
       home: PlatformDeviceLinkScreen(service: service),
     ));
 
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.textContaining('بريد إلكتروني'), findsOneWidget);
     expect(find.text('كلمة المرور'), findsNothing);
-    await tester.enterText(find.byType(TextField), ' customer@example.test ');
-    await tester.tap(find.text('إرسال رابط التأكيد'));
+    await tester.tap(find.text('إنشاء طلب تفعيل'));
     await tester.pumpAndSettle();
 
-    expect(service.requestedEmail, 'customer@example.test');
-    expect(find.textContaining('إذا كان البريد مسجلًا ومؤكدًا'), findsOneWidget);
-    expect(find.text('أكدت البريد، أكمل الربط'), findsOneWidget);
+    expect(service.requestCalls, 1);
+    expect(find.textContaining('رقم الطلب'), findsOneWidget);
+    expect(find.textContaining('بصمة الجهاز'), findsOneWidget);
+    expect(find.text('نسخ بيانات طلب التفعيل'), findsOneWidget);
+    expect(find.text('مشاركة الطلب (اختر WhatsApp)'), findsOneWidget);
+    expect(find.text('إثبات ملكية الجهاز والتحقق'), findsOneWidget);
   });
 
-  testWidgets('يعرض حالات انتظار البريد وتجهيز الترخيص ثم نجاح الربط', (tester) async {
+  testWidgets('يعرض انتظار الإدارة ثم تجهيز الترخيص ونجاح التفعيل', (tester) async {
     final service = FakeDeviceLinkOperations()
       ..statuses.addAll([
-        PlatformDeviceLinkStatus.waitingForEmail,
+        PlatformDeviceLinkStatus.waitingForAdmin,
         PlatformDeviceLinkStatus.licensePending,
         PlatformDeviceLinkStatus.linked,
       ]);
@@ -62,35 +77,20 @@ void main() {
       ),
     ));
 
-    await tester.enterText(find.byType(TextField), 'customer@example.test');
-    await tester.tap(find.text('إرسال رابط التأكيد'));
+    await tester.tap(find.text('إنشاء طلب تفعيل'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('أكدت البريد، أكمل الربط'));
+    await tester.tap(find.text('إثبات ملكية الجهاز والتحقق'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('لم يتم تأكيد البريد بعد'), findsOneWidget);
+    expect(find.textContaining('تم إثبات امتلاك الجهاز بنجاح'), findsOneWidget);
 
-    await tester.tap(find.text('أكدت البريد، أكمل الربط'));
+    await tester.tap(find.text('التحقق من حالة التفعيل'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('يجري تجهيز الترخيص الموقّع'), findsOneWidget);
+    expect(find.textContaining('يجري تجهيز ملف الترخيص الموقّع'), findsOneWidget);
 
-    await tester.tap(find.text('أكدت البريد، أكمل الربط'));
+    await tester.tap(find.text('التحقق من حالة التفعيل'));
     await tester.pumpAndSettle();
     expect(linked, isTrue);
-    expect(find.textContaining('أصبح ترخيص Homi جاهزًا'), findsOneWidget);
-    expect(find.text('أكدت البريد، أكمل الربط'), findsNothing);
-  });
-
-  testWidgets('يرفض الإرسال دون بريد إلكتروني', (tester) async {
-    final service = FakeDeviceLinkOperations();
-    await tester.pumpWidget(MaterialApp(
-      home: PlatformDeviceLinkScreen(service: service),
-    ));
-
-    await tester.tap(find.text('إرسال رابط التأكيد'));
-    await tester.pumpAndSettle();
-
-    expect(service.requestedEmail, isNull);
-    expect(find.text('أدخل البريد الإلكتروني المرتبط بحساب Homi.'), findsOneWidget);
+    expect(find.textContaining('اكتمل التفعيل'), findsOneWidget);
   });
 }
