@@ -42,6 +42,35 @@ void main() {
     expect(store.values.values, isNot(contains(first.publicKeyBase64)));
   });
 
+  test('يوفر المفتاح العام الخام ويوقع رسالة إثبات الملكية كاملة', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, isAndroid: () => true);
+    final data = await identity.loadOrCreate();
+    final message = [
+      'HOMI_DEVICE_PROOF_V1',
+      '123e4567-e89b-42d3-a456-426614174000',
+      'homi-grocery',
+      'android',
+      'universal',
+      base64UrlEncode(List<int>.generate(32, (index) => index)).replaceAll('=', ''),
+    ].join('\\n');
+
+    final signatureText = await identity.signMessage(message);
+    final signature = base64Url.decode(base64Url.normalize(signatureText));
+    final publicKey = SimplePublicKey(
+      data.publicKeyDer.sublist(12),
+      type: KeyPairType.ed25519,
+    );
+    expect(base64Url.decode(base64Url.normalize(identity.publicKeyRawBase64Url)), hasLength(32));
+    expect(
+      await Ed25519().verify(
+        utf8.encode(message),
+        signature: Signature(signature, publicKey: publicKey),
+      ),
+      isTrue,
+    );
+  });
+
   test('يرفض سجل هوية تالفًا بدل إنشاء مفتاح جديد لنفس الجهاز', () async {
     final store = MemorySecretStore();
     store.values['homi_platform_device_identity_v1'] = '{"device_key":"bad","private_seed":"broken"}';
