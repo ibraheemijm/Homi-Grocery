@@ -150,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : 'حتى ${license.endsAt!.toLocal().toString().split(' ').first}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم استيراد الترخيص والتحقق منه بنجاح — ${license.planKey}، ${expiry}.'),
+          content: Text('تم استيراد الترخيص والتحقق منه بنجاح — ${license.planKey}، $expiry.'),
           duration: const Duration(seconds: 5),
         ),
       );
