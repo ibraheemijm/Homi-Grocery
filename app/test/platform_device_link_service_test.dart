@@ -181,7 +181,7 @@ void main() {
       'ends_at': endsAt.toIso8601String(),
       'trial_ends_at': endsAt.toIso8601String(),
       'subscription_ends_at': null,
-      'offline_expires_at': issuedAt.add(const Duration(days: 14)).toIso8601String(),
+      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
       'grace_ends_at': null,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
@@ -255,7 +255,7 @@ void main() {
       'ends_at': endsAt.toIso8601String(),
       'trial_ends_at': endsAt.toIso8601String(),
       'subscription_ends_at': null,
-      'offline_expires_at': endsAt.toIso8601String(),
+      'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
       'grace_ends_at': null,
       'grace_period_days': 0,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
@@ -377,7 +377,7 @@ void main() {
     final issuedAt = DateTime.now().toUtc();
     final startsAt = issuedAt.subtract(const Duration(minutes: 1));
     final trialEndsAt = issuedAt.add(const Duration(days: 14));
-    final offlineExpiresAt = issuedAt.add(const Duration(days: 14));
+    final offlineExpiresAt = issuedAt.add(const Duration(days: 7));
     final licensePayload = utf8.encode(jsonEncode({
       'schema_version': 1,
       'license_id': licenseId,
