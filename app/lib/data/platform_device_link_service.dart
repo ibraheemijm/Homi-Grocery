@@ -37,7 +37,7 @@ class PlatformActivationRequest {
     'المعمارية: $architecture',
     'بصمة الجهاز: $keyFingerprint',
     'إثبات الملكية: ${proofVerified ? "مكتمل" : "بانتظار الإكمال"}',
-  ].join('\\n');
+  ].join('\n');
 }
 
 class PlatformLinkedLicense {
@@ -299,7 +299,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         identity.platform,
         identity.architecture,
         challenge,
-      ].join('\\n');
+      ].join('\n');
       final signature = await _deviceIdentity.signMessage(proofMessage);
       await _api.postJson(
         '/api/v1/public/activation-requests/$requestId/proof',
