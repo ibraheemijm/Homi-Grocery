@@ -601,17 +601,21 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
         claims['entitlement_version'] is! num) {
       throw const FormatException('مطالبات الترخيص الموقّع غير صالحة.');
     }
-    final localIdentity = await _deviceIdentity.loadOrCreate();
-    final localFingerprint = crypto.sha256
-        .convert(localIdentity.publicKeyDer.sublist(12))
-        .toString();
-    final deviceFingerprints = claims['device_fingerprints'];
-    if (deviceFingerprints is! List ||
-        deviceFingerprints.any((value) => value is! String) ||
-        !deviceFingerprints.contains(localFingerprint)) {
-      throw const FormatException(
-        'ملف الترخيص لا يتضمن بصمة مفتاح هذا الجهاز؛ لا يمكن نقله إلى جهاز آخر.',
-      );
+    if (claims['license_id'] is String) {
+      final localIdentity = await _deviceIdentity.loadOrCreate();
+      final localFingerprint = crypto.sha256
+          .convert(localIdentity.publicKeyDer.sublist(12))
+          .toString();
+      final deviceFingerprints = claims['device_fingerprints'];
+      if (deviceFingerprints is! List ||
+          deviceFingerprints.any((value) => value is! String) ||
+          !deviceFingerprints.contains(localFingerprint)) {
+        throw const FormatException(
+          'ملف الترخيص لا يتضمن بصمة مفتاح هذا الجهاز؛ لا يمكن نقله إلى جهاز آخر.',
+        );
+      }
+    } else if (claims['grant_id'] is String && claims['device_id'] != deviceId) {
+      throw const FormatException('تصريح العمل دون اتصال لا يخص هذا الجهاز.');
     }
     DateTime? parseOptionalDate(String key) {
       final value = claims[key];
