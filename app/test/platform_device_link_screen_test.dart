@@ -14,7 +14,7 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
     requestCalls++;
     pending = PlatformActivationRequest(
       requestId: '123e4567-e89b-42d3-a456-426614174000',
-      keyFingerprint: 'a' * 64,
+      keyFingerprint: List.filled(64, 'a').join(),
       platform: 'android',
       architecture: 'arm64-v8a',
       challengeExpiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
