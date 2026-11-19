@@ -107,7 +107,18 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
           break;
       }
     } catch (error) {
-      if (mounted) setState(() => _message = _friendlyError(error));
+      if (mounted) {
+        final message = error.toString();
+        setState(() {
+          if (message.contains('ACTIVATION_REQUEST_REJECTED') ||
+              message.contains('ACTIVATION_REQUEST_CANCELLED') ||
+              message.contains('ACTIVATION_REQUEST_EXPIRED')) {
+            _request = null;
+            _proofVerified = false;
+          }
+          _message = _friendlyError(error);
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
