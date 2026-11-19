@@ -42,6 +42,10 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
       PlatformDeviceLinkStatus.linked;
 
   @override
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes) async =>
+      throw UnimplementedError();
+
+  @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
 
   @override
