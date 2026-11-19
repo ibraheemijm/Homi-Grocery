@@ -281,8 +281,6 @@ void main() {
     );
     expect(store.values['homi_platform_signed_license_v1'], isNull);
   });
-}
-
 
   test('يجدد تصريح العمل دون اتصال عبر إثبات مفتاح الجهاز دون حساب عميل', () async {
     final store = MemorySecretStore();
@@ -393,3 +391,4 @@ void main() {
     expect(transport.requests[4].headers.containsKey('authorization'), isFalse);
     expect(await service.readOfflineGrant(), isNotNull);
   });
+}
