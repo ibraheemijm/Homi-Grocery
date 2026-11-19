@@ -211,7 +211,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         ),
                         const SizedBox(height: 18),
                         FilledButton.icon(
-                          onPressed: _working || _completed ? null : _requestActivation,
+                          onPressed: _working || _completed || _proofVerified ? null : _requestActivation,
                           icon: const Icon(Icons.add_link),
                           label: Text(request == null ? 'إنشاء طلب تفعيل' : 'تجديد تحدي إثبات الجهاز'),
                         ),
