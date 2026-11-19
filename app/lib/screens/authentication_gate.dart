@@ -145,7 +145,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         return;
       }
       final now = DateTime.now().toUtc();
-      // بعد سبعة أيام دون اتصال بالتجربة، أو عند انتهاء الاشتراك المدفوع،
+      // بعد انتهاء تصريح العمل دون اتصال الموقّع للتجربة، أو عند انتهاء الاشتراك المدفوع،
       // لا تُفتح عمليات البيع والتحرير وتبقى مساحة القراءة والتصدير متاحة.
       // بعد نهاية مهلة الاشتراك المدفوع لا يُسمح حتى بوضع القراءة فقط.
       final isPaidPlan = accessGrant.planKey == 'monthly' ||
