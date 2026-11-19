@@ -56,7 +56,7 @@ void main() {
 
     expect(service.requestCalls, 1);
     expect(find.text('رقم الطلب'), findsOneWidget);
-    expect(find.textContaining('بصمة الجهاز'), findsOneWidget);
+    expect(find.text('بصمة الجهاز'), findsOneWidget);
     expect(find.text('نسخ بيانات طلب التفعيل'), findsOneWidget);
     expect(find.text('مشاركة الطلب (اختر WhatsApp)'), findsOneWidget);
     expect(find.text('إثبات ملكية الجهاز والتحقق'), findsOneWidget);
