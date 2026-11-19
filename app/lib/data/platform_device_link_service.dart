@@ -329,10 +329,19 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }
     if (requestStatus == 'rejected' || requestStatus == 'cancelled' ||
         requestStatus == 'expired') {
+      await clearPendingLink();
       throw PlatformApiException(
         statusCode: 409,
         code: 'ACTIVATION_REQUEST_${requestStatus.toString().toUpperCase()}',
         message: 'طلب التفعيل ${requestStatus == 'rejected' ? 'مرفوض' : 'غير صالح'}؛ راجع إدارة Homi.',
+      );
+    }
+    if (status['license_status'] == 'revoked' ||
+        status['license_status'] == 'suspended') {
+      throw const PlatformApiException(
+        statusCode: 403,
+        code: 'LICENSE_NOT_ACTIVE',
+        message: 'الترخيص موقوف أو ملغى. تواصل مع إدارة Homi.',
       );
     }
     if (requestStatus != 'approved' || status['license'] is! Map) {
