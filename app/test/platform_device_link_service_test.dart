@@ -61,6 +61,7 @@ Map<String, Object?> _activationCreated(
   'challenge': challenge,
   'challenge_expires_at': DateTime.now().toUtc().add(const Duration(minutes: 5)).toIso8601String(),
   'key_fingerprint': _fingerprint(identity),
+  'support_whatsapp': '249900000000',
   'status': 'pending_proof',
 };
 
@@ -95,6 +96,7 @@ void main() {
     expect(request.headers.containsKey('authorization'), isFalse);
     expect(activation.requestId, requestId);
     expect(activation.keyFingerprint, _fingerprint(identity));
+    expect(activation.supportWhatsApp, '249900000000');
     expect(store.values['homi_platform_pending_device_link_v1'], contains('request_id'));
   });
 
@@ -142,7 +144,9 @@ void main() {
       isTrue,
     );
     expect(transport.requests[2].uri.path, '/api/v1/public/activation-requests/$requestId/status');
-    expect((await service.readPendingActivationRequest())!.proofVerified, isTrue);
+    final pending = await service.readPendingActivationRequest();
+    expect(pending!.proofVerified, isTrue);
+    expect(pending.supportWhatsApp, '249900000000');
   });
 
   test('يحفظ الترخيص الموقع فقط بعد تطابق بصمة مفتاح الجهاز', () async {
