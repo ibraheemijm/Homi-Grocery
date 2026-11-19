@@ -282,3 +282,114 @@ void main() {
     expect(store.values['homi_platform_signed_license_v1'], isNull);
   });
 }
+
+
+  test('يجدد تصريح العمل دون اتصال عبر إثبات مفتاح الجهاز دون حساب عميل', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    const requestId = '123e4567-e89b-42d3-a456-426614174030';
+    const licenseId = '123e4567-e89b-42d3-a456-426614174031';
+    const deviceId = '123e4567-e89b-42d3-a456-426614174032';
+    const keyId = 'homi-license-offline-key';
+    const grantId = '123e4567-e89b-42d3-a456-426614174033';
+    const challengeId = '123e4567-e89b-42d3-a456-426614174034';
+    final activationChallenge = _b64url(List<int>.generate(32, (i) => i + 3));
+    final offlineNonce = _b64url(List<int>.generate(32, (i) => 63 - i));
+    final keyPair = await Ed25519().newKeyPair();
+    final signingPublicKey = await keyPair.extractPublicKey();
+    final signingPublicDer = <int>[...spkiPrefix, ...signingPublicKey.bytes];
+    final issuedAt = DateTime.now().toUtc();
+    final startsAt = issuedAt.subtract(const Duration(minutes: 1));
+    final trialEndsAt = issuedAt.add(const Duration(days: 14));
+    final offlineExpiresAt = issuedAt.add(const Duration(days: 7));
+    final licensePayload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174035',
+      'user_id': '123e4567-e89b-42d3-a456-426614174036',
+      'product_id': '123e4567-e89b-42d3-a456-426614174037',
+      'origin_trial_id': '123e4567-e89b-42d3-a456-426614174038',
+      'subscription_id': null,
+      'trial_id': '123e4567-e89b-42d3-a456-426614174038',
+      'plan_key': 'trial',
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': trialEndsAt.toIso8601String(),
+      'trial_ends_at': trialEndsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': offlineExpiresAt.toIso8601String(),
+      'grace_ends_at': null,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'max_devices': 2,
+      'device_fingerprints': [_fingerprint(identity)],
+      'entitlement_version': 1,
+      'issued_at': issuedAt.toIso8601String(),
+      'key_id': keyId,
+    }));
+    final licenseSignature = await Ed25519().sign(licensePayload, keyPair: keyPair);
+    final grantPayload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'grant_id': grantId,
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174035',
+      'user_id': '123e4567-e89b-42d3-a456-426614174036',
+      'product_id': '123e4567-e89b-42d3-a456-426614174037',
+      'device_id': deviceId,
+      'plan_key': 'trial',
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': trialEndsAt.toIso8601String(),
+      'trial_ends_at': trialEndsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': offlineExpiresAt.toIso8601String(),
+      'grace_ends_at': null,
+      'grace_period_days': 0,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'max_devices': 2,
+      'device_fingerprints': [_fingerprint(identity)],
+      'key_id': keyId,
+      'entitlement_version': 1,
+      'issued_at': issuedAt.toIso8601String(),
+      'expires_at': offlineExpiresAt.toIso8601String(),
+    }));
+    final grantSignature = await Ed25519().sign(grantPayload, keyPair: keyPair);
+    final transport = QueueTransport([
+      success(_activationCreated(identity, requestId, activationChallenge), statusCode: 201),
+      success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
+      success({
+        'status': 'approved',
+        'license': {
+          'id': licenseId, 'device_id': deviceId, 'status': 'active',
+          'key_id': keyId, 'payload': base64Encode(licensePayload),
+          'signature': base64Encode(licenseSignature.bytes),
+        }
+      }),
+      success({
+        'challenge_id': challengeId,
+        'nonce': offlineNonce,
+        'expires_at': DateTime.now().toUtc().add(const Duration(minutes: 5)).toIso8601String(),
+      }, statusCode: 201),
+      success({
+        'id': grantId,
+        'key_id': keyId,
+        'payload': base64Encode(grantPayload),
+        'signature': base64Encode(grantSignature.bytes),
+      }, statusCode: 201),
+    ]);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(baseUri: Uri.parse('https://platform.example.test'), transport: transport),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {keyId: base64Encode(signingPublicDer)},
+    );
+
+    await service.requestActivation();
+    expect(await service.completePendingActivation(), PlatformDeviceLinkStatus.linked);
+    final grant = await service.refreshOfflineGrant();
+    expect(grant, isNotNull);
+    expect(grant!.licenseId, licenseId);
+    expect(grant.deviceId, deviceId);
+    expect(transport.requests[3].uri.path, '/api/v1/public/devices/$deviceId/challenges');
+    expect(transport.requests[4].uri.path, '/api/v1/public/licenses/$licenseId/devices/$deviceId/offline-grants');
+    expect(transport.requests[3].headers.containsKey('authorization'), isFalse);
+    expect(transport.requests[4].headers.containsKey('authorization'), isFalse);
+    expect(await service.readOfflineGrant(), isNotNull);
+  });
