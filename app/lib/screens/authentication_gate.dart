@@ -21,6 +21,7 @@ typedef AuthenticatedBuilder = Widget Function(
 typedef ReadOnlyBuilder = Widget Function(
   AuthUser user,
   VoidCallback onLogout,
+  VoidCallback onLicenseImported,
 );
 
 class AuthenticationGate extends StatefulWidget {
@@ -479,7 +480,16 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
-                    FilledButton(
+                    FilledButton.icon(
+                      onPressed: () => setState(() {
+                        _pendingDeviceLinkUser = blockedUser;
+                        _licenseBlockedUser = null;
+                      }),
+                      icon: const Icon(Icons.file_open_outlined),
+                      label: const Text('استيراد ملف ترخيص أو تجديده'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
                       onPressed: () => setState(() => _licenseBlockedUser = null),
                       child: const Text('العودة إلى تسجيل الدخول'),
                     ),
@@ -500,9 +510,23 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
           onRetry: _noop,
         );
       }
-      return builder(readOnlyUser, () {
-        if (mounted) setState(() => _readOnlyUser = null);
-      });
+      return builder(
+        readOnlyUser,
+        () {
+          if (mounted) setState(() => _readOnlyUser = null);
+        },
+        () async {
+          if (!mounted) return;
+          setState(() => _readOnlyUser = null);
+          try {
+            await _activateUser(readOnlyUser);
+          } catch (error) {
+            if (mounted) {
+              setState(() => _error = 'تم استيراد ملف الترخيص، لكن تعذر إعادة التحقق من الاستحقاق: $error');
+            }
+          }
+        },
+      );
     }
     final pendingDeviceLinkUser = _pendingDeviceLinkUser;
     if (pendingDeviceLinkUser != null) {
