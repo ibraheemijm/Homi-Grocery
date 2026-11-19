@@ -242,7 +242,7 @@ void main() {
       'starts_at': issuedAt.toIso8601String(),
       'ends_at': issuedAt.add(const Duration(days: 14)).toIso8601String(),
       'offline_expires_at': issuedAt.add(const Duration(days: 7)).toIso8601String(),
-      'device_fingerprints': ['f' * 64],
+      'device_fingerprints': [List.filled(64, 'f').join()],
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
       'key_id': keyId,
