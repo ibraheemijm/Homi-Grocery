@@ -147,7 +147,7 @@ void main() {
     await _pumpGate(tester);
 
     expect(find.byType(PlatformDeviceLinkScreen), findsOneWidget);
-    expect(find.text('ربط Homi Grocery بحسابك'), findsOneWidget);
+    expect(find.text('تفعيل Homi Grocery'), findsOneWidget);
     expect(find.text('authenticated'), findsNothing);
   });
 
