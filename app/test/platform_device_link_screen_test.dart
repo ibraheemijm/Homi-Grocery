@@ -54,6 +54,7 @@ void main() {
     ));
 
     expect(find.byType(TextField), findsNothing);
+    expect(find.text('استيراد ملف الترخيص (.hlic)'), findsOneWidget);
     expect(find.textContaining('بريد إلكتروني'), findsOneWidget);
     expect(find.text('كلمة المرور'), findsNothing);
     await tester.tap(find.text('إنشاء طلب تفعيل'));
