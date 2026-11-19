@@ -403,7 +403,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
     try {
       final challenge = await _api.postJson(
-        '/api/v1/devices/${license.deviceId}/challenges',
+        '/api/v1/public/devices/${license.deviceId}/challenges',
         body: {
           'license_id': license.licenseId,
           'purpose': 'offline_grant',
@@ -423,7 +423,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
       final deviceSignature = await _deviceIdentity.signNonce(nonce);
       final response = await _api.postJson(
-        '/api/v1/licenses/${license.licenseId}/offline-grants',
+        '/api/v1/public/licenses/${license.licenseId}/devices/${license.deviceId}/offline-grants',
         body: {
           'challenge_id': challengeId,
           'nonce': nonce,
