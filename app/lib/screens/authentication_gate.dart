@@ -61,6 +61,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   String? _error;
   AuthUser? _pendingDeviceLinkUser;
   AuthUser? _readOnlyUser;
+  AuthUser? _licenseBlockedUser;
   bool _cashierNeedsManagerLink = false;
 
   @override
@@ -131,8 +132,10 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       if (accessGrant == null) {
         if (mounted) {
           setState(() {
-            _readOnlyUser = user;
+            // لا نمنح القراءة والتصدير عند غياب تصريح موقع يمكن التحقق منه.
+            _licenseBlockedUser = user;
             _pendingDeviceLinkUser = null;
+            _readOnlyUser = null;
             _cashierNeedsManagerLink = false;
             _user = null;
             _shift = null;
@@ -143,6 +146,26 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       final now = DateTime.now().toUtc();
       // بعد سبعة أيام دون اتصال بالتجربة، أو عند انتهاء الاشتراك المدفوع،
       // لا تُفتح عمليات البيع والتحرير وتبقى مساحة القراءة والتصدير متاحة.
+      // بعد نهاية مهلة الاشتراك المدفوع لا يُسمح حتى بوضع القراءة فقط.
+      final isPaidPlan = accessGrant.planKey == 'monthly' ||
+          accessGrant.planKey == 'annual';
+      if (isPaidPlan &&
+          accessGrant.graceEndsAt != null &&
+          !accessGrant.graceEndsAt!.isAfter(now)) {
+        if (mounted) {
+          setState(() {
+            _licenseBlockedUser = user;
+            _readOnlyUser = null;
+            _pendingDeviceLinkUser = null;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      // التجربة تنتهي إلى القراءة فقط عند انتهاء التصريح أو التجربة.
+      // الاشتراك المدفوع يسمح بالقراءة والتصدير حتى نهاية مهلة السماح الموقعة.
       final fullAccessUntil = accessGrant.planKey == 'trial'
           ? accessGrant.offlineExpiresAt
           : accessGrant.endsAt;
@@ -151,6 +174,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         if (mounted) {
           setState(() {
             _readOnlyUser = user;
+            _licenseBlockedUser = null;
             _pendingDeviceLinkUser = null;
             _cashierNeedsManagerLink = false;
             _user = null;
@@ -428,6 +452,44 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     }
     if (_error != null) {
       return _GateError(message: _error!, onRetry: _initialize);
+    }
+    final blockedUser = _licenseBlockedUser;
+    if (blockedUser != null) {
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_clock_rounded, size: 56),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'انتهت مهلة الترخيص',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'انتهت فترة الاشتراك ومهلة القراءة والتصدير. أوقف التطبيق العمليات حتى تجديد الاشتراك وتحديث الترخيص.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: () => setState(() => _licenseBlockedUser = null),
+                      child: const Text('العودة إلى تسجيل الدخول'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
     }
     final readOnlyUser = _readOnlyUser;
     if (readOnlyUser != null) {
