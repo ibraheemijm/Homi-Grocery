@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -66,6 +67,38 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
         _message =
             'تم إنشاء الطلب. أكمل إثبات ملكية الجهاز، ثم أرسل بيانات الطلب إلى إدارة Homi عبر WhatsApp.';
       });
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _importLicenseFile() async {
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+    try {
+      final selection = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['hlic'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (selection == null) return;
+      final bytes = selection.files.single.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw const FormatException('تعذر قراءة محتوى ملف الترخيص المحدد.');
+      }
+      await widget.service.importLicenseFile(bytes);
+      if (!mounted) return;
+      setState(() {
+        _proofVerified = true;
+        _completed = true;
+        _message = 'تم استيراد ملف الترخيص والتحقق من توقيعه وتطابقه مع هذا الجهاز.';
+      });
+      widget.onLinked?.call();
     } catch (error) {
       if (mounted) setState(() => _message = _friendlyError(error));
     } finally {
@@ -221,6 +254,12 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 18),
+                        OutlinedButton.icon(
+                          onPressed: _working ? null : _importLicenseFile,
+                          icon: const Icon(Icons.file_open_outlined),
+                          label: const Text('استيراد ملف الترخيص (.hlic)'),
+                        ),
+                        const SizedBox(height: 10),
                         FilledButton.icon(
                           onPressed: _working || _completed || _proofVerified ? null : _requestActivation,
                           icon: const Icon(Icons.add_link),
