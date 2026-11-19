@@ -272,6 +272,7 @@ void main() {
       deviceIdentity: identity,
       store: store,
       trustedPublicKeys: {keyId: base64Encode(publicDer)},
+      apiUnavailableReason: 'لم يتم إعداد عنوان المنصة لهذا الإصدار.',
     );
 
     final imported = await service.importLicenseFile(utf8.encode(jsonEncode({
