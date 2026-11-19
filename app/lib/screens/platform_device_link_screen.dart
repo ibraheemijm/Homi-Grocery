@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../data/platform_device_link_service.dart';
 
@@ -20,35 +22,48 @@ class PlatformDeviceLinkScreen extends StatefulWidget {
 }
 
 class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
-  final _email = TextEditingController();
+  PlatformActivationRequest? _request;
   bool _working = false;
-  bool _requested = false;
-  String? _message;
+  bool _proofVerified = false;
   bool _completed = false;
+  String? _message;
 
   @override
-  void dispose() {
-    _email.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadPendingRequest();
   }
 
-  Future<void> _requestLink() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) {
-      setState(() => _message = 'أدخل البريد الإلكتروني المرتبط بحساب Homi.');
-      return;
+  Future<void> _loadPendingRequest() async {
+    try {
+      final pending = await widget.service.readPendingActivationRequest();
+      if (!mounted || pending == null) return;
+      setState(() {
+        _request = pending;
+        _proofVerified = pending.proofVerified;
+        _message = pending.proofVerified
+            ? 'يوجد طلب تفعيل محفوظ. يمكنك إرسال بياناته للإدارة أو التحقق من حالته.'
+            : 'يوجد طلب تفعيل محفوظ. أكمل إثبات ملكية هذا الجهاز قبل إرساله للإدارة.';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendlyError(error));
     }
+  }
+
+  Future<void> _requestActivation() async {
     setState(() {
       _working = true;
       _message = null;
+      _completed = false;
+      _proofVerified = false;
     });
     try {
-      await widget.service.requestLink(email);
+      final request = await widget.service.requestActivation();
       if (!mounted) return;
       setState(() {
-        _requested = true;
+        _request = request;
         _message =
-            'إذا كان البريد مسجلًا ومؤكدًا، فستصلك رسالة ربط. افتح الرسالة واضغط رابط التأكيد، ثم ارجع إلى التطبيق.';
+            'تم إنشاء الطلب. أكمل إثبات ملكية الجهاز، ثم أرسل بيانات الطلب إلى إدارة Homi عبر WhatsApp.';
       });
     } catch (error) {
       if (mounted) setState(() => _message = _friendlyError(error));
@@ -57,28 +72,35 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
     }
   }
 
-  Future<void> _completeLink() async {
+  Future<void> _verifyAndCheckStatus() async {
     setState(() {
       _working = true;
       _message = null;
     });
     try {
-      final status = await widget.service.completePendingLink();
+      final status = await widget.service.completePendingActivation();
       if (!mounted) return;
       switch (status) {
-        case PlatformDeviceLinkStatus.waitingForEmail:
-          setState(() => _message =
-              'لم يتم تأكيد البريد بعد. افتح رسالة Homi واضغط رابط التأكيد، ثم حاول مرة أخرى.');
+        case PlatformDeviceLinkStatus.waitingForAdmin:
+          setState(() {
+            _proofVerified = true;
+            _message =
+                'تم إثبات امتلاك الجهاز بنجاح. أرسل رقم الطلب وبصمة الجهاز إلى إدارة Homi لمراجعتهما.';
+          });
           break;
         case PlatformDeviceLinkStatus.licensePending:
-          setState(() => _message =
-              'تم إثبات البريد والجهاز. يجري تجهيز الترخيص الموقّع؛ إذا كان الحساب مؤهلًا للتجربة فستبدأ بعد نجاح الربط. اضغط تحقق مرة أخرى بعد قليل.');
+          setState(() {
+            _proofVerified = true;
+            _message =
+                'تمت الموافقة على الطلب. يجري تجهيز ملف الترخيص الموقّع؛ تحقق مرة أخرى بعد قليل.';
+          });
           break;
         case PlatformDeviceLinkStatus.linked:
           setState(() {
+            _proofVerified = true;
             _completed = true;
             _message =
-                'اكتمل ربط هذا الجهاز بنجاح وأصبح ترخيص Homi جاهزًا.';
+                'اكتمل التفعيل وتم التحقق من ملف الترخيص وتطابق بصمة هذا الجهاز.';
           });
           widget.onLinked?.call();
           break;
@@ -90,41 +112,69 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
     }
   }
 
+  String get _supportMessage =>
+      _request?.toSupportMessage(proofVerified: _proofVerified) ?? '';
+
+  Future<void> _copyRequest() async {
+    if (_supportMessage.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: _supportMessage));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم نسخ بيانات طلب التفعيل.')),
+    );
+  }
+
+  Future<void> _shareRequest() async {
+    if (_supportMessage.isEmpty) return;
+    await Share.share(
+      _supportMessage,
+      subject: 'طلب تفعيل Homi Grocery',
+    );
+  }
+
   String _friendlyError(Object error) {
     final text = error.toString();
-    if (text.contains('DEVICE_LINK_EXPIRED')) {
-      return 'انتهت صلاحية الرابط. اطلب رابطًا جديدًا.';
+    if (text.contains('ACTIVATION_CHALLENGE_EXPIRED')) {
+      return 'انتهت صلاحية إثبات الجهاز. أنشئ طلب تفعيل جديدًا.';
+    }
+    if (text.contains('ACTIVATION_REQUEST_REJECTED')) {
+      return 'تم رفض طلب التفعيل. تواصل مع إدارة Homi لمعرفة السبب.';
+    }
+    if (text.contains('ACTIVATION_REQUEST_EXPIRED') ||
+        text.contains('ACTIVATION_REQUEST_CANCELLED')) {
+      return 'لم يعد طلب التفعيل صالحًا. أنشئ طلبًا جديدًا.';
+    }
+    if (text.contains('DEVICE_ALREADY_ACTIVATED')) {
+      return 'هذا الجهاز مرتبط بتفعيل قائم بالفعل.';
     }
     if (text.contains('TRIAL_ALREADY_USED')) {
-      return 'سبق استخدام الفترة التجريبية لهذه المؤسسة. راجع خيارات الاشتراك من موقع Homi.';
+      return 'سبق استخدام الفترة التجريبية لهذه المؤسسة. تواصل مع الإدارة للاشتراك.';
     }
     if (text.contains('ACTIVE_SUBSCRIPTION_EXISTS')) {
       return 'توجد رخصة اشتراك نشطة لهذا المنتج بالفعل.';
     }
-    if (text.contains('DEVICE_LINK_CONFLICT')) {
-      return 'تعذر ربط هذا الجهاز بسبب تعارض في هوية الجهاز أو ارتباطه بترخيص آخر.';
+    if (text.contains('DEVICE_ALREADY_REGISTERED')) {
+      return 'مفتاح هذا الجهاز مرتبط بسجل آخر. يلزم طلب نقل الجهاز من الإدارة.';
     }
-    if (text.contains('DEVICE_LIMIT_REACHED')) {
-      return 'وصل الترخيص إلى الحد الأقصى لعدد الأجهزة المسموح بها.';
-    }
-    if (text.contains('SUBSCRIPTION_LICENSE_UNAVAILABLE')) {
-      return 'الاشتراك نشط لكن الترخيص لم يصبح جاهزًا بعد. أعد المحاولة أو تواصل مع إدارة Homi.';
+    if (text.contains('PLATFORM_NOT_SUPPORTED')) {
+      return 'هذا الإصدار أو نوع الجهاز غير مدعوم حاليًا لهذا المنتج.';
     }
     if (text.contains('PlatformApiConfigurationException')) {
       return 'لم يتم إعداد الاتصال بمنصة Homi في هذا الإصدار.';
     }
-    return 'تعذر إكمال ربط الجهاز. تحقق من اتصال الإنترنت ثم أعد المحاولة. التفاصيل: $text';
+    return 'تعذر إكمال التفعيل. تحقق من اتصال الإنترنت ثم أعد المحاولة. التفاصيل: $text';
   }
 
   @override
   Widget build(BuildContext context) {
+    final request = _request;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(maxWidth: 560),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Card(
@@ -141,7 +191,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'ربط Homi Grocery بحسابك',
+                          'تفعيل Homi Grocery',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 22,
@@ -150,73 +200,81 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         ),
                         const SizedBox(height: 10),
                         const Text(
-                          'أدخل البريد الإلكتروني المسجل في Homi Platform. لن نطلب كلمة مرور المنصة؛ سيصلك رابط لمرة واحدة لإثبات ملكية البريد.',
+                          'لا تحتاج إلى حساب أو بريد إلكتروني أو كلمة مرور. ينشئ التطبيق طلبًا مرتبطًا بمفتاح هذا الجهاز، ثم ترسل بياناته إلى إدارة Homi عبر WhatsApp لمراجعته.',
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 18),
-                        TextField(
-                          controller: _email,
-                          enabled: !_working && !_completed,
-                          keyboardType: TextInputType.emailAddress,
-                          textDirection: TextDirection.ltr,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) {
-                            if (!_working && !_completed) {
-                              _requestLink();
-                            }
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'البريد الإلكتروني',
-                            prefixIcon: Icon(Icons.email_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
                         FilledButton.icon(
-                          onPressed: _working || _completed ? null : _requestLink,
-                          icon: const Icon(Icons.mark_email_read_outlined),
-                          label: const Text('إرسال رابط التأكيد'),
+                          onPressed: _working || _completed ? null : _requestActivation,
+                          icon: const Icon(Icons.add_link),
+                          label: Text(request == null ? 'إنشاء طلب تفعيل' : 'تجديد تحدي إثبات الجهاز'),
                         ),
-                        if (_requested && !_completed) ...[
-                          const SizedBox(height: 10),
-                          OutlinedButton.icon(
-                            onPressed: _working ? null : _completeLink,
-                            icon: const Icon(Icons.verified_outlined),
-                            label: const Text('أكدت البريد، أكمل الربط'),
-                          ),
-                        ],
-                        if (widget.websiteBaseUrl.trim().isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          SelectableText(
-                            'إذا لم يكن لديك حساب أو لم تؤكد بريدك، أكمل التسجيل من موقع Homi: ${widget.websiteBaseUrl}',
-                            textAlign: TextAlign.center,
-                          ),
-                        ] else ...[
-                          const SizedBox(height: 16),
-                          const Text(
-                            'إذا لم تصلك رسالة، أنشئ حسابًا من موقع Homi أو أكد بريد حسابك الحالي، ثم أعد طلب الرابط.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                        if (_message != null) ...[
+                        if (request != null) ...[
                           const SizedBox(height: 18),
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: _completed
-                                  ? const Color(0xFFDCE9DF)
-                                  : const Color(0xFFF7F4EA),
-                              borderRadius: BorderRadius.circular(14),
+                              color: const Color(0xFFF3F6F3),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFD8E3DC)),
                             ),
-                            child: Text(
-                              _message!,
-                              textAlign: TextAlign.center,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('بيانات الطلب', style: TextStyle(fontWeight: FontWeight.w800)),
+                                const SizedBox(height: 10),
+                                _detail('رقم الطلب', request.requestId),
+                                _detail('المنصة', '${request.platform} · ${request.architecture}'),
+                                _detail('بصمة الجهاز', request.keyFingerprint),
+                                _detail('إثبات الملكية', _proofVerified ? 'مكتمل' : 'بانتظار الإكمال'),
+                                const SizedBox(height: 10),
+                                SelectableText(
+                                  _supportMessage,
+                                  style: const TextStyle(fontSize: 12, height: 1.5),
+                                ),
+                              ],
                             ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _working ? null : _copyRequest,
+                            icon: const Icon(Icons.copy),
+                            label: const Text('نسخ بيانات طلب التفعيل'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _working ? null : _shareRequest,
+                            icon: const Icon(Icons.share),
+                            label: const Text('مشاركة الطلب (اختر WhatsApp)'),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            onPressed: _working || _completed ? null : _verifyAndCheckStatus,
+                            icon: const Icon(Icons.verified_outlined),
+                            label: Text(_proofVerified ? 'التحقق من حالة التفعيل' : 'إثبات ملكية الجهاز والتحقق'),
                           ),
                         ],
                         if (_working) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 14),
                           const Center(child: CircularProgressIndicator()),
+                        ],
+                        if (_message != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            _message!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: _completed ? const Color(0xFF173D32) : null,
+                              fontWeight: _completed ? FontWeight.w700 : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                        if (request != null) ...[
+                          const SizedBox(height: 14),
+                          const Text(
+                            'إثبات ملكية الجهاز لا يعني الموافقة على التجربة أو تأكيد استلام أي مبلغ. تبدأ التجربة أو الاشتراك بعد اعتماد الإدارة وإصدار الترخيص.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
                         ],
                       ],
                     ),
@@ -229,4 +287,15 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       ),
     );
   }
+
+  Widget _detail(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+            SelectableText(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
 }
