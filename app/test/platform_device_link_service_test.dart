@@ -47,20 +47,20 @@ const spkiPrefix = <int>[
 ];
 
 String _b64url(List<int> bytes) => base64UrlEncode(bytes).replaceAll('=', '');
-String _fingerprint(PlatformDeviceIdentity identity) {
-  final raw = base64Url.decode(base64Url.normalize(identity.publicKeyRawBase64Url));
+String _fingerprint(PlatformDeviceIdentityData identity) {
+  final raw = base64Url.decode(base64Url.normalize(identityData.publicKeyRawBase64Url));
   return crypto.sha256.convert(raw).toString();
 }
 
 Map<String, Object?> _activationCreated(
-  PlatformDeviceIdentity identity,
+  PlatformDeviceIdentityData identity,
   String requestId,
   String challenge,
 ) => {
   'activation_request_id': requestId,
   'challenge': challenge,
   'challenge_expires_at': DateTime.now().toUtc().add(const Duration(minutes: 5)).toIso8601String(),
-  'key_fingerprint': _fingerprint(identity),
+  'key_fingerprint': _fingerprint(identityData),
   'support_whatsapp': '249900000000',
   'status': 'pending_proof',
 };
@@ -69,10 +69,11 @@ void main() {
   test('ينشئ طلب تفعيل دون بريد أو حساب ويرسل المفتاح العام الخام فقط', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'linux');
+    final identityData = await identity.loadOrCreate();
     const requestId = '123e4567-e89b-42d3-a456-426614174000';
     final challenge = _b64url(List<int>.generate(32, (i) => i));
     final transport = QueueTransport([
-      success(_activationCreated(identity, requestId, challenge), statusCode: 201),
+      success(_activationCreated(identityData, requestId, challenge), statusCode: 201),
     ]);
     final service = PlatformDeviceLinkService(
       api: PlatformApiClient(baseUri: Uri.parse('https://platform.example.test'), transport: transport),
@@ -89,13 +90,13 @@ void main() {
     expect(body['product_key'], 'homi-grocery');
     expect(body['platform_key'], 'linux');
     expect(body['architecture_key'], isNotEmpty);
-    expect(body['public_key'], identity.publicKeyRawBase64Url);
+    expect(body['public_key'], identityData.publicKeyRawBase64Url);
     expect(base64Url.decode(base64Url.normalize(body['public_key'] as String)), hasLength(32));
     expect(body.containsKey('email'), isFalse);
     expect(body.containsKey('password'), isFalse);
     expect(request.headers.containsKey('authorization'), isFalse);
     expect(activation.requestId, requestId);
-    expect(activation.keyFingerprint, _fingerprint(identity));
+    expect(activation.keyFingerprint, _fingerprint(identityData));
     expect(activation.supportWhatsApp, '249900000000');
     expect(store.values['homi_platform_pending_device_link_v1'], contains('request_id'));
   });
@@ -103,10 +104,11 @@ void main() {
   test('يوقع التحدي بصيغة البروتوكول ويرجع انتظار مراجعة الإدارة', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'windows');
+    final identityData = await identity.loadOrCreate();
     const requestId = '123e4567-e89b-42d3-a456-426614174001';
     final challenge = _b64url(List<int>.generate(32, (i) => 31 - i));
     final transport = QueueTransport([
-      success(_activationCreated(identity, requestId, challenge), statusCode: 201),
+      success(_activationCreated(identityData, requestId, challenge), statusCode: 201),
       success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
       success({'status': 'proof_verified'}),
     ]);
@@ -128,12 +130,12 @@ void main() {
       requestId,
       'homi-grocery',
       'windows',
-      identity.architecture,
+      identityData.architecture,
       challenge,
     ].join('\n');
     final signature = base64Url.decode(base64Url.normalize(proofBody['signature'] as String));
     final publicKey = SimplePublicKey(
-      base64Url.decode(base64Url.normalize(identity.publicKeyRawBase64Url)),
+      base64Url.decode(base64Url.normalize(identityData.publicKeyRawBase64Url)),
       type: KeyPairType.ed25519,
     );
     expect(
@@ -152,6 +154,7 @@ void main() {
   test('يحفظ الترخيص الموقع فقط بعد تطابق بصمة مفتاح الجهاز', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    final identityData = await identity.loadOrCreate();
     const requestId = '123e4567-e89b-42d3-a456-426614174010';
     const licenseId = '123e4567-e89b-42d3-a456-426614174011';
     const deviceId = '123e4567-e89b-42d3-a456-426614174012';
@@ -181,14 +184,14 @@ void main() {
       'grace_ends_at': null,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
-      'device_fingerprints': [_fingerprint(identity)],
+      'device_fingerprints': [_fingerprint(identityData)],
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
       'key_id': keyId,
     }));
     final signed = await Ed25519().sign(payload, keyPair: keyPair);
     final transport = QueueTransport([
-      success(_activationCreated(identity, requestId, challenge), statusCode: 201),
+      success(_activationCreated(identityData, requestId, challenge), statusCode: 201),
       success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
       success({
         'status': 'approved',
@@ -227,6 +230,7 @@ void main() {
   test('يرفض ملف ترخيص صحيح التوقيع لكنه لا يتضمن بصمة هذا الجهاز', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    final identityData = await identity.loadOrCreate();
     const requestId = '123e4567-e89b-42d3-a456-426614174020';
     const licenseId = '123e4567-e89b-42d3-a456-426614174021';
     const deviceId = '123e4567-e89b-42d3-a456-426614174022';
@@ -253,7 +257,7 @@ void main() {
     }));
     final signature = await Ed25519().sign(payload, keyPair: keyPair);
     final transport = QueueTransport([
-      success(_activationCreated(identity, requestId, challenge), statusCode: 201),
+      success(_activationCreated(identityData, requestId, challenge), statusCode: 201),
       success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
       success({
         'status': 'approved',
@@ -285,6 +289,7 @@ void main() {
   test('يجدد تصريح العمل دون اتصال عبر إثبات مفتاح الجهاز دون حساب عميل', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    final identityData = await identity.loadOrCreate();
     const requestId = '123e4567-e89b-42d3-a456-426614174030';
     const licenseId = '123e4567-e89b-42d3-a456-426614174031';
     const deviceId = '123e4567-e89b-42d3-a456-426614174032';
@@ -318,7 +323,7 @@ void main() {
       'grace_ends_at': null,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
-      'device_fingerprints': [_fingerprint(identity)],
+      'device_fingerprints': [_fingerprint(identityData)],
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
       'key_id': keyId,
@@ -342,7 +347,7 @@ void main() {
       'grace_period_days': 0,
       'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
       'max_devices': 2,
-      'device_fingerprints': [_fingerprint(identity)],
+      'device_fingerprints': [_fingerprint(identityData)],
       'key_id': keyId,
       'entitlement_version': 1,
       'issued_at': issuedAt.toIso8601String(),
@@ -350,7 +355,7 @@ void main() {
     }));
     final grantSignature = await Ed25519().sign(grantPayload, keyPair: keyPair);
     final transport = QueueTransport([
-      success(_activationCreated(identity, requestId, activationChallenge), statusCode: 201),
+      success(_activationCreated(identityData, requestId, activationChallenge), statusCode: 201),
       success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
       success({
         'status': 'approved',
