@@ -86,11 +86,11 @@ void main() {
     expect(find.textContaining('تم إثبات امتلاك الجهاز بنجاح'), findsOneWidget);
 
     await tester.ensureVisible(find.text('التحقق من حالة التفعيل'));
-    await tester.ensureVisible(find.text('التحقق من حالة التفعيل'));
     await tester.tap(find.text('التحقق من حالة التفعيل'));
     await tester.pumpAndSettle();
     expect(find.textContaining('يجري تجهيز ملف الترخيص الموقّع'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('التحقق من حالة التفعيل'));
     await tester.tap(find.text('التحقق من حالة التفعيل'));
     await tester.pumpAndSettle();
     expect(linked, isTrue);
