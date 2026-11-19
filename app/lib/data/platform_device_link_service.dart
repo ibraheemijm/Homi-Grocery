@@ -751,7 +751,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
               'full_until_offline_expiry_or_trial_end_then_read_export' ||
           !offlineExpiresAt.isAfter(issuedUtc) ||
           offlineExpiresAt.isAfter(
-            issuedUtc.add(const Duration(days: 7)),
+            issuedUtc.add(const Duration(days: 14)),
           ) ||
           offlineExpiresAt.isAfter(trialEndsAt)) {
         throw const FormatException('سياسة العمل دون اتصال للتجربة غير صالحة.');
