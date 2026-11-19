@@ -2,14 +2,42 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as crypto;
 
 import 'platform_api_client.dart';
 import 'platform_device_identity.dart';
 
 enum PlatformDeviceLinkStatus {
-  waitingForEmail,
+  waitingForAdmin,
   licensePending,
   linked,
+}
+
+class PlatformActivationRequest {
+  const PlatformActivationRequest({
+    required this.requestId,
+    required this.keyFingerprint,
+    required this.platform,
+    required this.architecture,
+    required this.challengeExpiresAt,
+    this.proofVerified = false,
+  });
+
+  final String requestId;
+  final String keyFingerprint;
+  final String platform;
+  final String architecture;
+  final DateTime challengeExpiresAt;
+  final bool proofVerified;
+
+  String toSupportMessage({bool proofVerified = false}) => [
+    'طلب تفعيل Homi Grocery',
+    'رقم الطلب: $requestId',
+    'المنصة: $platform',
+    'المعمارية: $architecture',
+    'بصمة الجهاز: $keyFingerprint',
+    'إثبات الملكية: ${proofVerified ? "مكتمل" : "بانتظار الإكمال"}',
+  ].join('\\n');
 }
 
 class PlatformLinkedLicense {
@@ -49,8 +77,9 @@ class PlatformLinkedLicense {
 }
 
 abstract interface class PlatformDeviceLinkOperations {
-  Future<void> requestLink(String email);
-  Future<PlatformDeviceLinkStatus> completePendingLink();
+  Future<PlatformActivationRequest> requestActivation();
+  Future<PlatformActivationRequest?> readPendingActivationRequest();
+  Future<PlatformDeviceLinkStatus> completePendingActivation();
   Future<PlatformLinkedLicense?> readLinkedLicense();
   Future<PlatformLinkedLicense?> refreshOfflineGrant();
   Future<PlatformLinkedLicense?> readOfflineGrant();
@@ -63,12 +92,15 @@ class UnavailablePlatformDeviceLinkService
   final String reason;
 
   @override
-  Future<void> requestLink(String email) async {
+  Future<PlatformActivationRequest> requestActivation() async {
     throw PlatformApiConfigurationException(reason);
   }
 
   @override
-  Future<PlatformDeviceLinkStatus> completePendingLink() async {
+  Future<PlatformActivationRequest?> readPendingActivationRequest() async => null;
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingActivation() async {
     throw PlatformApiConfigurationException(reason);
   }
 
@@ -167,97 +199,139 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     return difference == 0;
   }
 
-  @override
-  Future<void> requestLink(String email) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-            .hasMatch(normalizedEmail) ||
-        normalizedEmail.length > 254) {
-      throw const FormatException('أدخل بريدًا إلكترونيًا صحيحًا.');
-    }
 
+  @override
+  Future<PlatformActivationRequest> requestActivation() async {
     final identity = await _deviceIdentity.loadOrCreate();
     final response = await _api.postJson(
-      '/api/v1/products/homi-grocery/device-links',
+      '/api/v1/public/activation-requests',
       body: {
-        'email': normalizedEmail,
-        'device_key': identity.deviceKey,
-        'public_key': identity.publicKeyBase64,
-        'platform': identity.platform,
-        'architecture': identity.architecture,
+        'product_key': 'homi-grocery',
+        'platform_key': identity.platform,
+        'architecture_key': identity.architecture,
+        'device_label': 'Homi Grocery - ${identity.platform}',
+        'public_key': identity.publicKeyRawBase64Url,
       },
     );
-    final challengeId = response['challenge_id'];
-    final nonce = response['nonce'];
-    final expiresAtText = response['expires_at'];
-    final expiresAt = expiresAtText is String
-        ? DateTime.tryParse(expiresAtText)
-        : null;
-    if (challengeId is! String ||
-        !_isUuid(challengeId) ||
-        nonce is! String ||
-        !_isValidNonce(nonce) ||
+    final requestId = response['activation_request_id'];
+    final challenge = response['challenge'];
+    final expiresAtText = response['challenge_expires_at'];
+    final fingerprint = response['key_fingerprint'];
+    final expiresAt = expiresAtText is String ? DateTime.tryParse(expiresAtText) : null;
+    if (requestId is! String ||
+        !_isUuid(requestId) ||
+        challenge is! String ||
+        !_isValidNonce(challenge) ||
+        fingerprint is! String ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(fingerprint) ||
         expiresAt == null ||
         !expiresAt.isAfter(_clock().toUtc())) {
-      throw const FormatException('استجابة ربط الجهاز من المنصة غير صالحة.');
+      throw const FormatException('استجابة طلب تفعيل الجهاز من المنصة غير صالحة.');
     }
 
-    await _store.write(
-      _pendingKey,
-      jsonEncode({
-        'email': normalizedEmail,
-        'challenge_id': challengeId,
-        'nonce': nonce,
-        'expires_at': expiresAt.toUtc().toIso8601String(),
-        'device_key': identity.deviceKey,
-      }),
+    await _store.write(_pendingKey, jsonEncode({
+      'request_id': requestId,
+      'challenge': challenge,
+      'challenge_expires_at': expiresAt.toUtc().toIso8601String(),
+      'device_key': identity.deviceKey,
+      'platform': identity.platform,
+      'architecture': identity.architecture,
+      'key_fingerprint': fingerprint,
+      'proof_completed': false,
+    }));
+    return PlatformActivationRequest(
+      requestId: requestId,
+      keyFingerprint: fingerprint,
+      platform: identity.platform,
+      architecture: identity.architecture,
+      challengeExpiresAt: expiresAt.toUtc(),
     );
   }
 
   @override
-  Future<PlatformDeviceLinkStatus> completePendingLink() async {
+  Future<PlatformActivationRequest?> readPendingActivationRequest() async {
+    final pending = await _readPending();
+    if (pending == null) return null;
+    return PlatformActivationRequest(
+      requestId: pending['request_id']!,
+      keyFingerprint: pending['key_fingerprint']!,
+      platform: pending['platform']!,
+      architecture: pending['architecture']!,
+      challengeExpiresAt: DateTime.parse(pending['challenge_expires_at']!).toUtc(),
+      proofVerified: pending['proof_completed'] == 'true',
+    );
+  }
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingActivation() async {
     final pending = await _readPending();
     if (pending == null) {
       throw const PlatformApiException(
         statusCode: 400,
-        code: 'DEVICE_LINK_NOT_REQUESTED',
-        message: 'اطلب رابط ربط الجهاز أولًا.',
+        code: 'ACTIVATION_REQUEST_NOT_CREATED',
+        message: 'أنشئ طلب التفعيل أولًا.',
       );
     }
     final identity = await _deviceIdentity.loadOrCreate();
-    if (identity.deviceKey != pending['device_key']) {
+    if (identity.deviceKey != pending['device_key'] ||
+        identity.platform != pending['platform'] ||
+        identity.architecture != pending['architecture']) {
       await clearPendingLink();
-      throw StateError(
-        'هوية الجهاز المحفوظة تغيرت؛ أوقف الربط واطلب رابطًا جديدًا.',
-      );
+      throw StateError('هوية الجهاز تغيرت؛ أوقف التفعيل وأنشئ طلبًا جديدًا.');
     }
-    final signature = await _deviceIdentity.signNonce(pending['nonce']!);
 
-    late final Map<String, Object?> response;
-    try {
-      response = await _api.postJson(
-        '/api/v1/device-links/complete',
-        body: {
-          'challenge_id': pending['challenge_id'],
-          'nonce': pending['nonce'],
-          'signature': signature,
-        },
-      );
-    } on PlatformApiException catch (error) {
-      if (error.code == 'DEVICE_LINK_NOT_READY') {
-        return PlatformDeviceLinkStatus.waitingForEmail;
+    if (pending['proof_completed'] != 'true') {
+      final challengeExpiresAt = DateTime.parse(pending['challenge_expires_at']!).toUtc();
+      if (!challengeExpiresAt.isAfter(_clock().toUtc())) {
+        await clearPendingLink();
+        throw const PlatformApiException(
+          statusCode: 410,
+          code: 'ACTIVATION_CHALLENGE_EXPIRED',
+          message: 'انتهت صلاحية إثبات الجهاز. أنشئ طلب تفعيل جديدًا.',
+        );
       }
-      rethrow;
+      final requestId = pending['request_id']!;
+      final challenge = pending['challenge']!;
+      final proofMessage = [
+        'HOMI_DEVICE_PROOF_V1',
+        requestId.toLowerCase(),
+        'homi-grocery',
+        identity.platform,
+        identity.architecture,
+        challenge,
+      ].join('\\n');
+      final signature = await _deviceIdentity.signMessage(proofMessage);
+      await _api.postJson(
+        '/api/v1/public/activation-requests/$requestId/proof',
+        body: {'challenge': challenge, 'signature': signature},
+      );
+      pending['proof_completed'] = 'true';
+      await _store.write(_pendingKey, jsonEncode(pending));
     }
 
-    if (response['status'] == 'pending') {
+    final requestId = pending['request_id']!;
+    final status = await _api.getJson(
+      '/api/v1/public/activation-requests/$requestId/status',
+    );
+    final requestStatus = status['status'];
+    if (requestStatus == 'proof_verified') {
+      return PlatformDeviceLinkStatus.waitingForAdmin;
+    }
+    if (requestStatus == 'rejected' || requestStatus == 'cancelled' ||
+        requestStatus == 'expired') {
+      throw PlatformApiException(
+        statusCode: 409,
+        code: 'ACTIVATION_REQUEST_${requestStatus.toString().toUpperCase()}',
+        message: 'طلب التفعيل ${requestStatus == 'rejected' ? 'مرفوض' : 'غير صالح'}؛ راجع إدارة Homi.',
+      );
+    }
+    if (requestStatus != 'approved' || status['license'] is! Map) {
       return PlatformDeviceLinkStatus.licensePending;
     }
-    if (response['status'] != 'active' || response['license'] is! Map) {
-      throw const FormatException('حالة ربط الجهاز أو الترخيص غير معروفة.');
+    final license = Map<String, Object?>.from(status['license'] as Map);
+    if (license['status'] != 'active') {
+      return PlatformDeviceLinkStatus.licensePending;
     }
-
-    final license = Map<String, Object?>.from(response['license'] as Map);
     final verified = await _verifyIssuedLicense(license);
     await _store.write(_licenseKey, jsonEncode({
       'license_id': verified.licenseId,
