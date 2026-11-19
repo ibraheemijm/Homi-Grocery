@@ -159,6 +159,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
                   user: user,
                   shiftId: shiftId,
                   onLogout: onLogout,
+                  platformDeviceLinkService: _platformDeviceLinkService,
                 )
               : CashierWorkspaceScreen(
                   cashier: user,
@@ -279,6 +280,7 @@ class DashboardScreen extends StatefulWidget {
     required this.user,
     required this.shiftId,
     required this.onLogout,
+    this.platformDeviceLinkService,
     this.reportsScreenBuilder,
     this.backupScreenBuilder,
     super.key,
@@ -289,6 +291,7 @@ class DashboardScreen extends StatefulWidget {
   final AuthUser user;
   final int shiftId;
   final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
   // تسمح ببناء شاشات بديلة في اختبارات التنقل دون تشغيل قواعد بياناتها.
   final Widget Function(int userId)? reportsScreenBuilder;
   final Widget Function(int managerUserId)? backupScreenBuilder;
@@ -515,7 +518,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             : _selectedIndex == 7
                                                 ? (widget.reportsScreenBuilder?.call(widget.user.id) ?? ReportsScreen(userId: widget.user.id))
                                                 : _selectedIndex == 8
-                                                    ? SettingsScreen(canManageSystemSettings: widget.user.isManager)
+                                                    ? SettingsScreen(
+                                                        canManageSystemSettings: widget.user.isManager,
+                                                        platformDeviceLinkService: widget.platformDeviceLinkService,
+                                                      )
                                                     : _selectedIndex == 9
                                         ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
