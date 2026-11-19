@@ -74,15 +74,29 @@ const Color brandMint = Color(0xFFDCE9DF);
 
 PlatformDeviceLinkOperations _createPlatformDeviceLinkService() {
   final store = FlutterPlatformSecretStore();
+  final identity = PlatformDeviceIdentity(store);
   try {
+    final api = PlatformApiClient.fromEnvironment();
     return PlatformDeviceLinkService(
-      api: PlatformApiClient.fromEnvironment(),
-      deviceIdentity: PlatformDeviceIdentity(store),
+      api: api,
+      deviceIdentity: identity,
       store: store,
     );
   } on PlatformApiConfigurationException catch (error) {
-    // يفشل الربط بأمان إذا لم يُضبط عنوان المنصة في بناء التطبيق.
-    return UnavailablePlatformDeviceLinkService(error.message);
+    // يظل استيراد ملف الترخيص المحلي متاحًا حتى دون إعداد عنوان API.
+    // لا تستخدم هذه الوجهة لأي طلب شبكة؛ يمنعها apiUnavailableReason داخل الخدمة.
+    try {
+      return PlatformDeviceLinkService(
+        api: PlatformApiClient(baseUri: Uri.parse('https://offline.invalid')),
+        deviceIdentity: identity,
+        store: store,
+        apiUnavailableReason: error.message,
+      );
+    } on FormatException catch (trustError) {
+      return UnavailablePlatformDeviceLinkService(
+        'إعداد مفاتيح الثقة للترخيص غير صالح: ${trustError.message}',
+      );
+    }
   } on FormatException catch (error) {
     // لا نسمح لإعداد مفتاح ثقة تالف بإسقاط التطبيق عند بدء التشغيل.
     return UnavailablePlatformDeviceLinkService(
