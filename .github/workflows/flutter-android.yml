@@ -3,7 +3,7 @@ name: Flutter Android checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding]
+    branches: [feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding, feature/manual-activation-no-account]
   pull_request:
     branches: [main, feature/flutter-foundation, feature/windows-ota-foundation]
 
