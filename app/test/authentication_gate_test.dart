@@ -186,7 +186,7 @@ void main() {
             database,
             users: {manager.username: manager, cashier.username: cashier},
           ),
-          readOnlyBuilder: (user, onLogout) => Scaffold(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
             body: Text('read-only ${user.username}'),
           ),
           authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
@@ -238,7 +238,7 @@ void main() {
             database,
             users: {manager.username: manager, cashier.username: cashier},
           ),
-          readOnlyBuilder: (user, onLogout) => Scaffold(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
             body: Text('read-only ${user.username}'),
           ),
           authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
@@ -291,7 +291,7 @@ void main() {
             database,
             users: {manager.username: manager, cashier.username: cashier},
           ),
-          readOnlyBuilder: (user, onLogout) => Scaffold(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
             body: Text('read-only ${user.username}'),
           ),
           authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
@@ -344,7 +344,7 @@ void main() {
             database,
             users: {manager.username: manager, cashier.username: cashier},
           ),
-          readOnlyBuilder: (user, onLogout) => Scaffold(
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
             body: Text('read-only ${user.username}'),
           ),
           authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
