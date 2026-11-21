@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -203,6 +201,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
   }
 
   Future<void> _createHreqFile() async {
+    final targetPlatform = Theme.of(context).platform;
     setState(() {
       _working = true;
       _message = null;
@@ -216,8 +215,8 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       );
       final fileName = 'Homi-Activation-Request-${requestFile.requestId}.hreq';
       final bytes = Uint8List.fromList(requestFile.bytes);
-      if (Theme.of(context).platform == TargetPlatform.android ||
-          Theme.of(context).platform == TargetPlatform.iOS) {
+      if (targetPlatform == TargetPlatform.android ||
+          targetPlatform == TargetPlatform.iOS) {
         await Share.shareXFiles(
           [XFile.fromData(
             bytes,
@@ -361,7 +360,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          value: _requestedPlan,
+                          initialValue: _requestedPlan,
                           decoration: const InputDecoration(
                             labelText: 'الاشتراك المطلوب',
                             border: OutlineInputBorder(),
