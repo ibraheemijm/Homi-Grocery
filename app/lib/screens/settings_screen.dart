@@ -303,6 +303,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (manifest == null) return;
     try {
       if (Platform.isWindows) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تثبيت تحديث Windows'),
+            content: const Text('سيغلق Homi Grocery مؤقتًا، وقد يطلب Windows تأكيد UAC. بعد التحديث سيختبر التطبيق تشغيل النسخة الجديدة ويسترجع النسخة السابقة تلقائيًا إذا فشل الفحص.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('متابعة التحديث'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
         await WindowsUpdateLauncher().launch(package: file, sha256: manifest.sha256);
         exit(0);
       }
