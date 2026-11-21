@@ -671,6 +671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
 
+                    if (defaultTargetPlatform == TargetPlatform.android) ...[
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
@@ -710,6 +711,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    ],
                   ],
                   Card(
                     child: Padding(
