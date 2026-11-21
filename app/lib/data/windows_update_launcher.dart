@@ -14,6 +14,9 @@ class WindowsUpdateLauncher {
     if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(sha256)) {
       throw const FormatException('بصمة SHA-256 غير صالحة.');
     }
+    if (!package.path.toLowerCase().endsWith('.zip')) {
+      throw const FormatException('حزمة تحديث Windows يجب أن تكون ZIP.');
+    }
     if (!await package.exists() || await package.length() < 1) {
       throw const FormatException('حزمة تحديث Windows غير موجودة أو فارغة.');
     }
