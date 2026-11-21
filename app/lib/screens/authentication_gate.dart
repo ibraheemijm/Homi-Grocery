@@ -105,19 +105,24 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   Future<void> _activateUser(AuthUser user) async {
     final deviceLink = widget.platformDeviceLinkService;
     if (deviceLink != null) {
-      final license = await deviceLink.readLinkedLicense();
-      if (license == null) {
-        if (!user.isManager) {
-          if (mounted) {
-            setState(() {
-              _cashierNeedsManagerLink = true;
-              _pendingDeviceLinkUser = null;
-              _user = null;
-              _shift = null;
-            });
-          }
-          return;
+      var license = await deviceLink.readLinkedLicense();
+      if (license == null && !user.isManager) {
+        if (mounted) {
+          setState(() {
+            _cashierNeedsManagerLink = true;
+            _pendingDeviceLinkUser = null;
+            _user = null;
+            _shift = null;
+          });
         }
+        return;
+      }
+      // لا تبدأ مدة التجربة عند محاولة دخول كاشير قبل إعداد المدير؛
+      // يبدأ العد عند أول دخول فعلي للمدير إلى مساحة العمل.
+      if (license == null) {
+        license = await deviceLink.startLocalTrial();
+      }
+      if (license == null) {
         if (mounted) {
           setState(() {
             _pendingDeviceLinkUser = user;
