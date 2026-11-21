@@ -76,6 +76,40 @@ void main() {
   });
 
 
+  test('يقبل استجابة Worker المباشرة دون غلاف success/data', () async {
+    final transport = FakeTransport(const PlatformHttpResponse(
+      statusCode: 200,
+      body: '{"available":false,"source":"worker"}',
+    ));
+    final api = PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: transport,
+    );
+
+    final result = await api.getJson('/api/v1/updates/check');
+
+    expect(result['available'], isFalse);
+    expect(result['source'], 'worker');
+  });
+
+  test('يقرأ أخطاء Worker المباشرة ويحافظ على رمز الخطأ', () async {
+    final transport = FakeTransport(const PlatformHttpResponse(
+      statusCode: 403,
+      body: '{"error":{"code":"LICENSE_NOT_ACTIVE","message":"License is not active."}}',
+    ));
+    final api = PlatformApiClient(
+      baseUri: Uri.parse('https://platform.example.test'),
+      transport: transport,
+    );
+
+    await expectLater(
+      api.getJson('/api/v1/updates/check'),
+      throwsA(isA<PlatformApiException>()
+          .having((error) => error.code, 'code', 'LICENSE_NOT_ACTIVE')
+          .having((error) => error.statusCode, 'status', 403)),
+    );
+  });
+
   test('لا يتبع تحويلات HTTP إلى وجهة أخرى', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var requestCount = 0;
