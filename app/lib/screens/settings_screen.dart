@@ -297,7 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _installPendingUpdate() async {
-    final file = _pendingAndroidApk;
+    final file = _pendingUpdatePackage;
     if (file == null || _checkingUpdate) return;
     final manifest = _pendingUpdateManifest;
     if (manifest == null) return;
@@ -705,16 +705,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
-                              onPressed: _checkingUpdate ? null : _checkForAndroidUpdate,
+                              onPressed: _checkingUpdate ? null : _checkForPlatformUpdate,
                               icon: _checkingUpdate
                                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                                   : const Icon(Icons.system_update_alt_rounded),
                               label: Text(_checkingUpdate ? 'جارٍ فحص التحديث...' : 'فحص التحديثات'),
                             ),
-                            if (_pendingAndroidApk != null) ...[
+                            if (_pendingUpdatePackage != null) ...[
                               const SizedBox(height: 8),
                               FilledButton.icon(
-                                onPressed: _checkingUpdate ? null : _installPendingAndroidUpdate,
+                                onPressed: _checkingUpdate ? null : _installPendingUpdate,
                                 icon: const Icon(Icons.install_mobile_rounded),
                                 label: const Text('تثبيت التحديث الجاهز'),
                               ),
