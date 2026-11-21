@@ -105,6 +105,7 @@ abstract interface class PlatformDeviceLinkOperations {
   Future<PlatformDeviceLinkStatus> completePendingActivation();
   Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes);
   Future<PlatformLinkedLicense?> readLinkedLicense();
+  Future<PlatformLinkedLicense?> startLocalTrial();
   Future<PlatformLinkedLicense?> refreshOfflineGrant();
   Future<PlatformLinkedLicense?> readOfflineGrant();
 }
@@ -150,6 +151,18 @@ class UnavailablePlatformDeviceLinkService
 
   @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
+
+  @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async => null;
+
+  @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async {
+    final storedLicense = await _store.read(_licenseKey);
+    if (storedLicense != null && storedLicense.isNotEmpty) {
+      return readLinkedLicense();
+    }
+    return _readOrStartLocalTrial();
+  }
 
   @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
@@ -647,7 +660,11 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async {
     final stored = await _store.read(_licenseKey);
-    if (stored == null || stored.isEmpty) return _readOrStartLocalTrial();
+    if (stored == null || stored.isEmpty) {
+      final trial = await _store.read(_localTrialKey);
+      if (trial == null || trial.isEmpty) return null;
+      return _readOrStartLocalTrial();
+    }
     try {
       final decoded = jsonDecode(stored);
       if (decoded is! Map<String, dynamic>) {
