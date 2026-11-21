@@ -537,4 +537,43 @@ void main() {
     expect(transport.requests[4].headers.containsKey('authorization'), isFalse);
     expect(await service.readOfflineGrant(), isNotNull);
   });
+
+  test('يبدأ تجربة محلية لمدة 14 يومًا عند أول استخدام وتعمل دون اتصال', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, platformOverride: () => 'linux');
+    var now = DateTime.utc(2026, 11, 21, 10);
+    final transport = QueueTransport([]);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {},
+      clock: () => now,
+    );
+
+    final first = await service.readLinkedLicense();
+    expect(first, isNotNull);
+    expect(first!.planKey, 'trial');
+    expect(first.startsAt, now);
+    expect(first.trialEndsAt, now.add(const Duration(days: 14)));
+    expect(first.offlineExpiresAt, now.add(const Duration(days: 14)));
+    expect(first.signedPayload, isEmpty);
+
+    now = now.add(const Duration(days: 5));
+    final second = await service.readLinkedLicense();
+    expect(second!.licenseId, first.licenseId);
+    expect(second.startsAt, first.startsAt);
+    expect(second.trialEndsAt, first.trialEndsAt);
+    expect(await service.refreshOfflineGrant(), isNotNull);
+    expect(transport.requests, isEmpty);
+
+    now = now.subtract(const Duration(days: 6));
+    final rollback = await service.readLinkedLicense();
+    expect(rollback!.offlineExpiresAt, now);
+    expect(rollback.trialEndsAt, first.trialEndsAt);
+  });
+
 }
