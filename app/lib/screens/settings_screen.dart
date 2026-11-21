@@ -16,6 +16,7 @@ import '../data/platform_device_identity.dart';
 import '../data/platform_signing_trust.dart';
 import '../data/platform_update_service.dart';
 import '../data/android_apk_installer.dart';
+import '../data/windows_update_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -44,7 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _importingFont = false;
   bool _importingLicense = false;
   bool _checkingUpdate = false;
-  File? _pendingAndroidApk;
+  File? _pendingUpdatePackage;
+  VerifiedPlatformUpdateManifest? _pendingUpdateManifest;
   String? _updateMessage;
   bool _occasionEnabled = false;
   DateTime _systemStartDate = DateTime(DateTime.now().year, 1, 1);
@@ -176,12 +178,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
 
-  Future<void> _checkForAndroidUpdate() async {
+  Future<void> _checkForPlatformUpdate() async {
     if (_checkingUpdate) return;
     setState(() {
       _checkingUpdate = true;
       _updateMessage = 'جارٍ فحص إصدار Homi والتحقق من مفاتيح التوقيع...';
-      _pendingAndroidApk = null;
+      _pendingUpdatePackage = null;
+      _pendingUpdateManifest = null;
     });
     PlatformApiClient? api;
     try {
@@ -192,8 +195,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final linkedLicense = await linkService.readLinkedLicense();
       final store = FlutterPlatformSecretStore();
       final identity = await PlatformDeviceIdentity(store).loadOrCreate();
-      final installer = AndroidApkInstaller();
-      final currentVersionCode = await installer.installedVersionCode();
+      final platform = identity.platform;
+      if (platform != 'android' && platform != 'windows') {
+        throw UnsupportedError('فحص التحديث متاح حاليًا على Android وWindows.');
+      }
+      final currentVersionCode = platform == 'android'
+          ? await AndroidApkInstaller().installedVersionCode()
+          : const int.fromEnvironment('HOMI_BUILD_NUMBER', defaultValue: 1);
 
       api = PlatformApiClient.fromEnvironment();
       final updates = PlatformUpdateService(
@@ -207,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final update = await updates.checkForUpdate(
         accessToken: '',
         productKey: productKey,
-        platform: 'android',
+        platform: platform,
         architecture: identity.architecture,
         channel: channel,
         currentVersionCode: currentVersionCode,
@@ -225,7 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         licenseId: licenseId,
         deviceId: deviceId,
         productKey: productKey,
-        platform: 'android',
+        platform: platform,
         architecture: identity.architecture,
         channel: channel,
       );
@@ -287,11 +295,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _installPendingAndroidUpdate() async {
+  Future<void> _installPendingUpdate() async {
     final file = _pendingAndroidApk;
     if (file == null || _checkingUpdate) return;
-    final installer = AndroidApkInstaller();
+    final manifest = _pendingUpdateManifest;
+    if (manifest == null) return;
     try {
+      if (Platform.isWindows) {
+        await WindowsUpdateLauncher().launch(package: file, sha256: manifest.sha256);
+        exit(0);
+      }
+      final installer = AndroidApkInstaller();
       final canInstall = await installer.canRequestPackageInstalls();
       if (!mounted) return;
       if (!canInstall) {
@@ -673,7 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
 
-                    if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.windows) ...[
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
@@ -686,7 +700,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'يفحص التطبيق الإصدارات المنشورة، ويتحقق من توقيع manifest وحجم الحزمة وبصمة SHA-256 قبل إتاحة التثبيت. يتطلب تثبيت APK موافقتك عبر مثبت Android الرسمي.',
+                              'يفحص التطبيق الإصدارات المنشورة، ويتحقق من توقيع manifest وحجم الحزمة وبصمة SHA-256. على Android يفتح مثبت النظام، وعلى Windows يستخدم منسق التحديث الرسمي مع فحص صحة التشغيل والاسترجاع عند الفشل.',
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
