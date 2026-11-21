@@ -56,6 +56,9 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
   Future<PlatformLinkedLicense?> readLinkedLicense() async => null;
 
   @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async => null;
+
+  @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async => null;
 
   @override
