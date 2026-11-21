@@ -69,6 +69,7 @@ class PlatformLinkedLicense {
     required this.signedPayload,
     required this.signature,
     required this.publicKeyDer,
+    this.isLocalTrial = false,
   });
 
   final String licenseId;
@@ -86,6 +87,7 @@ class PlatformLinkedLicense {
   final List<int> signedPayload;
   final List<int> signature;
   final List<int> publicKeyDer;
+  final bool isLocalTrial;
 }
 
 abstract interface class PlatformDeviceLinkOperations {
@@ -645,6 +647,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
       signedPayload: const [],
       signature: const [],
       publicKeyDer: identity.publicKeyDer,
+      isLocalTrial: true,
     );
   }
 
@@ -699,7 +702,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }
     final license = await readLinkedLicense();
     if (license == null) return null;
-    if (license.planKey == 'trial') return license;
+    if (license.isLocalTrial) return license;
 
     try {
       final challenge = await _api.postJson(
