@@ -25,7 +25,12 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
   PlatformLinkedLicense? grant;
 
   @override
-  Future<PlatformActivationRequest> requestActivation() async =>
+  Future<PlatformActivationRequest> requestActivation({
+    String? customerName,
+    String? customerPhone,
+    String? requestedPlan,
+    String? customerNotes,
+  }) async =>
       PlatformActivationRequest(
         requestId: '123e4567-e89b-42d3-a456-426614174000',
         keyFingerprint: List.filled(64, 'a').join(),
@@ -33,6 +38,17 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
         architecture: 'arm64-v8a',
         challengeExpiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
       );
+
+  @override
+  Future<PlatformActivationRequestFile> createActivationRequestFile({
+    required String customerName,
+    required String customerPhone,
+    required String requestedPlan,
+    String? customerNotes,
+  }) async => const PlatformActivationRequestFile(
+    requestId: '123e4567-e89b-42d3-a456-426614174000',
+    bytes: [],
+  );
 
   @override
   Future<PlatformActivationRequest?> readPendingActivationRequest() async => null;
