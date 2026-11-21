@@ -233,14 +233,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final approved = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('تحديث Homi ' + manifest.version),
+          title: Text('تحديث Homi ${manifest.version}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('رقم البناء: ' + manifest.versionCode.toString()),
-                Text('حجم الملف: ' + (manifest.sizeBytes / (1024 * 1024)).toStringAsFixed(1) + ' MB'),
+                Text('رقم البناء: ${manifest.versionCode}'),
+                Text('حجم الملف: ${(manifest.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'),
                 const SizedBox(height: 12),
                 Text(manifest.releaseNotes?.trim().isNotEmpty == true
                     ? manifest.releaseNotes!
@@ -292,7 +292,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (file == null || _checkingUpdate) return;
     final installer = AndroidApkInstaller();
     try {
-      if (!await installer.canRequestPackageInstalls()) {
+      final canInstall = await installer.canRequestPackageInstalls();
+      if (!mounted) return;
+      if (!canInstall) {
         final openSettings = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
@@ -318,7 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _updateMessage = 'تم فتح مثبت Android الرسمي. أكمل التثبيت من شاشة النظام؛ لا يثبت Homi التحديث بصمت.');
       }
     } catch (error) {
-      if (mounted) setState(() => _updateMessage = 'تعذر فتح مثبت Android: ' + error.toString());
+      if (mounted) setState(() => _updateMessage = 'تعذر فتح مثبت Android: $error');
     }
   }
 
