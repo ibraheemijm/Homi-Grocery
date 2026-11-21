@@ -282,7 +282,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _pendingAndroidApk = file;
+        _pendingUpdatePackage = file;
+        _pendingUpdateManifest = manifest;
         _updateMessage = 'تم تنزيل التحديث والتحقق من توقيعه وبصمته. اضغط تثبيت التحديث للمتابعة.';
       });
     } catch (error) {
