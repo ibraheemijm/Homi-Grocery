@@ -156,15 +156,6 @@ class UnavailablePlatformDeviceLinkService
   Future<PlatformLinkedLicense?> startLocalTrial() async => null;
 
   @override
-  Future<PlatformLinkedLicense?> startLocalTrial() async {
-    final storedLicense = await _store.read(_licenseKey);
-    if (storedLicense != null && storedLicense.isNotEmpty) {
-      return readLinkedLicense();
-    }
-    return _readOrStartLocalTrial();
-  }
-
-  @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
     throw PlatformApiConfigurationException(reason);
   }
@@ -688,6 +679,15 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
       // لا نعيد إنشاء هوية أو ترخيص عند تلف السجل؛ نوقف التشغيل الآمن.
       rethrow;
     }
+  }
+
+  @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async {
+    final storedLicense = await _store.read(_licenseKey);
+    if (storedLicense != null && storedLicense.isNotEmpty) {
+      return readLinkedLicense();
+    }
+    return _readOrStartLocalTrial();
   }
 
   @override
