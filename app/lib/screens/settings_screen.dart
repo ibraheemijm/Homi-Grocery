@@ -279,7 +279,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     } catch (error) {
       if (mounted) {
-        setState(() => _updateMessage = 'تعذر فحص أو تنزيل التحديث: ' + error.toString());
+        setState(() => _updateMessage = 'تعذر فحص أو تنزيل التحديث: $error');
       }
     } finally {
       api?.close();
