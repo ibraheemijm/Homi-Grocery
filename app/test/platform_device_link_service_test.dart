@@ -554,7 +554,8 @@ void main() {
       clock: () => now,
     );
 
-    final first = await service.readLinkedLicense();
+    expect(await service.readLinkedLicense(), isNull);
+    final first = await service.startLocalTrial();
     expect(first, isNotNull);
     expect(first!.planKey, 'trial');
     expect(first.startsAt, now);
