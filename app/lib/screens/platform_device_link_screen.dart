@@ -77,7 +77,15 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       final customerName = _customerNameController.text.trim();
       final customerPhone = _customerPhoneController.text.trim();
       if (customerName.length < 2 ||
-          !RegExp(r'^\+[1-9][0-9]{7,14}
+          !RegExp(r'^[+][1-9][0-9]{7,14}$').hasMatch(customerPhone)) {
+        throw const FormatException('أدخل اسم العميل ورقم هاتف صحيحًا بصيغة دولية.');
+      }
+      final request = await widget.service.requestActivation(
+        customerName: customerName,
+        customerPhone: customerPhone,
+        requestedPlan: _requestedPlan,
+        customerNotes: _customerNotesController.text.trim(),
+      );
       if (!mounted) return;
       setState(() {
         _request = request;
