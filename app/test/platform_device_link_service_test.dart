@@ -151,7 +151,7 @@ void main() {
     );
     expect(
       await Ed25519().verify(
-        utf8.encode('HOMI_HREQ_V1\\n$digest'),
+        utf8.encode('HOMI_HREQ_V1\n$digest'),
         signature: Signature(signature, publicKey: publicKey),
       ),
       isTrue,
