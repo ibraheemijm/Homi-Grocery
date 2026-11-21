@@ -77,7 +77,9 @@ void main() {
     expect(find.text('كلمة المرور'), findsNothing);
     await tester.enterText(find.byType(TextField).at(0), 'متجر الاختبار');
     await tester.enterText(find.byType(TextField).at(1), '+2490904697455');
-    await tester.tap(find.text('إرسال الطلب عبر الإنترنت'));
+    final requestButton = find.text('إرسال الطلب عبر الإنترنت');
+    await tester.ensureVisible(requestButton);
+    await tester.tap(requestButton);
     await tester.pumpAndSettle();
 
     expect(service.requestCalls, 1);
