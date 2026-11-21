@@ -557,24 +557,29 @@ void main() {
     expect(await service.readLinkedLicense(), isNull);
     final first = await service.startLocalTrial();
     expect(first, isNotNull);
-    expect(first!.planKey, 'trial');
-    expect(first.startsAt, now);
-    expect(first.trialEndsAt, now.add(const Duration(days: 14)));
-    expect(first.offlineExpiresAt, now.add(const Duration(days: 14)));
-    expect(first.signedPayload, isEmpty);
+    final trial = first!;
+    expect(trial.planKey, 'trial');
+    expect(trial.startsAt, now);
+    expect(trial.trialEndsAt, now.add(const Duration(days: 14)));
+    expect(trial.offlineExpiresAt, now.add(const Duration(days: 14)));
+    expect(trial.signedPayload, isEmpty);
 
     now = now.add(const Duration(days: 5));
     final second = await service.readLinkedLicense();
-    expect(second!.licenseId, first.licenseId);
-    expect(second.startsAt, first.startsAt);
-    expect(second.trialEndsAt, first.trialEndsAt);
+    expect(second, isNotNull);
+    final continuedTrial = second!;
+    expect(continuedTrial.licenseId, trial.licenseId);
+    expect(continuedTrial.startsAt, trial.startsAt);
+    expect(continuedTrial.trialEndsAt, trial.trialEndsAt);
     expect(await service.refreshOfflineGrant(), isNotNull);
     expect(transport.requests, isEmpty);
 
     now = now.subtract(const Duration(days: 6));
     final rollback = await service.readLinkedLicense();
-    expect(rollback!.offlineExpiresAt, now);
-    expect(rollback.trialEndsAt, first.trialEndsAt);
+    expect(rollback, isNotNull);
+    final rolledBackTrial = rollback!;
+    expect(rolledBackTrial.offlineExpiresAt, now);
+    expect(rolledBackTrial.trialEndsAt, trial.trialEndsAt);
   });
 
 }
