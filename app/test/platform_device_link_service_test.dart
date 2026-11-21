@@ -529,7 +529,8 @@ void main() {
     expect(await service.completePendingActivation(), PlatformDeviceLinkStatus.linked);
     final grant = await service.refreshOfflineGrant();
     expect(grant, isNotNull);
-    expect(grant!.licenseId, licenseId);
+    expect(grant!.isLocalTrial, isFalse);
+    expect(grant.licenseId, licenseId);
     expect(grant.deviceId, deviceId);
     expect(transport.requests[3].uri.path, '/api/v1/public/devices/$deviceId/challenges');
     expect(transport.requests[4].uri.path, '/api/v1/public/licenses/$licenseId/devices/$deviceId/offline-grants');
@@ -559,6 +560,7 @@ void main() {
     expect(first, isNotNull);
     final trial = first!;
     expect(trial.planKey, 'trial');
+    expect(trial.isLocalTrial, isTrue);
     expect(trial.startsAt, now);
     expect(trial.trialEndsAt, now.add(const Duration(days: 14)));
     expect(trial.offlineExpiresAt, now.add(const Duration(days: 14)));
