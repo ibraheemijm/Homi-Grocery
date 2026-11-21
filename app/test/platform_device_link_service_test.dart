@@ -82,13 +82,22 @@ void main() {
       trustedPublicKeys: {},
     );
 
-    final activation = await service.requestActivation();
+    final activation = await service.requestActivation(
+      customerName: 'متجر الاختبار',
+      customerPhone: '+2490904697455',
+      requestedPlan: 'annual',
+      customerNotes: 'ملاحظة',
+    );
     final request = transport.requests.single;
     expect(request.method, 'POST');
     expect(request.uri.path, '/api/v1/public/activation-requests');
     final body = jsonDecode(request.body!) as Map<String, dynamic>;
     expect(body['product_key'], 'homi-grocery');
     expect(body['device_id'], identityData.deviceKey);
+    expect(body['customer_name'], 'متجر الاختبار');
+    expect(body['customer_phone'], '+2490904697455');
+    expect(body['requested_plan'], 'annual');
+    expect(body['customer_notes'], 'ملاحظة');
     expect(body['platform_key'], 'linux');
     expect(body['architecture_key'], isNotEmpty);
     expect(body['public_key'], identityData.publicKeyRawBase64Url);
