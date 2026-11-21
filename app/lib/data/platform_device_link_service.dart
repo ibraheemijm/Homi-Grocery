@@ -188,7 +188,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   static const _trustedKeysEnvironmentBase64 =
       String.fromEnvironment('HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64');
   static const _appVersion =
-      String.fromEnvironment('HOMI_APP_VERSION', defaultValue: '0.1.0');
+      String.fromEnvironment('HOMI_APP_VERSION', defaultValue: '1.0.0');
   static const _buildNumber =
       String.fromEnvironment('HOMI_BUILD_NUMBER', defaultValue: '1');
   static const _spkiPrefix = <int>[
