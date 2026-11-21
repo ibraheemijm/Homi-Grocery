@@ -119,9 +119,7 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
       }
       // لا تبدأ مدة التجربة عند محاولة دخول كاشير قبل إعداد المدير؛
       // يبدأ العد عند أول دخول فعلي للمدير إلى مساحة العمل.
-      if (license == null) {
-        license = await deviceLink.startLocalTrial();
-      }
+      license ??= await deviceLink.startLocalTrial();
       if (license == null) {
         if (mounted) {
           setState(() {
