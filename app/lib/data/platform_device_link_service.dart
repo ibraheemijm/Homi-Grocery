@@ -185,6 +185,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
   static const _pendingKey = 'homi_platform_pending_device_link_v1';
   static const _licenseKey = 'homi_platform_signed_license_v1';
   static const _offlineGrantKey = 'homi_platform_signed_offline_grant_v1';
+  static const _localTrialKey = 'homi_platform_local_trial_v1';
   static const _trustedKeysEnvironmentBase64 =
       String.fromEnvironment('HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64');
   static const _appVersion =
@@ -563,10 +564,90 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     return verified;
   }
 
+  Future<PlatformLinkedLicense> _readOrStartLocalTrial() async {
+    final identity = await _deviceIdentity.loadOrCreate();
+    final now = _clock().toUtc();
+    final stored = await _store.read(_localTrialKey);
+    late final String licenseId;
+    late final DateTime startedAt;
+    late final DateTime lastSeenAt;
+    var clockRollbackDetected = false;
+
+    if (stored == null || stored.isEmpty) {
+      startedAt = now;
+      lastSeenAt = now;
+      final digest = crypto.sha256
+          .convert(utf8.encode('homi-local-trial-v1:${identity.deviceKey}:${now.toIso8601String()}'))
+          .bytes
+          .take(16)
+          .toList();
+      digest[6] = (digest[6] & 0x0f) | 0x40;
+      digest[8] = (digest[8] & 0x3f) | 0x80;
+      final hex = digest.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+      licenseId = '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
+      await _store.write(_localTrialKey, jsonEncode({
+        'version': 1,
+        'license_id': licenseId,
+        'device_id': identity.deviceKey,
+        'started_at': startedAt.toIso8601String(),
+        'last_seen_at': lastSeenAt.toIso8601String(),
+      }));
+    } else {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['version'] != 1 ||
+          decoded['license_id'] is! String ||
+          decoded['device_id'] != identity.deviceKey ||
+          decoded['started_at'] is! String ||
+          decoded['last_seen_at'] is! String) {
+        throw const FormatException('سجل الفترة التجريبية المحلية تالف أو لا يطابق هذا الجهاز.');
+      }
+      final parsedStart = DateTime.tryParse(decoded['started_at'] as String);
+      final parsedLastSeen = DateTime.tryParse(decoded['last_seen_at'] as String);
+      if (parsedStart == null || parsedLastSeen == null) {
+        throw const FormatException('تواريخ الفترة التجريبية المحلية غير صالحة.');
+      }
+      licenseId = decoded['license_id'] as String;
+      startedAt = parsedStart.toUtc();
+      lastSeenAt = parsedLastSeen.toUtc();
+      clockRollbackDetected = now.isBefore(lastSeenAt);
+      if (!clockRollbackDetected) {
+        await _store.write(_localTrialKey, jsonEncode({
+          'version': 1,
+          'license_id': licenseId,
+          'device_id': identity.deviceKey,
+          'started_at': startedAt.toIso8601String(),
+          'last_seen_at': now.toIso8601String(),
+        }));
+      }
+    }
+
+    const trialDuration = Duration(days: 14);
+    final trialEndsAt = startedAt.add(trialDuration);
+    final offlineExpiresAt = clockRollbackDetected ? now : trialEndsAt;
+    return PlatformLinkedLicense(
+      licenseId: licenseId,
+      deviceId: identity.deviceKey,
+      keyId: 'local-trial-v1',
+      startsAt: startedAt,
+      endsAt: trialEndsAt,
+      trialEndsAt: trialEndsAt,
+      subscriptionEndsAt: null,
+      offlineExpiresAt: offlineExpiresAt,
+      graceEndsAt: null,
+      accessPolicy: 'full_until_offline_expiry_or_trial_end_then_read_export',
+      planKey: 'trial',
+      entitlementVersion: 1,
+      signedPayload: const [],
+      signature: const [],
+      publicKeyDer: identity.publicKeyDer,
+    );
+  }
+
   @override
   Future<PlatformLinkedLicense?> readLinkedLicense() async {
     final stored = await _store.read(_licenseKey);
-    if (stored == null || stored.isEmpty) return null;
+    if (stored == null || stored.isEmpty) return _readOrStartLocalTrial();
     try {
       final decoded = jsonDecode(stored);
       if (decoded is! Map<String, dynamic>) {
@@ -601,6 +682,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }
     final license = await readLinkedLicense();
     if (license == null) return null;
+    if (license.planKey == 'trial') return license;
 
     try {
       final challenge = await _api.postJson(
@@ -887,7 +969,7 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
               'full_until_offline_expiry_or_trial_end_then_read_export' ||
           !offlineExpiresAt.isAfter(issuedUtc) ||
           offlineExpiresAt.isAfter(
-            issuedUtc.add(const Duration(days: 7)),
+            issuedUtc.add(const Duration(days: 14)),
           ) ||
           offlineExpiresAt.isAfter(trialEndsAt)) {
         throw const FormatException('سياسة العمل دون اتصال للتجربة غير صالحة.');
