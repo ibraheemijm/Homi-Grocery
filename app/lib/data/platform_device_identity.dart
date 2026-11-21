@@ -76,6 +76,8 @@ class PlatformDeviceIdentity {
   _StoredDeviceIdentity? _cachedIdentity;
   Future<_StoredDeviceIdentity>? _openingIdentity;
 
+  String createRequestId() => _createUuid();
+
   Future<PlatformDeviceIdentityData> loadOrCreate() async {
     final platform = _supportedPlatform();
     final stored = await _readOrCreate();
