@@ -10,7 +10,12 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
   PlatformActivationRequest? pending;
 
   @override
-  Future<PlatformActivationRequest> requestActivation() async {
+  Future<PlatformActivationRequest> requestActivation({
+    String? customerName,
+    String? customerPhone,
+    String? requestedPlan,
+    String? customerNotes,
+  }) async {
     requestCalls++;
     pending = PlatformActivationRequest(
       requestId: '123e4567-e89b-42d3-a456-426614174000',
@@ -21,6 +26,17 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
     );
     return pending!;
   }
+
+  @override
+  Future<PlatformActivationRequestFile> createActivationRequestFile({
+    required String customerName,
+    required String customerPhone,
+    required String requestedPlan,
+    String? customerNotes,
+  }) async => PlatformActivationRequestFile(
+    requestId: '123e4567-e89b-42d3-a456-426614174001',
+    bytes: const [1, 2, 3],
+  );
 
   @override
   Future<PlatformActivationRequest?> readPendingActivationRequest() async => pending;
@@ -53,18 +69,23 @@ void main() {
       home: PlatformDeviceLinkScreen(service: service),
     ));
 
-    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.text('اسم العميل أو المتجر'), findsOneWidget);
+    expect(find.text('رقم الهاتف الدولي'), findsOneWidget);
     expect(find.text('استيراد ملف الترخيص (.hlic)'), findsOneWidget);
     expect(find.textContaining('بريد إلكتروني'), findsOneWidget);
     expect(find.text('كلمة المرور'), findsNothing);
-    await tester.tap(find.text('إنشاء طلب تفعيل'));
+    await tester.enterText(find.byType(TextField).at(0), 'متجر الاختبار');
+    await tester.enterText(find.byType(TextField).at(1), '+2490904697455');
+    await tester.tap(find.text('إرسال الطلب عبر الإنترنت'));
     await tester.pumpAndSettle();
 
     expect(service.requestCalls, 1);
     expect(find.text('رقم الطلب'), findsOneWidget);
     expect(find.text('بصمة الجهاز'), findsOneWidget);
     expect(find.text('نسخ بيانات طلب التفعيل'), findsOneWidget);
-    expect(find.text('مشاركة الطلب (اختر WhatsApp)'), findsOneWidget);
+    expect(find.text('مشاركة ملخص الطلب'), findsOneWidget);
+    expect(find.text('+249 090 469 7455'), findsOneWidget);
     expect(find.text('إثبات ملكية الجهاز والتحقق'), findsOneWidget);
   });
 
@@ -83,7 +104,9 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('إنشاء طلب تفعيل'));
+    await tester.enterText(find.byType(TextField).at(0), 'متجر الاختبار');
+    await tester.enterText(find.byType(TextField).at(1), '+2490904697455');
+    await tester.tap(find.text('إرسال الطلب عبر الإنترنت'));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('إثبات ملكية الجهاز والتحقق'));
