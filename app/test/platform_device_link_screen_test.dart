@@ -33,7 +33,7 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
     required String customerPhone,
     required String requestedPlan,
     String? customerNotes,
-  }) async => PlatformActivationRequestFile(
+  }) async => const PlatformActivationRequestFile(
     requestId: '123e4567-e89b-42d3-a456-426614174001',
     bytes: const [1, 2, 3],
   );
