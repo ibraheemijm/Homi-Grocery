@@ -88,6 +88,7 @@ void main() {
     expect(request.uri.path, '/api/v1/public/activation-requests');
     final body = jsonDecode(request.body!) as Map<String, dynamic>;
     expect(body['product_key'], 'homi-grocery');
+    expect(body['device_id'], identityData.deviceKey);
     expect(body['platform_key'], 'linux');
     expect(body['architecture_key'], isNotEmpty);
     expect(body['public_key'], identityData.publicKeyRawBase64Url);
@@ -99,6 +100,62 @@ void main() {
     expect(activation.keyFingerprint, _fingerprint(identityData));
     expect(activation.supportWhatsApp, '249900000000');
     expect(store.values['homi_platform_pending_device_link_v1'], contains('request_id'));
+  });
+
+  test('ينشئ ملف HREQ موقعًا بمفتاح الجهاز ويحتوي بيانات العميل المطلوبة', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, platformOverride: () => 'linux');
+    final identityData = await identity.loadOrCreate();
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: QueueTransport([]),
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {},
+    );
+
+    final requestFile = await service.createActivationRequestFile(
+      customerName: 'متجر الاختبار',
+      customerPhone: '+2490904697455',
+      requestedPlan: 'annual',
+      customerNotes: 'ملاحظة اختبار',
+    );
+    final envelope = jsonDecode(utf8.decode(requestFile.bytes)) as Map<String, dynamic>;
+    expect(envelope['format'], 'HOMI_ACTIVATION_REQUEST');
+    expect(envelope['format_version'], 1);
+
+    final payloadBytes = base64Url.decode(
+      base64Url.normalize(envelope['payload'] as String),
+    );
+    final payload = jsonDecode(utf8.decode(payloadBytes)) as Map<String, dynamic>;
+    expect(payload['request_id'], requestFile.requestId);
+    expect(payload['product_key'], 'homi-grocery');
+    expect(payload['customer']['display_name'], 'متجر الاختبار');
+    expect(payload['customer']['phone'], '+2490904697455');
+    expect(payload['customer']['requested_plan'], 'annual');
+    expect(payload['device']['device_id'], identityData.deviceKey);
+    expect(payload['device']['public_key'], identityData.publicKeyRawBase64Url);
+    expect(payload['device']['key_fingerprint'], _fingerprint(identityData));
+    expect(payload.containsKey('email'), isFalse);
+    expect(payload.containsKey('password'), isFalse);
+
+    final digest = crypto.sha256.convert(payloadBytes).toString();
+    final signature = base64Url.decode(
+      base64Url.normalize(envelope['signature'] as String),
+    );
+    final publicKey = SimplePublicKey(
+      base64Url.decode(base64Url.normalize(identityData.publicKeyRawBase64Url)),
+      type: KeyPairType.ed25519,
+    );
+    expect(
+      await Ed25519().verify(
+        utf8.encode('HOMI_HREQ_V1\\n$digest'),
+        signature: Signature(signature, publicKey: publicKey),
+      ),
+      isTrue,
+    );
   });
 
   test('يوقع التحدي بصيغة البروتوكول ويرجع انتظار مراجعة الإدارة', () async {
