@@ -35,7 +35,7 @@ class FakeDeviceLinkOperations implements PlatformDeviceLinkOperations {
     String? customerNotes,
   }) async => const PlatformActivationRequestFile(
     requestId: '123e4567-e89b-42d3-a456-426614174001',
-    bytes: const [1, 2, 3],
+    bytes: [1, 2, 3],
   );
 
   @override
