@@ -155,7 +155,7 @@ jobs:
       - name: Run tests
         run: flutter test
       - name: Build Android debug APK
-        run: flutter build apk --debug --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }}
+        run: flutter build apk --debug --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }} --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=${{ vars.HOMI_PLATFORM_ROOT_KEY_ID }} --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=${{ vars.HOMI_PLATFORM_ROOT_PUBLIC_KEY }}
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
