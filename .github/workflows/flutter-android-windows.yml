@@ -51,7 +51,17 @@ jobs:
       - name: Run tests
         run: flutter test
       - name: Build Windows desktop
-        run: flutter build windows --release --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }}
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)'
+          if (-not $versionLine) {
+            throw "تعذر قراءة إصدار التطبيق من pubspec.yaml."
+          }
+          $fullVersion = $versionLine.Matches[0].Groups[1].Value
+          $versionParts = $fullVersion.Split('+')
+          $version = $versionParts[0]
+          $buildNumber = if ($versionParts.Length -gt 1) { $versionParts[1] } else { "1" }
+          flutter build windows --release --build-name=$version --build-number=$buildNumber --dart-define=HOMI_BUILD_NUMBER=$buildNumber --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }} --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=${{ vars.HOMI_PLATFORM_ROOT_KEY_ID }} --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=${{ vars.HOMI_PLATFORM_ROOT_PUBLIC_KEY }}
       - name: Build standalone Windows updater
         shell: pwsh
         run: |
