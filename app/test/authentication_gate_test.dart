@@ -65,6 +65,9 @@ class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
   Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
 
   @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async => null;
+
+  @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async => grant ?? license;
 
   @override
