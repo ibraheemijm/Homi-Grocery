@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +12,7 @@ class PlatformDeviceLinkScreen extends StatefulWidget {
   const PlatformDeviceLinkScreen({
     required this.service,
     this.onLinked,
-    this.websiteBaseUrl = '',
+    this.websiteBaseUrl = const String.fromEnvironment('HOMI_WEBSITE_BASE_URL'),
     super.key,
   });
 
@@ -29,11 +31,23 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
   bool _proofVerified = false;
   bool _completed = false;
   String? _message;
+  final _customerNameController = TextEditingController();
+  final _customerPhoneController = TextEditingController();
+  final _customerNotesController = TextEditingController();
+  String _requestedPlan = 'monthly';
 
   @override
   void initState() {
     super.initState();
     _loadPendingRequest();
+  }
+
+  @override
+  void dispose() {
+    _customerNameController.dispose();
+    _customerPhoneController.dispose();
+    _customerNotesController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPendingRequest() async {
@@ -60,12 +74,23 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       _proofVerified = false;
     });
     try {
-      final request = await widget.service.requestActivation();
+      final customerName = _customerNameController.text.trim();
+      final customerPhone = _customerPhoneController.text.trim();
+      if (customerName.length < 2 ||
+          !RegExp(r'^[+][1-9][0-9]{7,14}$').hasMatch(customerPhone)) {
+        throw const FormatException('أدخل اسم العميل ورقم هاتف صحيحًا بصيغة دولية.');
+      }
+      final request = await widget.service.requestActivation(
+        customerName: customerName,
+        customerPhone: customerPhone,
+        requestedPlan: _requestedPlan,
+        customerNotes: _customerNotesController.text.trim(),
+      );
       if (!mounted) return;
       setState(() {
         _request = request;
         _message =
-            'تم إنشاء الطلب. أكمل إثبات ملكية الجهاز، ثم أرسل بيانات الطلب إلى إدارة Homi عبر WhatsApp.';
+            'تم إنشاء الطلب وإرسال بيانات العميل والجهاز إلى المنصة. أكمل إثبات الملكية، ثم تابع الحالة من موقع Homi.';
       });
     } catch (error) {
       if (mounted) setState(() => _message = _friendlyError(error));
@@ -119,7 +144,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
           setState(() {
             _proofVerified = true;
             _message =
-                'تم إثبات امتلاك الجهاز بنجاح. أرسل رقم الطلب وبصمة الجهاز إلى إدارة Homi لمراجعتهما.';
+                'تم إثبات امتلاك الجهاز بنجاح. أصبح الطلب جاهزًا لمراجعة إدارة Homi.';
           });
           break;
         case PlatformDeviceLinkStatus.licensePending:
@@ -171,14 +196,74 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
 
   Future<void> _shareRequest() async {
     if (_supportMessage.isEmpty) return;
-    final number = _request?.supportWhatsApp;
-    if (number != null && number.isNotEmpty) {
-      final uri = Uri.https('wa.me', '/$number', {'text': _supportMessage});
-      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
-    }
     await Share.share(
       _supportMessage,
-      subject: 'طلب تفعيل Homi Grocery',
+      subject: 'ملخص طلب تفعيل Homi Grocery',
+    );
+  }
+
+  Future<void> _createHreqFile() async {
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+    try {
+      final requestFile = await widget.service.createActivationRequestFile(
+        customerName: _customerNameController.text,
+        customerPhone: _customerPhoneController.text,
+        requestedPlan: _requestedPlan,
+        customerNotes: _customerNotesController.text,
+      );
+      final fileName = 'Homi-Activation-Request-${requestFile.requestId}.hreq';
+      final bytes = Uint8List.fromList(requestFile.bytes);
+      if (Theme.of(context).platform == TargetPlatform.android ||
+          Theme.of(context).platform == TargetPlatform.iOS) {
+        await Share.shareXFiles(
+          [XFile.fromData(
+            bytes,
+            name: fileName,
+            mimeType: 'application/vnd.homi.activation-request+json',
+          )],
+          subject: 'طلب تفعيل Homi Grocery',
+          text: 'ارفع ملف الطلب إلى موقع Homi لإكمال إجراءات التفعيل.',
+        );
+        if (!mounted) return;
+        setState(() => _message = 'تم إنشاء ملف الطلب ${requestFile.requestId} وفتح قائمة المشاركة.');
+      } else {
+        final savedPath = await FilePicker.platform.saveFile(
+          fileName: fileName,
+          bytes: bytes,
+          type: FileType.custom,
+          allowedExtensions: const ['hreq'],
+        );
+        if (!mounted) return;
+        setState(() => _message = savedPath == null
+            ? 'تم إلغاء حفظ ملف الطلب.'
+            : 'تم حفظ ملف الطلب: ${requestFile.requestId}');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _message = _friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _openActivationWebsite() async {
+    final baseUrl = widget.websiteBaseUrl.trim();
+    if (baseUrl.isEmpty) {
+      setState(() => _message = 'رابط موقع Homi غير مضبوط في هذا الإصدار. احفظ ملف .hreq ثم افتح الموقع من المتصفح.');
+      return;
+    }
+    final uri = Uri.parse('${baseUrl.replaceAll(RegExp(r'/+$'), '')}/activation/');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) setState(() => _message = 'تعذر فتح موقع Homi. افتح الرابط يدويًا من المتصفح.');
+    }
+  }
+
+  Future<void> _callSupport() async {
+    await launchUrl(
+      Uri(scheme: 'tel', path: '+2490904697455'),
+      mode: LaunchMode.externalApplication,
     );
   }
 
@@ -250,10 +335,68 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         ),
                         const SizedBox(height: 10),
                         const Text(
-                          'لا تحتاج إلى حساب أو بريد إلكتروني أو كلمة مرور. ينشئ التطبيق طلبًا مرتبطًا بمفتاح هذا الجهاز، ثم ترسل بياناته إلى إدارة Homi عبر WhatsApp لمراجعته.',
+                          'لا تحتاج إلى حساب أو بريد إلكتروني أو كلمة مرور. أدخل بيانات العميل، ثم أرسل طلبًا مباشرًا أو أنشئ ملف .hreq لرفعه عبر موقع Homi.',
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 18),
+                        TextField(
+                          controller: _customerNameController,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'اسم العميل أو المتجر',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _customerPhoneController,
+                          keyboardType: TextInputType.phone,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
+                          decoration: const InputDecoration(
+                            labelText: 'رقم الهاتف الدولي',
+                            hintText: '+249...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          value: _requestedPlan,
+                          decoration: const InputDecoration(
+                            labelText: 'الاشتراك المطلوب',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'monthly', child: Text('شهري — 30 يومًا')),
+                            DropdownMenuItem(value: 'annual', child: Text('سنوي — 365 يومًا')),
+                            DropdownMenuItem(value: 'lifetime', child: Text('دائم')),
+                          ],
+                          onChanged: _working ? null : (value) {
+                            if (value != null) setState(() => _requestedPlan = value);
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _customerNotesController,
+                          maxLength: 500,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'ملاحظات (اختياري)',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _working ? null : _createHreqFile,
+                          icon: const Icon(Icons.file_upload_outlined),
+                          label: const Text('إنشاء ملف طلب التفعيل (.hreq)'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _working ? null : _openActivationWebsite,
+                          icon: const Icon(Icons.language),
+                          label: const Text('فتح موقع Homi لرفع الطلب'),
+                        ),
+                        const SizedBox(height: 12),
                         OutlinedButton.icon(
                           onPressed: _working ? null : _importLicenseFile,
                           icon: const Icon(Icons.file_open_outlined),
@@ -263,7 +406,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                         FilledButton.icon(
                           onPressed: _working || _completed || _proofVerified ? null : _requestActivation,
                           icon: const Icon(Icons.add_link),
-                          label: Text(request == null ? 'إنشاء طلب تفعيل' : 'تجديد تحدي إثبات الجهاز'),
+                          label: Text(request == null ? 'إرسال الطلب عبر الإنترنت' : 'تجديد تحدي إثبات الجهاز'),
                         ),
                         if (request != null) ...[
                           const SizedBox(height: 18),
@@ -282,8 +425,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                                 _detail('رقم الطلب', request.requestId),
                                 _detail('المنصة', '${request.platform} · ${request.architecture}'),
                                 _detail('بصمة الجهاز', request.keyFingerprint),
-                                if (request.supportWhatsApp != null)
-                                  _detail('رقم دعم WhatsApp', request.supportWhatsApp!),
+                                _detail('رقم الدعم', '+2490904697455'),
                                 _detail('إثبات الملكية', _proofVerified ? 'مكتمل' : 'بانتظار الإكمال'),
                                 const SizedBox(height: 10),
                                 SelectableText(
@@ -302,9 +444,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                           OutlinedButton.icon(
                             onPressed: _working ? null : _shareRequest,
                             icon: const Icon(Icons.chat),
-                            label: Text(request.supportWhatsApp == null
-                                ? 'مشاركة الطلب (اختر WhatsApp)'
-                                : 'التواصل مع دعم WhatsApp'),
+                            label: const Text('مشاركة ملخص الطلب'),
                           ),
                           const SizedBox(height: 8),
                           FilledButton.icon(
@@ -328,10 +468,22 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                             ),
                           ),
                         ],
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const Text('الدعم الفني', textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const SelectableText('+249 090 469 7455', textAlign: TextAlign.center,
+                            textDirection: TextDirection.ltr),
+                        OutlinedButton.icon(
+                          onPressed: _working ? null : _callSupport,
+                          icon: const Icon(Icons.call_outlined),
+                          label: const Text('اتصال بالدعم'),
+                        ),
                         if (request != null) ...[
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 8),
                           const Text(
-                            'إثبات ملكية الجهاز لا يعني الموافقة على التجربة أو تأكيد استلام أي مبلغ. تبدأ التجربة أو الاشتراك بعد اعتماد الإدارة وإصدار الترخيص.',
+                            'إثبات ملكية الجهاز لا يعني الموافقة على الاشتراك أو تأكيد استلام أي مبلغ. يصدر الترخيص بعد مراجعة الإدارة وتأكيد الدفع.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 12, color: Colors.black54),
                           ),
