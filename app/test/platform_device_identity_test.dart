@@ -76,7 +76,10 @@ void main() {
   });
 
   test('يرفض nonce غير صحيح قبل إجراء التوقيع', () async {
-    final identity = PlatformDeviceIdentity(MemorySecretStore());
+    final identity = PlatformDeviceIdentity(
+      MemorySecretStore(),
+      isAndroid: () => true,
+    );
     await identity.loadOrCreate();
 
     await expectLater(
