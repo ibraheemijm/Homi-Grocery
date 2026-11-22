@@ -1,0 +1,341 @@
+// مستودع الزبائن: حساب الأرصدة وتسجيل التحصيلات دون حذف سجل الفواتير.
+import 'package:sqflite/sqflite.dart';
+
+import 'cash_shift_repository.dart';
+
+class CustomerBalance {
+  const CustomerBalance({required this.id, required this.name, required this.salesCount, required this.totalDebt, required this.totalPaid, this.openingBalance = 0});
+  final int id;
+  final String name;
+  final int salesCount;
+  final int totalDebt;
+  final int totalPaid;
+  final int openingBalance;
+  int get balance => (totalDebt - totalPaid + openingBalance).clamp(0, 1 << 62).toInt();
+}
+
+class CustomerLedgerEntry {
+  const CustomerLedgerEntry({
+    required this.title,
+    required this.amount,
+    required this.isCredit,
+    required this.createdAt,
+    this.note,
+  });
+
+  final String title;
+  final int amount;
+  final bool isCredit;
+  final String createdAt;
+  final String? note;
+}
+
+abstract interface class CustomerDataSource {
+  Future<List<CustomerBalance>> balances({required int userId, String query = ''});
+  Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId});
+  Future<int> addCustomer({required String name, required int userId, String? phone, String? notes, int openingBalance = 0});
+  Future<void> setOpeningBalance({required int customerId, required int amount, required int userId});
+  Future<void> recordPayment({
+    required int customerId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    required int userId,
+    int? shiftId,
+  });
+}
+
+class CustomerRepository implements CustomerDataSource {
+  CustomerRepository(this._database);
+  final Database _database;
+
+  // لا يسمح بقراءة دفتر الزبائن دون هوية مستخدم وصلاحية فعالة.
+  Future<void> _requireReadAccess(int userId) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض بيانات الزبائن.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key IN ('view_customer_data', 'customer_collections') AND is_allowed = 1",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض بيانات الزبائن.');
+    }
+  }
+
+  // يعرض الأرصدة المحسوبة من الفواتير والتحصيلات الفعلية بعد التحقق من الهوية.
+  @override
+  Future<List<CustomerBalance>> balances({required int userId, String query = ''}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.rawQuery('''
+      SELECT c.id, c.name,
+        (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.id) AS sales_count,
+        COALESCE((
+          SELECT SUM(MAX(0,
+            (s.total - s.paid_amount) - MIN(
+              s.total - s.paid_amount,
+              COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+            )
+          )) FROM sales s WHERE s.customer_id = c.id
+        ), 0) AS total_debt,
+        COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0) AS total_paid,
+        c.opening_balance AS opening_balance
+      FROM customers c
+      WHERE c.name LIKE ?
+      ORDER BY CASE WHEN c.name = ? COLLATE NOCASE THEN 0 ELSE 1 END,
+      (
+        COALESCE((SELECT SUM(MAX(0,
+          (s.total - s.paid_amount) - MIN(
+            s.total - s.paid_amount,
+            COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+          )
+        )) FROM sales s WHERE s.customer_id = c.id), 0)
+        - COALESCE((SELECT SUM(cp.amount) FROM customer_payments cp WHERE cp.customer_id = c.id), 0)
+        + c.opening_balance
+      ) DESC, c.name COLLATE NOCASE ASC
+    ''', ['%${query.trim()}%', query.trim()]);
+    return rows.map((row) => CustomerBalance(
+      id: row['id'] as int,
+      name: row['name'] as String,
+      salesCount: (row['sales_count'] as num).toInt(),
+      totalDebt: (row['total_debt'] as num).toInt(),
+      totalPaid: (row['total_paid'] as num).toInt(),
+      openingBalance: (row['opening_balance'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  /// كشف حساب موحد مرتب زمنيًا من الفواتير والمرتجعات والتحصيلات.
+  @override
+  Future<List<CustomerLedgerEntry>> ledger(int customerId, {required int userId}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.rawQuery('''
+      SELECT 'رصيد افتتاحي' AS title, c.opening_balance AS amount,
+        0 AS is_credit, COALESCE((SELECT value || 'T00:00:00.000Z' FROM app_metadata WHERE key = 'system_start_date'), c.created_at) AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+      FROM customers c WHERE c.id = ? AND c.opening_balance > 0
+      UNION ALL
+      SELECT 'فاتورة ' || s.invoice_number AS title,
+        MAX(0, s.total - s.paid_amount) AS amount,
+        0 AS is_credit, s.created_at AS created_at,
+        ('الإجمالي: ' || s.total || ' ج.س • المدفوع عند البيع: ' || s.paid_amount || ' ج.س') AS note
+      FROM sales s
+      WHERE s.customer_id = ?
+      UNION ALL
+      SELECT 'مرتجع فاتورة ' || s.invoice_number AS title,
+        sr.amount AS amount, 1 AS is_credit,
+        sr.created_at AS created_at, sr.note AS note
+      FROM sale_returns sr
+      JOIN sales s ON s.id = sr.sale_id
+      WHERE s.customer_id = ?
+      UNION ALL
+      SELECT 'تحصيل من الزبون' AS title, cp.amount AS amount,
+        1 AS is_credit, cp.created_at AS created_at, cp.note AS note
+      FROM customer_payments cp
+      WHERE cp.customer_id = ?
+      UNION ALL
+      SELECT 'رد نقدي للزبون' AS title, srr.amount AS amount,
+        0 AS is_credit, srr.created_at AS created_at,
+        COALESCE(srr.note, srr.payment_method) AS note
+      FROM sale_return_refunds srr
+      JOIN sales s ON s.id = srr.sale_id
+      WHERE s.customer_id = ?
+      ORDER BY created_at ASC
+    ''', [customerId, customerId, customerId, customerId, customerId]);
+    return rows.map((row) => CustomerLedgerEntry(
+      title: row['title'] as String,
+      amount: (row['amount'] as num).toInt(),
+      isCredit: (row['is_credit'] as num).toInt() == 1,
+      createdAt: row['created_at'] as String,
+      note: row['note'] as String?,
+    )).toList(growable: false);
+  }
+
+  // إضافة الزبائن يدويًا والأرصدة الافتتاحية متاحة للمدير النشط فقط.
+  @override
+  Future<int> addCustomer({
+    required String name,
+    required int userId,
+    String? phone,
+    String? notes,
+    int openingBalance = 0,
+  }) async {
+    return _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty ||
+          users.single['is_active'] != 1 ||
+          users.single['role'] != 'manager') {
+        throw StateError('إضافة الزبائن والأرصدة الافتتاحية متاحة للمدير النشط فقط.');
+      }
+      if (openingBalance < 0) {
+        throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
+      }
+      final normalized = name.trim();
+      if (normalized.isEmpty) throw ArgumentError('اسم الزبون مطلوب.');
+      final id = await txn.insert('customers', {
+        'name': normalized,
+        'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
+        'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+        'opening_balance': openingBalance,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id != 0) return id;
+      final rows = await txn.query(
+        'customers',
+        columns: ['id'],
+        where: 'name = ? COLLATE NOCASE',
+        whereArgs: [normalized],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('تعذر حفظ الزبون.');
+      return rows.first['id'] as int;
+    });
+  }
+
+  // تعديل الرصيد الافتتاحي للمدير فقط مع تسجيل القيمتين داخل المعاملة نفسها.
+  @override
+  Future<void> setOpeningBalance({required int customerId, required int amount, required int userId}) async {
+    if (amount < 0) throw ArgumentError('رصيد الزبون الافتتاحي لا يمكن أن يكون سالبًا.');
+    await _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير النشط فقط.');
+      }
+      final customers = await txn.query(
+        'customers',
+        columns: ['opening_balance'],
+        where: 'id = ?',
+        whereArgs: [customerId],
+        limit: 1,
+      );
+      if (customers.isEmpty) throw StateError('الزبون غير موجود.');
+      final previous = (customers.single['opening_balance'] as num).toInt();
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'customers',
+        {'opening_balance': amount},
+        where: 'id = ?',
+        whereArgs: [customerId],
+      );
+      await txn.insert('auth_audit_log', {
+        'user_id': userId,
+        'username_snapshot': users.single['username'],
+        'action': 'customer_opening_balance_updated:$customerId:$previous:$amount',
+        'created_at': now,
+      });
+    });
+  }
+
+  // تسجيل تحصيل مع التحقق من الرصيد داخل معاملة لمنع تجاوز المبلغ المستحق.
+  @override
+  Future<void> recordPayment({
+    required int customerId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    required int userId,
+    int? shiftId,
+  }) async {
+    if (amount <= 0) throw ArgumentError('قيمة التحصيل يجب أن تكون أكبر من صفر.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
+      throw ArgumentError('طريقة التحصيل غير مدعومة.');
+    }
+    await _database.transaction((txn) async {
+      final accounts = await txn.query(
+        'users',
+        columns: ['role', 'is_active'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+        throw StateError('الحساب غير نشط أو غير موجود.');
+      }
+      final role = accounts.single['role'];
+      if (role != 'manager' && role != 'cashier') {
+        throw StateError('نوع الحساب غير مصرح له بتحصيل ديون الزبائن.');
+      }
+      if (paymentMethod == 'نقدي') {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
+      if (role == 'cashier') {
+        final permissions = await txn.query(
+          'cashier_permissions',
+          columns: ['is_allowed', 'max_amount'],
+          where: "user_id = ? AND permission_key = 'customer_collections'",
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+          throw StateError('لا يملك الكاشير صلاحية تحصيل ديون الزبائن.');
+        }
+        final limit = (permissions.single['max_amount'] as num?)?.toInt();
+        if (limit != null && amount > limit) {
+          throw StateError('قيمة التحصيل تتجاوز الحد المسموح ($limit ج.س).');
+        }
+      }
+      final customers = await txn.query('customers', columns: ['id'], where: 'id = ?', whereArgs: [customerId], limit: 1);
+      if (customers.isEmpty) throw StateError('الزبون غير موجود.');
+      final result = await txn.rawQuery('''
+        SELECT COALESCE(SUM(MAX(0,
+          (s.total - s.paid_amount) - MIN(
+            s.total - s.paid_amount,
+            COALESCE((SELECT SUM(sr.amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)
+          )
+        )), 0) AS debt,
+        COALESCE((SELECT SUM(amount) FROM customer_payments WHERE customer_id = ?), 0) AS collected,
+        COALESCE((SELECT opening_balance FROM customers WHERE id = ?), 0) AS opening_balance
+        FROM sales s WHERE s.customer_id = ?
+      ''', [customerId, customerId, customerId]);
+      final debt = (result.first['debt'] as num).toInt();
+      final collected = (result.first['collected'] as num).toInt();
+      final openingBalance = (result.first['opening_balance'] as num?)?.toInt() ?? 0;
+      final outstanding = (debt + openingBalance - collected).clamp(0, 1 << 62).toInt();
+      if (amount > outstanding) {
+        throw ArgumentError('قيمة التحصيل تتجاوز الرصيد المستحق ($outstanding ج.س).');
+      }
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final paymentId = await txn.insert('customer_payments', {
+        'customer_id': customerId,
+        'amount': amount,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'in',
+        'category': 'تحصيل من زبون',
+        'amount': amount,
+        'payment_method': paymentMethod,
+        'reference_type': 'customer_payment',
+        'reference_id': paymentId,
+        'user_id': userId,
+        'shift_id': paymentMethod == 'نقدي' ? shiftId : null,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+    });
+  }
+}

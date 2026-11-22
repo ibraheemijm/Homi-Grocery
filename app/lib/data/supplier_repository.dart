@@ -1,0 +1,924 @@
+// مستودع الموردين والمشتريات: حفظ ذري للفواتير وتحديث المخزون والمدفوعات.
+import 'package:sqflite/sqflite.dart';
+
+import 'cash_shift_repository.dart';
+
+class SupplierLookup {
+  const SupplierLookup({required this.id, required this.name});
+  final int id;
+  final String name;
+}
+
+class SupplierPurchaseLookup {
+  const SupplierPurchaseLookup({required this.id, required this.invoiceNumber, required this.supplierName, required this.createdAt});
+  final int id;
+  final String invoiceNumber;
+  final String supplierName;
+  final String createdAt;
+}
+
+class PendingSupplierRefund {
+  const PendingSupplierRefund({required this.returnId, required this.invoiceNumber, required this.supplierName, required this.createdAt, required this.refundableAmount});
+  final int returnId;
+  final String invoiceNumber;
+  final String supplierName;
+  final String createdAt;
+  final int refundableAmount;
+}
+
+class SupplierLedgerEntry {
+  const SupplierLedgerEntry({required this.title, required this.amount, required this.isPayable, required this.createdAt, this.note});
+  final String title;
+  final int amount;
+  // true تعني أن الحركة تزيد ما علينا للمورد، وfalse تعني أنها لصالح المتجر.
+  final bool isPayable;
+  final String createdAt;
+  final String? note;
+}
+
+class SupplierBalance {
+  const SupplierBalance({required this.id, required this.name, required this.purchaseCount, required this.totalDebt, required this.totalPaid, this.openingBalance = 0});
+  final int id;
+  final String name;
+  final int purchaseCount;
+  final int totalDebt;
+  final int totalPaid;
+  final int openingBalance;
+  int get balance => totalDebt - totalPaid + openingBalance;
+  int get credit => (-balance).clamp(0, 1 << 62).toInt();
+}
+
+class PurchaseLine {
+  const PurchaseLine({
+    required this.productId,
+    required this.productName,
+    required this.unit,
+    required this.quantity,
+    required this.unitCost,
+    this.sellingPrice,
+  });
+  final int productId;
+  final String productName;
+  final String unit;
+  final double quantity;
+  final int unitCost;
+  final int? sellingPrice;
+  int get lineTotal => (quantity * unitCost).round();
+}
+
+class PurchaseRecord {
+  const PurchaseRecord({required this.id, required this.invoiceNumber, required this.supplierId, required this.subtotal, required this.discount, required this.total, required this.paidAmount, required this.createdAt});
+  final int id;
+  final String invoiceNumber;
+  final int supplierId;
+  final int subtotal;
+  final int discount;
+  final int total;
+  final int paidAmount;
+  final String createdAt;
+  int get remainingAmount => (total - paidAmount).clamp(0, 1 << 62).toInt();
+}
+
+class PurchaseHistoryRecord {
+  const PurchaseHistoryRecord({
+    required this.id,
+    required this.invoiceNumber,
+    required this.supplierName,
+    required this.subtotal,
+    required this.discount,
+    required this.total,
+    required this.paidAmount,
+    required this.paymentMethod,
+    required this.createdAt,
+    this.note,
+  });
+
+  final int id;
+  final String invoiceNumber;
+  final String supplierName;
+  final int subtotal;
+  final int discount;
+  final int total;
+  final int paidAmount;
+  final String paymentMethod;
+  final String createdAt;
+  final String? note;
+
+  int get remainingAmount => (total - paidAmount).clamp(0, 1 << 62).toInt();
+}
+
+class PurchaseItemRecord {
+  const PurchaseItemRecord({
+    required this.productName,
+    required this.unit,
+    required this.quantity,
+    required this.unitCost,
+    required this.lineTotal,
+  });
+
+  final String productName;
+  final String unit;
+  final double quantity;
+  final int unitCost;
+  final int lineTotal;
+}
+
+class SupplierRepository {
+  SupplierRepository(this._database);
+  final Database _database;
+
+  /// يتحقق من صلاحية الكاشير ويعيد الحد المالي للعملية عند ضبطه.
+  static Future<int?> _cashierLimit(
+    Transaction txn, {
+    required int userId,
+    required String permissionKey,
+    required String label,
+  }) async {
+    final rows = await txn.query(
+      'cashier_permissions',
+      columns: ['is_allowed', 'max_amount'],
+      where: 'user_id = ? AND permission_key = ?',
+      whereArgs: [userId, permissionKey],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية $label.');
+    }
+    return (rows.single['max_amount'] as num?)?.toInt();
+  }
+
+
+  /// إضافة المورد للمدير فقط؛ يعاد فحص الحساب داخل المعاملة ولا تعتمد الحماية على الواجهة.
+  Future<int> addSupplier({
+    required int userId,
+    required String name,
+    String? phone,
+    String? notes,
+    int openingBalance = 0,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) throw ArgumentError('اسم المورد مطلوب.');
+    return _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('إضافة الموردين والأرصدة الافتتاحية متاحة للمدير النشط فقط.');
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      final id = await txn.insert('suppliers', {
+        'name': normalized,
+        'phone': phone?.trim().isEmpty == true ? null : phone?.trim(),
+        'notes': notes?.trim().isEmpty == true ? null : notes?.trim(),
+        'opening_balance': openingBalance,
+        'created_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id != 0) {
+        await txn.insert('auth_audit_log', {
+          'user_id': userId,
+          'username_snapshot': users.single['username'],
+          'action': 'supplier_created:$id',
+          'created_at': now,
+        });
+        return id;
+      }
+      final rows = await txn.query(
+        'suppliers',
+        columns: ['id'],
+        where: 'name = ? COLLATE NOCASE',
+        whereArgs: [normalized],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('تعذر حفظ المورد.');
+      return rows.first['id'] as int;
+    });
+  }
+
+  // يتحقق من هوية المستخدم وصلاحية عرض بيانات الموردين قبل إرجاع الأرصدة.
+  Future<void> _requireReadAccess(int userId) async {
+    final users = await _database.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (users.isEmpty || users.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier') {
+      throw StateError('لا يملك المستخدم صلاحية عرض بيانات الموردين.');
+    }
+    final permissions = await _database.query(
+      'cashier_permissions', columns: ['is_allowed'],
+      where: "user_id = ? AND permission_key = 'view_supplier_data'",
+      whereArgs: [userId], limit: 1,
+    );
+    if (permissions.isEmpty || permissions.single['is_allowed'] != 1) {
+      throw StateError('لا يملك الكاشير صلاحية عرض بيانات الموردين.');
+    }
+  }
+
+  // يسمح بالبحث عن أسماء الموردين فقط عند وجود صلاحية تشغيلية ذات صلة.
+  Future<void> _requirePermissionReadAccess(int userId, Set<String> allowedPermissions) async {
+    final users = await _database.query('users', columns: ['role', 'is_active'], where: 'id = ?', whereArgs: [userId], limit: 1);
+    if (users.isEmpty || users.single['is_active'] != 1) throw StateError('الحساب غير نشط أو غير موجود.');
+    if (users.single['role'] == 'manager') return;
+    if (users.single['role'] != 'cashier' || allowedPermissions.isEmpty) throw StateError('لا يملك المستخدم صلاحية الوصول إلى الموردين.');
+    final placeholders = List.filled(allowedPermissions.length, '?').join(', ');
+    final rows = await _database.query('cashier_permissions', columns: ['permission_key'], where: 'user_id = ? AND is_allowed = 1 AND permission_key IN ($placeholders)', whereArgs: [userId, ...allowedPermissions], limit: 1);
+    if (rows.isEmpty) throw StateError('لا يملك الكاشير صلاحية البحث عن الموردين لهذه العملية.');
+  }
+
+  // يعيد أسماء الموردين ومعرّفاتهم فقط؛ لا يكشف الأرصدة أو إجمالي الديون.
+  Future<List<SupplierLookup>> supplierLookup({required int userId, String query = ''}) async {
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_purchases', 'supplier_payments', 'supplier_returns', 'supplier_return_refunds'});
+    final rows = await _database.query('suppliers', columns: ['id', 'name'], where: 'name LIKE ?', whereArgs: ['%${query.trim()}%'], orderBy: 'name COLLATE NOCASE ASC');
+    return rows.map((row) => SupplierLookup(id: row['id'] as int, name: row['name'] as String)).toList(growable: false);
+  }
+
+  // يسمح بقراءة الحد الأدنى من بيانات الفاتورة اللازمة لتنفيذ مرتجع المورد.
+  Future<void> _requireReturnAccess(int userId) => _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_returns'});
+
+  // يفرض صلاحية مستقلة للعمليات المالية الخاصة بالكاشير داخل المعاملة.
+  Future<int?> _requireCashierPermission(
+    Transaction txn, {
+    required int userId,
+    required String permissionKey,
+    required String label,
+  }) async {
+    final accounts = await txn.query(
+      'users', columns: ['role', 'is_active'],
+      where: 'id = ?', whereArgs: [userId], limit: 1,
+    );
+    if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+      throw StateError('الحساب غير نشط أو غير موجود.');
+    }
+    final role = accounts.single['role'];
+    if (role == 'manager') return null;
+    if (role != 'cashier') throw StateError('نوع الحساب غير مصرح له بهذه العملية.');
+    return _cashierLimit(txn, userId: userId, permissionKey: permissionKey, label: label);
+  }
+
+  // تعديل الرصيد الافتتاحي للمورد للمدير فقط مع تسجيل القيمتين ذريًا.
+  // الموجب مستحق للمورد والسالب مستحق للمتجر؛ لذلك لا نمنع الإشارة السالبة.
+  Future<void> setOpeningBalance({required int supplierId, required int amount, required int userId}) async {
+    await _database.transaction((txn) async {
+      final users = await txn.query(
+        'users',
+        columns: ['username'],
+        where: "id = ? AND role = 'manager' AND is_active = 1",
+        whereArgs: [userId],
+        limit: 1,
+      );
+      if (users.isEmpty) {
+        throw StateError('تعديل الأرصدة الافتتاحية متاح للمدير النشط فقط.');
+      }
+      final suppliers = await txn.query(
+        'suppliers',
+        columns: ['opening_balance'],
+        where: 'id = ?',
+        whereArgs: [supplierId],
+        limit: 1,
+      );
+      if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
+      final previous = (suppliers.single['opening_balance'] as num).toInt();
+      final now = DateTime.now().toUtc().toIso8601String();
+      await txn.update(
+        'suppliers',
+        {'opening_balance': amount},
+        where: 'id = ?',
+        whereArgs: [supplierId],
+      );
+      await txn.insert('auth_audit_log', {
+        'user_id': userId,
+        'username_snapshot': users.single['username'],
+        'action': 'supplier_opening_balance_updated:$supplierId:$previous:$amount',
+        'created_at': now,
+      });
+    });
+  }
+
+  Future<List<SupplierBalance>> balances({required int userId, String query = ''}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.rawQuery('''
+      SELECT s.id, s.name, s.opening_balance AS opening_balance,
+        (SELECT COUNT(*) FROM purchases p WHERE p.supplier_id = s.id) AS purchase_count,
+        COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0) AS total_debt,
+        COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) + COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+          - COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0) AS total_paid
+      FROM suppliers s WHERE s.name LIKE ?
+      ORDER BY (COALESCE((SELECT SUM(p.total - p.paid_amount) FROM purchases p WHERE p.supplier_id = s.id), 0)
+        - COALESCE((SELECT SUM(sp.amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0)
+        - COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+        + COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases rp ON rp.id = sr.purchase_id WHERE rp.supplier_id = s.id), 0)
+        + s.opening_balance) DESC,
+        s.name COLLATE NOCASE ASC
+    ''', ['%${query.trim()}%']);
+    return rows.map((r) => SupplierBalance(
+      id: r['id'] as int, name: r['name'] as String,
+      purchaseCount: (r['purchase_count'] as num).toInt(),
+      totalDebt: (r['total_debt'] as num).toInt(),
+      totalPaid: (r['total_paid'] as num).toInt(),
+      openingBalance: (r['opening_balance'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  // كشف حساب المورد ويعرض الرصيد الافتتاحي كبند مستقل عن الفواتير والحركات.
+  Future<List<SupplierLedgerEntry>> ledger(int supplierId, {required int userId}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.rawQuery('''
+      SELECT 'رصيد افتتاحي' AS title, ABS(s.opening_balance) AS amount,
+        CASE WHEN s.opening_balance > 0 THEN 1 ELSE 0 END AS is_payable,
+        COALESCE((SELECT value || 'T00:00:00.000Z' FROM app_metadata WHERE key = 'system_start_date'), s.created_at) AS created_at, 'الرصيد المرحّل عند بدء استخدام النظام' AS note
+      FROM suppliers s WHERE s.id = ? AND s.opening_balance <> 0
+      UNION ALL
+      SELECT 'فاتورة شراء ' || p.invoice_number AS title,
+        MAX(0, p.total - p.paid_amount) AS amount, 1 AS is_payable,
+        p.created_at AS created_at, p.note AS note
+      FROM purchases p WHERE p.supplier_id = ?
+      UNION ALL
+      SELECT 'سداد للمورد' AS title, sp.amount AS amount, 0 AS is_payable,
+        sp.created_at AS created_at, sp.note AS note
+      FROM supplier_payments sp WHERE sp.supplier_id = ?
+      UNION ALL
+      SELECT 'مرتجع شراء' AS title, sr.amount AS amount, 0 AS is_payable,
+        sr.created_at AS created_at, sr.note AS note
+      FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id
+      WHERE p.supplier_id = ?
+      UNION ALL
+      SELECT 'استرداد مبلغ مرتجع' AS title, srr.amount AS amount, 1 AS is_payable,
+        srr.created_at AS created_at, COALESCE(srr.note, srr.payment_method) AS note
+      FROM supplier_return_refunds srr
+      JOIN supplier_returns sr ON sr.id = srr.supplier_return_id
+      JOIN purchases p ON p.id = sr.purchase_id
+      WHERE p.supplier_id = ?
+      ORDER BY created_at ASC
+    ''', [supplierId, supplierId, supplierId, supplierId, supplierId]);
+    return rows.map((row) => SupplierLedgerEntry(
+      title: row['title'] as String,
+      amount: (row['amount'] as num).toInt(),
+      isPayable: (row['is_payable'] as num).toInt() == 1,
+      createdAt: row['created_at'] as String,
+      note: row['note'] as String?,
+    )).toList(growable: false);
+  }
+
+  Future<PurchaseRecord> createPurchase({
+    required int supplierId,
+    required List<PurchaseLine> lines,
+    int discount = 0,
+    required int paidAmount,
+    String paymentMethod = 'آجل',
+    String paymentChannel = 'نقدي',
+    String? note,
+    required int userId,
+    int? shiftId,
+  }) async {
+    if (lines.isEmpty) throw ArgumentError('أضف صنفًا واحدًا على الأقل.');
+    if (discount < 0 || paidAmount < 0) throw ArgumentError('الخصم والمدفوع لا يمكن أن يكونا سالبين.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentChannel)) {
+      throw ArgumentError('طريقة دفع فاتورة الشراء غير مدعومة.');
+    }
+    for (final line in lines) {
+      if (line.productId <= 0 ||
+          !line.quantity.isFinite ||
+          line.quantity <= 0 ||
+          line.unitCost < 0 ||
+          (line.sellingPrice != null && line.sellingPrice! < 0)) {
+        throw ArgumentError('تحقق من كميات وأسعار أصناف الشراء.');
+      }
+    }
+    return _database.transaction((txn) async {
+      if (paidAmount > 0 && paymentChannel == 'نقدي') {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
+      final supplier = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
+      if (supplier.isEmpty) throw StateError('المورد غير موجود.');
+      final subtotal = lines.fold<int>(0, (sum, line) => sum + line.lineTotal);
+      if (discount > subtotal) throw ArgumentError('الخصم يتجاوز إجمالي الشراء.');
+      final total = subtotal - discount;
+      if (paidAmount > total) throw ArgumentError('المدفوع يتجاوز إجمالي الفاتورة.');
+      {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          if (lines.any((line) => line.sellingPrice != null)) {
+            throw StateError('تعديل سعر البيع متاح للمدير فقط، ولا تمنحه صلاحية المشتريات.');
+          }
+          final purchaseLimit = await _cashierLimit(
+            txn,
+            userId: userId,
+            permissionKey: 'supplier_purchases',
+            label: 'تسجيل فواتير الشراء',
+          );
+          if (purchaseLimit != null && total > purchaseLimit) {
+            throw StateError('قيمة فاتورة الشراء تتجاوز الحد المسموح ($purchaseLimit ج.س).');
+          }
+          if (paidAmount > 0) {
+            final paymentLimit = await _cashierLimit(
+              txn,
+              userId: userId,
+              permissionKey: 'supplier_payments',
+              label: 'سداد مستحقات الموردين',
+            );
+            if (paymentLimit != null && paidAmount > paymentLimit) {
+              throw StateError('المبلغ المدفوع مع الفاتورة يتجاوز الحد المسموح ($paymentLimit ج.س).');
+            }
+          }
+        } else if (accounts.single['role'] != 'manager') {
+          throw StateError('نوع الحساب غير مصرح له بتسجيل فاتورة شراء.');
+        }
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      final invoiceNumber = 'PUR-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+      final purchaseId = await txn.insert('purchases', {
+        'invoice_number': invoiceNumber, 'supplier_id': supplierId,
+        'subtotal': subtotal, 'discount': discount, 'total': total,
+        'paid_amount': paidAmount, 'payment_method': paymentMethod,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(), 'created_at': now,
+      });
+      if (paidAmount > 0) {
+        await txn.insert('cash_transactions', {
+          'direction': 'out',
+          'category': 'شراء مدفوع',
+          'amount': paidAmount,
+          'payment_method': paymentChannel,
+          'reference_type': 'purchase',
+          'reference_id': purchaseId,
+          'user_id': userId,
+          'shift_id': paymentChannel == 'نقدي' ? shiftId : null,
+          'note': 'فاتورة شراء $invoiceNumber',
+          'created_at': now,
+        });
+      }
+      for (final line in lines) {
+        final products = await txn.query('products', columns: ['id', 'stock_quantity'], where: 'id = ?', whereArgs: [line.productId], limit: 1);
+        if (products.isEmpty) throw ArgumentError('أحد أصناف الشراء غير موجود.');
+        final before = (products.single['stock_quantity'] as num).toDouble();
+        final after = before + line.quantity;
+        final productUpdate = <String, Object?>{
+          'stock_quantity': after,
+          'purchase_price': line.unitCost,
+          if (line.sellingPrice != null) 'selling_price': line.sellingPrice,
+        };
+        await txn.update(
+          'products',
+          productUpdate,
+          where: 'id = ?',
+          whereArgs: [line.productId],
+        );
+        await txn.insert('purchase_items', {
+          'purchase_id': purchaseId, 'product_id': line.productId,
+          'product_name': line.productName, 'unit': line.unit,
+          'quantity': line.quantity, 'unit_cost': line.unitCost, 'line_total': line.lineTotal,
+        });
+        await txn.insert('stock_movements', {
+          'product_id': line.productId, 'movement_type': 'شراء',
+          'quantity_delta': line.quantity, 'stock_before': before, 'stock_after': after,
+          'note': note?.trim().isEmpty == true ? 'فاتورة $invoiceNumber' : note?.trim(),
+          'reference_type': 'purchase', 'reference_id': purchaseId, 'created_at': now,
+        });
+      }
+      return PurchaseRecord(id: purchaseId, invoiceNumber: invoiceNumber, supplierId: supplierId,
+        subtotal: subtotal, discount: discount, total: total, paidAmount: paidAmount, createdAt: now);
+    });
+  }
+
+  /// يعرض بيانات الفواتير الأساسية فقط للكاشير الذي يملك صلاحية المرتجعات.
+  /// لا يعيد إجمالي الفاتورة أو المدفوع أو المتبقي.
+  Future<List<SupplierPurchaseLookup>> purchaseHistoryForReturns({required int userId, int limit = 100}) async {
+    await _requireReturnAccess(userId);
+    if (limit < 1 || limit > 1000) throw ArgumentError('حد نتائج سجل المرتجعات غير صالح.');
+    final rows = await _database.rawQuery('''
+      SELECT p.id, p.invoice_number, s.name AS supplier_name, p.created_at
+      FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
+      ORDER BY p.created_at DESC, p.id DESC LIMIT ?
+    ''', [limit]);
+    return rows.map((row) => SupplierPurchaseLookup(
+      id: row['id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      createdAt: row['created_at'] as String,
+    )).toList(growable: false);
+  }
+
+  /// يعرض سجل فواتير الشراء والمبالغ المحاسبية لمن يملك صلاحية عرض بيانات الموردين.
+  Future<List<PurchaseHistoryRecord>> purchaseHistory({
+    required int userId,
+    int? supplierId,
+    String query = '',
+    DateTime? fromDate,
+    DateTime? toDate,
+    int limit = 100,
+  }) async {
+    await _requireReadAccess(userId);
+    if (limit < 1 || limit > 1000) {
+      throw ArgumentError('حد نتائج سجل المشتريات غير صالح.');
+    }
+    if (fromDate != null && toDate != null &&
+        DateTime(fromDate.year, fromDate.month, fromDate.day)
+            .isAfter(DateTime(toDate.year, toDate.month, toDate.day))) {
+      throw ArgumentError('تاريخ بداية البحث يجب ألا يتجاوز تاريخ النهاية.');
+    }
+    final normalizedQuery = query.trim();
+    final start = fromDate == null
+        ? null
+        : DateTime(fromDate.year, fromDate.month, fromDate.day)
+            .toUtc().toIso8601String();
+    final end = toDate == null
+        ? null
+        : DateTime(toDate.year, toDate.month, toDate.day + 1)
+            .toUtc().toIso8601String();
+    final rows = await _database.rawQuery('''
+      SELECT p.id, p.invoice_number, p.supplier_id, s.name AS supplier_name,
+        p.subtotal, p.discount, p.total, p.paid_amount, p.payment_method,
+        p.note, p.created_at
+      FROM purchases p
+      JOIN suppliers s ON s.id = p.supplier_id
+      WHERE (? IS NULL OR p.supplier_id = ?)
+        AND (? = '' OR p.invoice_number LIKE ? OR s.name LIKE ?)
+        AND (? IS NULL OR p.created_at >= ?)
+        AND (? IS NULL OR p.created_at < ?)
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT ?
+    ''', [
+      supplierId, supplierId,
+      normalizedQuery, '%$normalizedQuery%', '%$normalizedQuery%',
+      start, start, end, end, limit,
+    ]);
+    return rows.map((row) => PurchaseHistoryRecord(
+      id: row['id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      subtotal: (row['subtotal'] as num).toInt(),
+      discount: (row['discount'] as num).toInt(),
+      total: (row['total'] as num).toInt(),
+      paidAmount: (row['paid_amount'] as num).toInt(),
+      paymentMethod: row['payment_method'] as String,
+      note: row['note'] as String?,
+      createdAt: row['created_at'] as String,
+    )).toList(growable: false);
+  }
+
+  /// يعرض البنود المحفوظة كما كانت وقت الشراء، لا حسب بيانات الصنف الحالية.
+  Future<List<PurchaseItemRecord>> purchaseItems(int purchaseId, {required int userId}) async {
+    await _requireReadAccess(userId);
+    final rows = await _database.query(
+      'purchase_items',
+      columns: ['product_name', 'unit', 'quantity', 'unit_cost', 'line_total'],
+      where: 'purchase_id = ?',
+      whereArgs: [purchaseId],
+      orderBy: 'id ASC',
+    );
+    return rows.map((row) => PurchaseItemRecord(
+      productName: row['product_name'] as String,
+      unit: row['unit'] as String,
+      quantity: (row['quantity'] as num).toDouble(),
+      unitCost: (row['unit_cost'] as num).toInt(),
+      lineTotal: (row['line_total'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  /// يعيد أصنافًا من فاتورة شراء، ويحدّث المخزون والمستحق وسجل الحركة ذريًا.
+  /// لتجنب رصيد دائن غير ممثل بعد، لا يسمح بإرجاع قيمة أكبر من المستحق الحالي للمورد.
+  Future<int> createSupplierReturn({
+    required int userId,
+    required int purchaseId,
+    required Map<int, double> quantitiesByPurchaseItemId,
+    String? note,
+  }) async {
+    if (quantitiesByPurchaseItemId.isEmpty ||
+        quantitiesByPurchaseItemId.values.any((q) => !q.isFinite || q <= 0)) {
+      throw ArgumentError('حدد كميات مرتجع صالحة.');
+    }
+    return _database.transaction((txn) async {
+      final permissionLimit = await _requireCashierPermission(
+        txn,
+        userId: userId,
+        permissionKey: 'supplier_returns',
+        label: 'تسجيل مرتجعات الموردين',
+      );
+      final purchases = await txn.query(
+        'purchases',
+        columns: ['id', 'supplier_id', 'invoice_number', 'subtotal', 'total'],
+        where: 'id = ?',
+        whereArgs: [purchaseId],
+        limit: 1,
+      );
+      if (purchases.isEmpty) throw StateError('فاتورة الشراء غير موجودة.');
+      final purchase = purchases.single;
+      final now = DateTime.now().toUtc().toIso8601String();
+      final selectedLines = <Map<String, Object?>>[];
+      var total = 0;
+      for (final entry in quantitiesByPurchaseItemId.entries) {
+        final rows = await txn.rawQuery('''
+          SELECT pi.id, pi.product_id, pi.product_name, pi.quantity, pi.unit_cost, pi.line_total,
+            p.subtotal AS purchase_subtotal, p.total AS purchase_total, pr.stock_quantity,
+            COALESCE((SELECT SUM(sri.quantity) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_quantity,
+            COALESCE((SELECT SUM(sri.line_total) FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0) AS returned_amount
+          FROM purchase_items pi
+          JOIN purchases p ON p.id = pi.purchase_id
+          JOIN products pr ON pr.id = pi.product_id
+          WHERE pi.id = ? AND pi.purchase_id = ?
+        ''', [entry.key, purchaseId]);
+        if (rows.isEmpty) throw ArgumentError('أحد أصناف المرتجع لا يتبع فاتورة الشراء المحددة.');
+        final row = rows.single;
+        final original = (row['quantity'] as num).toDouble();
+        final alreadyReturned = (row['returned_quantity'] as num).toDouble();
+        final stock = (row['stock_quantity'] as num).toDouble();
+        final quantity = entry.value;
+        if (quantity > original - alreadyReturned + 0.0000001) {
+          throw ArgumentError('كمية المرتجع تتجاوز الكمية المتبقية من فاتورة الشراء.');
+        }
+        if (quantity > stock + 0.0000001) {
+          throw ArgumentError('المخزون الحالي لا يكفي لإرجاع هذه الكمية.');
+        }
+        final unitCost = (row['unit_cost'] as num).toInt();
+        final originalLineTotal = (row['line_total'] as num).toInt();
+        final purchaseSubtotal = (row['purchase_subtotal'] as num).toInt();
+        final purchaseTotal = (row['purchase_total'] as num).toInt();
+        final previousAmount = (row['returned_amount'] as num).toInt();
+        // يوزّع خصم فاتورة الشراء نسبيًا على البنود، ويستخدم المجموع التراكمي
+        // حتى لا تختلف القيمة إذا قُسّم إرجاع الكمية إلى عمليات متعددة.
+        final cumulativeAmount = purchaseSubtotal == 0
+            ? 0
+            : (originalLineTotal * purchaseTotal * (alreadyReturned + quantity) /
+                    (purchaseSubtotal * original))
+                .round();
+        final lineTotal = (cumulativeAmount - previousAmount)
+            .clamp(0, originalLineTotal)
+            .toInt();
+        total += lineTotal;
+        selectedLines.add({
+          'purchase_item_id': entry.key,
+          'product_id': row['product_id'] as int,
+          'product_name': row['product_name'] as String,
+          'quantity': quantity,
+          'unit_cost': unitCost,
+          'line_total': lineTotal,
+          'stock_before': stock,
+        });
+      }
+      if (total <= 0) throw ArgumentError('قيمة المرتجع يجب أن تكون أكبر من صفر.');
+      if (permissionLimit != null && total > permissionLimit) {
+        throw StateError('قيمة مرتجع المورد تتجاوز الحد المسموح ($permissionLimit ج.س).');
+      }
+      final returnId = await txn.insert('supplier_returns', {
+        'purchase_id': purchaseId,
+        'amount': total,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': now,
+      });
+      for (final line in selectedLines) {
+        final before = line['stock_before'] as double;
+        final quantity = line['quantity'] as double;
+        final after = before - quantity;
+        await txn.update('products', {'stock_quantity': after}, where: 'id = ?', whereArgs: [line['product_id']]);
+        await txn.insert('supplier_return_items', {
+          'return_id': returnId,
+          'purchase_item_id': line['purchase_item_id'],
+          'product_id': line['product_id'],
+          'product_name': line['product_name'],
+          'quantity': quantity,
+          'unit_cost': line['unit_cost'],
+          'line_total': line['line_total'],
+        });
+        await txn.insert('stock_movements', {
+          'product_id': line['product_id'],
+          'movement_type': 'مرتجع شراء',
+          'quantity_delta': -quantity,
+          'stock_before': before,
+          'stock_after': after,
+          'note': note?.trim().isEmpty == true ? 'مرتجع فاتورة ${purchase['invoice_number']}' : note?.trim(),
+          'reference_type': 'supplier_return',
+          'reference_id': returnId,
+          'created_at': now,
+        });
+      }
+      return returnId;
+    });
+  }
+
+  /// بنود فاتورة الشراء مع الكميات المتبقية القابلة للإرجاع.
+  Future<List<Map<String, Object?>>> returnablePurchaseItems(int purchaseId, {required int userId}) async {
+    await _requireReturnAccess(userId);
+    return _database.rawQuery('''
+      SELECT pi.id, pi.product_id, pi.product_name, pi.unit, pi.quantity,
+        pi.unit_cost, pi.line_total, pr.stock_quantity,
+        MAX(0, pi.quantity - COALESCE((SELECT SUM(sri.quantity)
+          FROM supplier_return_items sri WHERE sri.purchase_item_id = pi.id), 0)) AS returnable_quantity
+      FROM purchase_items pi
+      JOIN products pr ON pr.id = pi.product_id
+      WHERE pi.purchase_id = ?
+      ORDER BY pi.id ASC
+    ''', [purchaseId]);
+  }
+
+  /// يعرض المرتجعات التي بقي منها مبلغ قابل للاسترداد، دون كشف أرصدة المورد كاملة.
+  Future<List<PendingSupplierRefund>> pendingSupplierReturnRefunds({required int userId, int limit = 100}) async {
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_return_refunds'});
+    if (limit < 1 || limit > 1000) throw ArgumentError('حد نتائج الاستردادات غير صالح.');
+    final rows = await _database.rawQuery('''
+      SELECT sr.id AS return_id, p.invoice_number, s.name AS supplier_name,
+        sr.created_at,
+        MAX(0, sr.amount - COALESCE((
+          SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+          WHERE srr.supplier_return_id = sr.id
+        ), 0)) AS refundable_amount
+      FROM supplier_returns sr
+      JOIN purchases p ON p.id = sr.purchase_id
+      JOIN suppliers s ON s.id = p.supplier_id
+      WHERE sr.amount > COALESCE((
+        SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+        WHERE srr.supplier_return_id = sr.id
+      ), 0)
+      ORDER BY sr.created_at DESC, sr.id DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows.map((row) => PendingSupplierRefund(
+      returnId: row['return_id'] as int,
+      invoiceNumber: row['invoice_number'] as String,
+      supplierName: row['supplier_name'] as String,
+      createdAt: row['created_at'] as String,
+      refundableAmount: (row['refundable_amount'] as num).toInt(),
+    )).toList(growable: false);
+  }
+
+  /// أقصى مبلغ لم يُسترد نقديًا بعد من مرتجع مورد.
+  Future<int> maximumRefundableSupplierReturnAmount(int returnId, {required int userId}) async {
+    await _requirePermissionReadAccess(userId, const {'view_supplier_data', 'supplier_return_refunds'});
+    final rows = await _database.rawQuery('''
+      SELECT MAX(0, sr.amount - COALESCE((
+        SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+        WHERE srr.supplier_return_id = sr.id
+      ), 0)) AS refundable
+      FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+    ''', [returnId]);
+    if (rows.isEmpty) throw StateError('مرتجع المورد غير موجود.');
+    return (rows.single['refundable'] as num).toInt();
+  }
+
+  /// تسجيل رد نقدي/بنكي وصل فعليًا من المورد؛ يظل الرصيد الدائن منفصلًا عن الخزينة.
+  Future<int> recordSupplierReturnRefund({
+    required int userId,
+    required int returnId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    int? shiftId,
+  }) async {
+    if (returnId <= 0 || amount <= 0) {
+      throw ArgumentError('حدد مرتجعًا ومبلغ رد صالحين.');
+    }
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod.trim())) {
+      throw ArgumentError('طريقة استلام المبلغ غير مدعومة.');
+    }
+    return _database.transaction((txn) async {
+      final permissionLimit = await _requireCashierPermission(
+        txn,
+        userId: userId,
+        permissionKey: 'supplier_return_refunds',
+        label: 'استلام مبالغ مرتجعات الموردين',
+      );
+      if (paymentMethod.trim() == 'نقدي') {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
+      final rows = await txn.rawQuery('''
+        SELECT sr.id, sr.amount FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+      ''', [returnId]);
+      if (rows.isEmpty) throw StateError('مرتجع المورد غير موجود.');
+      final availableRows = await txn.rawQuery('''
+        SELECT MAX(0, sr.amount - COALESCE((
+          SELECT SUM(srr.amount) FROM supplier_return_refunds srr
+          WHERE srr.supplier_return_id = sr.id
+        ), 0)) AS refundable
+        FROM supplier_returns sr WHERE sr.id = ? LIMIT 1
+      ''', [returnId]);
+      final available = (availableRows.single['refundable'] as num).toInt();
+      if (amount > available) {
+        throw ArgumentError('المبلغ أكبر من رصيد المرتجع المتاح للاسترداد ($available ج.س).');
+      }
+      if (permissionLimit != null && amount > permissionLimit) {
+        throw StateError('مبلغ الاسترداد يتجاوز الحد المسموح ($permissionLimit ج.س).');
+      }
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final refundId = await txn.insert('supplier_return_refunds', {
+        'supplier_return_id': returnId,
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'in',
+        'category': 'استرداد نقدي من مورد',
+        'amount': amount,
+        'payment_method': paymentMethod.trim(),
+        'reference_type': 'supplier_return_refund',
+        'reference_id': refundId,
+        'user_id': userId,
+        'shift_id': paymentMethod.trim() == 'نقدي' ? shiftId : null,
+        'note': note?.trim().isEmpty == true ? 'استرداد مرتجع المورد #$returnId' : note?.trim(),
+        'created_at': createdAt,
+      });
+      return refundId;
+    });
+  }
+
+  Future<void> recordPayment({
+    required int supplierId,
+    required int amount,
+    String paymentMethod = 'نقدي',
+    String? note,
+    required int userId,
+    int? shiftId,
+  }) async {
+    if (amount <= 0) throw ArgumentError('قيمة الدفع يجب أن تكون أكبر من صفر.');
+    if (!const {'نقدي', 'تحويل بنكي'}.contains(paymentMethod)) {
+      throw ArgumentError('طريقة الدفع غير مدعومة.');
+    }
+    await _database.transaction((txn) async {
+      if (paymentMethod == 'نقدي') {
+        await CashShiftRepository.validateActiveShift(
+          txn,
+          shiftId: shiftId,
+          userId: userId,
+        );
+      }
+      {
+        final accounts = await txn.query(
+          'users',
+          columns: ['role', 'is_active'],
+          where: 'id = ?',
+          whereArgs: [userId],
+          limit: 1,
+        );
+        if (accounts.isEmpty || accounts.single['is_active'] != 1) {
+          throw StateError('الحساب غير نشط أو غير موجود.');
+        }
+        if (accounts.single['role'] == 'cashier') {
+          final limit = await _cashierLimit(
+            txn,
+            userId: userId,
+            permissionKey: 'supplier_payments',
+            label: 'سداد مستحقات الموردين',
+          );
+          if (limit != null && amount > limit) {
+            throw StateError('دفعة المورد تتجاوز الحد المسموح ($limit ج.س).');
+          }
+        } else if (accounts.single['role'] != 'manager') {
+          throw StateError('نوع الحساب غير مصرح له بسداد مستحقات الموردين.');
+        }
+      }
+      final suppliers = await txn.query('suppliers', columns: ['id'], where: 'id = ?', whereArgs: [supplierId], limit: 1);
+      if (suppliers.isEmpty) throw StateError('المورد غير موجود.');
+      final result = await txn.rawQuery('''
+        SELECT COALESCE((SELECT SUM(total - paid_amount) FROM purchases WHERE supplier_id = ?), 0) AS debt,
+          COALESCE((SELECT SUM(amount) FROM supplier_payments WHERE supplier_id = ?), 0) +
+          COALESCE((SELECT SUM(sr.amount) FROM supplier_returns sr JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) -
+          COALESCE((SELECT SUM(srr.amount) FROM supplier_return_refunds srr JOIN supplier_returns sr ON sr.id = srr.supplier_return_id JOIN purchases p ON p.id = sr.purchase_id WHERE p.supplier_id = ?), 0) AS paid,
+          COALESCE((SELECT opening_balance FROM suppliers WHERE id = ?), 0) AS opening_balance
+      ''', [supplierId, supplierId, supplierId, supplierId, supplierId]);
+      final openingBalance = (result.first['opening_balance'] as num?)?.toInt() ?? 0;
+      final outstanding = ((result.first['debt'] as num).toInt() - (result.first['paid'] as num).toInt() + openingBalance).clamp(0, 1 << 62).toInt();
+      if (amount > outstanding) throw ArgumentError('الدفع يتجاوز المستحق للمورد ($outstanding ج.س).');
+      final createdAt = DateTime.now().toUtc().toIso8601String();
+      final paymentId = await txn.insert('supplier_payments', {
+        'supplier_id': supplierId, 'amount': amount,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+      await txn.insert('cash_transactions', {
+        'direction': 'out',
+        'category': 'سداد للمورد',
+        'amount': amount,
+        'payment_method': paymentMethod,
+        'reference_type': 'supplier_payment',
+        'reference_id': paymentId,
+        'user_id': userId,
+        'shift_id': paymentMethod == 'نقدي' ? shiftId : null,
+        'note': note?.trim().isEmpty == true ? null : note?.trim(),
+        'created_at': createdAt,
+      });
+    });
+  }
+}

@@ -1,0 +1,523 @@
+// شاشة الزبائن والديون: عرض الأرصدة وتسجيل التحصيلات من قاعدة البيانات.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/material.dart';
+import '../widgets/dialog_lifecycle.dart';
+
+import '../data/customer_repository.dart';
+import '../data/grocery_database.dart';
+
+class CustomersScreen extends StatefulWidget {
+  const CustomersScreen({
+    required this.userId,
+    this.shiftId,
+    this.cashierPermissions,
+    this.repository,
+    super.key,
+  });
+
+  final int userId;
+  final int? shiftId;
+  // null تعني دخول المدير، أما الكاشير فيمرر الصلاحيات الممنوحة له.
+  final Set<String>? cashierPermissions;
+  // حقن المستودع يعزل اختبارات الشاشة عن قاعدة بيانات التطبيق الدائمة.
+  final CustomerDataSource? repository;
+
+  @override
+  State<CustomersScreen> createState() => _CustomersScreenState();
+}
+
+class _CustomersScreenState extends State<CustomersScreen> {
+  CustomerDataSource? _repository;
+  List<CustomerBalance> _customers = [];
+  final _search = TextEditingController();
+  bool _loading = true;
+  String? _error;
+
+  bool get _isManager => widget.cashierPermissions == null;
+  bool get _canAddCustomer => _isManager;
+  bool get _canCollect => _isManager || widget.cashierPermissions!.contains('customer_collections');
+  bool get _canViewLedger => _isManager || widget.cashierPermissions!.contains('view_customer_data');
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      _repository = widget.repository;
+      if (_repository == null) {
+        final database = await GroceryDatabase.open();
+        _repository = CustomerRepository(database);
+      }
+      await _load();
+      if (mounted) setState(() { _loading = false; _error = null; });
+    } catch (error) {
+      if (mounted) setState(() { _loading = false; _error = 'تعذر تحميل حسابات الزبائن: $error'; });
+    }
+  }
+
+  Future<void> _load() async {
+    if (_repository == null) return;
+    final rows = await _repository!.balances(userId: widget.userId, query: _search.text);
+    if (mounted) setState(() => _customers = rows);
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final phone = defaultTargetPlatform == TargetPlatform.android &&
+            constraints.maxWidth < 600;
+        return phone ? _buildAndroidPhone(context) : _buildDesktopLayout(context);
+      },
+    );
+  }
+
+  // تخطيط هاتف Android: قائمة مستقلة وبطاقات عمودية تمنع تزاحم بيانات الزبون وأزراره.
+  Widget _buildAndroidPhone(BuildContext context) {
+    final theme = Theme.of(context);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(onPressed: _initialize, child: const Text('إعادة المحاولة')),
+                    ]),
+                  ))
+                : Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('الزبائن والديون', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                          Text('متابعة الأرصدة والتحصيلات', style: theme.textTheme.bodySmall),
+                        ])),
+                        if (_canAddCustomer)
+                          IconButton.filled(
+                            tooltip: 'إضافة زبون',
+                            onPressed: _addCustomer,
+                            icon: const Icon(Icons.person_add_alt_1_rounded),
+                          ),
+                      ]),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _search,
+                        onChanged: (_) => _load(),
+                        decoration: InputDecoration(
+                          hintText: 'ابحث باسم الزبون',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _search.text.isEmpty ? null : IconButton(
+                            tooltip: 'مسح البحث',
+                            onPressed: () { _search.clear(); _load(); },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                          filled: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: _customers.isEmpty
+                            ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.people_outline_rounded, size: 52),
+                                SizedBox(height: 10),
+                                Text('لا يوجد زبائن مطابقون للبحث.'),
+                                SizedBox(height: 5),
+                                Text('يمكن إضافة زبون هنا أو تسجيل اسمه عند إنشاء فاتورة.', textAlign: TextAlign.center),
+                              ]))
+                            : ListView.separated(
+                                itemCount: _customers.length,
+                                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                                itemBuilder: (context, index) => _buildAndroidCustomerCard(_customers[index], theme),
+                              ),
+                      ),
+                      if (_customers.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('عدد الزبائن: ${_customers.length}', style: theme.textTheme.bodySmall),
+                        ),
+                    ]),
+                  ),
+      ),
+    );
+  }
+
+  Widget _buildAndroidCustomerCard(CustomerBalance customer, ThemeData theme) {
+    final debt = customer.balance > 0;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            CircleAvatar(child: Text(customer.name.isEmpty ? '?' : customer.name.characters.first)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(customer.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${customer.balance} ج.س', style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: debt ? Colors.red.shade700 : theme.colorScheme.primary,
+              )),
+              Text(debt ? 'الرصيد المستحق' : 'لا توجد ديون', style: theme.textTheme.labelSmall),
+            ]),
+          ]),
+          if (_canViewLedger) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 7, runSpacing: 4, children: [
+              Chip(avatar: const Icon(Icons.receipt_long_outlined, size: 16),
+                label: Text('الفواتير: ${customer.salesCount}'), visualDensity: VisualDensity.compact),
+              Chip(avatar: const Icon(Icons.account_balance_wallet_outlined, size: 16),
+                label: Text('افتتاحي: ${customer.openingBalance} ج.س'), visualDensity: VisualDensity.compact),
+            ]),
+          ],
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (_canViewLedger)
+              OutlinedButton.icon(onPressed: () => _showLedger(customer),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18), label: const Text('كشف الحساب')),
+            if (_canCollect)
+              OutlinedButton.icon(onPressed: debt ? () => _collect(customer) : null,
+                icon: const Icon(Icons.payments_outlined, size: 18), label: const Text('تسجيل تحصيل')),
+            if (_isManager)
+              OutlinedButton.icon(onPressed: () => _editOpeningBalance(customer),
+                icon: const Icon(Icons.edit_note_rounded, size: 18), label: const Text('الرصيد الافتتاحي')),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context) {
+    final theme = Theme.of(context);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(onPressed: _initialize, child: const Text('إعادة المحاولة')),
+                    ]),
+                  ))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(18),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1100),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          Row(children: [
+                            Expanded(child: Text('الزبائن والديون', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800))),
+                            if (_canAddCustomer)
+                              FilledButton.icon(onPressed: _addCustomer, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('إضافة زبون')),
+                          ]),
+                          const SizedBox(height: 6),
+                          Text('الرصيد الحالي يجمع الرصيد الافتتاحي مع فواتير البيع والتحصيلات المسجلة.', style: theme.textTheme.bodyMedium),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _search,
+                            onChanged: (_) => _load(),
+                            decoration: const InputDecoration(
+                              hintText: 'ابحث باسم الزبون',
+                              prefixIcon: Icon(Icons.search_rounded),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          if (_customers.isEmpty)
+                            const Card(child: Padding(
+                              padding: EdgeInsets.all(28),
+                              child: Column(children: [
+                                Icon(Icons.people_outline_rounded, size: 44),
+                                SizedBox(height: 10),
+                                Text('لا يوجد زبائن مطابقون للبحث.'),
+                                SizedBox(height: 5),
+                                Text('يمكن إضافة زبون هنا أو تسجيل اسمه عند إنشاء فاتورة.', textAlign: TextAlign.center),
+                              ]),
+                            ))
+                          else
+                            ..._customers.map((customer) => Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(children: [
+                                  CircleAvatar(child: Text(customer.name.isEmpty ? '?' : customer.name.characters.first)),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 4),
+                                    if (_canViewLedger)
+                                      Text('الفواتير: ${customer.salesCount} • رصيد الفواتير: ${customer.totalDebt} ج.س • افتتاحي: ${customer.openingBalance} ج.س'),
+                                  ])),
+                                  const SizedBox(width: 8),
+                                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                    Text('${customer.balance} ج.س', style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      color: customer.balance > 0 ? Colors.red.shade700 : theme.colorScheme.primary,
+                                    )),
+                                    Text(customer.balance > 0 ? 'الرصيد المستحق' : 'لا توجد ديون مستحقة',
+                                      style: theme.textTheme.labelSmall),
+                                  ]),
+                                  const SizedBox(width: 8),
+                                  if (_isManager)
+                                    IconButton(
+                                      tooltip: 'تعديل الرصيد الافتتاحي',
+                                      onPressed: () => _editOpeningBalance(customer),
+                                      icon: const Icon(Icons.edit_note_rounded),
+                                    ),
+                                  if (_canViewLedger)
+                                    IconButton(
+                                      tooltip: 'كشف الحساب',
+                                      onPressed: () => _showLedger(customer),
+                                      icon: const Icon(Icons.receipt_long_outlined),
+                                    ),
+                                  if (_canCollect)
+                                    IconButton(
+                                      tooltip: 'تسجيل تحصيل',
+                                      onPressed: customer.balance > 0 ? () => _collect(customer) : null,
+                                      icon: const Icon(Icons.payments_outlined),
+                                    ),
+                                ]),
+                              ),
+                            )),
+                        ]),
+                      ),
+                    ),
+                  ),
+      ),
+    );
+  }
+
+  Future<void> _showLedger(CustomerBalance customer) async {
+    if (!_canViewLedger) return;
+    try {
+      final entries = await _repository!.ledger(customer.id, userId: widget.userId);
+      if (!mounted) return;
+      await showDialogAndWaitForExit<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('كشف حساب ${customer.name}'),
+          content: SizedBox(
+            width: 560,
+            child: entries.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text('لا توجد حركات مالية مسجلة لهذا الزبون.'),
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final entry in entries)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              entry.isCredit
+                                  ? Icons.south_west_rounded
+                                  : Icons.north_east_rounded,
+                              color: entry.isCredit
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700,
+                            ),
+                            title: Text(entry.title),
+                            subtitle: Text(
+                              [
+                                _formatDate(entry.createdAt),
+                                if (entry.note?.trim().isNotEmpty == true) entry.note!.trim(),
+                              ].join(' • '),
+                            ),
+                            trailing: Text(
+                              '${entry.isCredit ? '−' : '+'}${entry.amount} ج.س',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: entry.isCredit
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      _message('تعذر تحميل كشف الحساب: $error');
+    }
+  }
+
+  String _formatDate(String value) {
+    final date = DateTime.tryParse(value)?.toLocal();
+    if (date == null) return value;
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    return '${date.year}-${twoDigits(date.month)}-${twoDigits(date.day)} '
+        '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+  }
+
+  Future<void> _addCustomer() async {
+    if (!_canAddCustomer) return;
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final openingBalance = TextEditingController(text: '0');
+    final result = await showDialogAndWaitForExit<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('إضافة زبون'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: 'اسم الزبون')),
+          const SizedBox(height: 10),
+          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم الهاتف (اختياري)')),
+          const SizedBox(height: 10),
+          TextField(controller: openingBalance, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الرصيد الافتتاحي المستحق لنا', helperText: 'اتركه صفرًا إذا لم توجد ديون سابقة')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (result == true && mounted) {
+      try {
+        final opening = int.tryParse(openingBalance.text.trim());
+        if (opening == null || opening < 0) throw ArgumentError('أدخل رصيدًا افتتاحيًا صحيحًا.');
+        await _repository!.addCustomer(name: name.text, userId: widget.userId, phone: phone.text, openingBalance: opening);
+        await _load();
+      } catch (error) {
+        _message('تعذر إضافة الزبون: $error');
+      }
+    }
+    name.dispose();
+    phone.dispose();
+    openingBalance.dispose();
+  }
+
+  Future<void> _editOpeningBalance(CustomerBalance customer) async {
+    if (!_isManager) return;
+    final amount = TextEditingController(text: customer.openingBalance.toString());
+    final result = await showDialogAndWaitForExit<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('الرصيد الافتتاحي — ${customer.name}'),
+        content: TextField(
+          controller: amount,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'المبلغ المستحق لنا من الزبون',
+            helperText: 'لا يشمل الفواتير أو التحصيلات المسجلة لاحقًا',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (result == true && mounted) {
+      try {
+        final value = int.tryParse(amount.text.trim());
+        if (value == null || value < 0) throw ArgumentError('أدخل مبلغًا صحيحًا غير سالب.');
+        await _repository!.setOpeningBalance(
+          customerId: customer.id, amount: value, userId: widget.userId,
+        );
+        await _load();
+        _message('تم تحديث الرصيد الافتتاحي.');
+      } catch (error) {
+        _message('تعذر تحديث الرصيد الافتتاحي: $error');
+      }
+    }
+    amount.dispose();
+  }
+
+  Future<void> _collect(CustomerBalance customer) async {
+    if (!_canCollect || customer.balance <= 0) return;
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String paymentMethod = 'نقدي';
+    final result = await showDialogAndWaitForExit<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, refresh) => AlertDialog(
+          title: Text('تحصيل من ${customer.name}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('الرصيد المستحق: ${customer.balance} ج.س'),
+            const SizedBox(height: 12),
+            TextField(controller: amountController, autofocus: true, keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'المبلغ المستلم', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: paymentMethod,
+              decoration: const InputDecoration(labelText: 'طريقة التحصيل', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'نقدي', child: Text('نقدي')),
+                DropdownMenuItem(value: 'تحويل بنكي', child: Text('تحويل بنكي')),
+              ],
+              onChanged: (value) { if (value != null) refresh(() => paymentMethod = value); },
+            ),
+            const SizedBox(height: 10),
+            TextField(controller: noteController, decoration: const InputDecoration(labelText: 'ملاحظة (اختياري)', border: OutlineInputBorder())),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(onPressed: () {
+              final value = int.tryParse(amountController.text.trim());
+              if (value == null || value <= 0) return;
+              Navigator.pop(dialogContext, {'amount': value, 'method': paymentMethod});
+            }, child: const Text('تسجيل التحصيل')),
+          ],
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      try {
+        await _repository!.recordPayment(
+          customerId: customer.id,
+          userId: widget.userId,
+          shiftId: widget.shiftId,
+          amount: result['amount']! as int,
+          paymentMethod: result['method']! as String,
+          note: noteController.text,
+        );
+        await _load();
+        _message('تم تسجيل التحصيل بنجاح.');
+      } catch (error) {
+        _message('لم يتم تسجيل التحصيل: $error');
+      }
+    }
+    amountController.dispose();
+    noteController.dispose();
+  }
+
+  
+  void _message(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
