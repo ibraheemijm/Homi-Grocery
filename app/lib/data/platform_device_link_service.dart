@@ -157,6 +157,84 @@ class UnavailablePlatformDeviceLinkService
   @override
   Future<PlatformLinkedLicense?> startLocalTrial() async => null;
 
+  Future<void> _registerLocalTrial(PlatformLinkedLicense localTrial) async {
+    if (!localTrial.isLocalTrial || apiUnavailableReason != null) return;
+    final stored = await _store.read(_localTrialKey);
+    if (stored == null || stored.isEmpty) return;
+    final decoded = jsonDecode(stored);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['device_id'] != localTrial.deviceId ||
+        decoded['started_at'] is! String ||
+        decoded['last_seen_at'] is! String) {
+      throw const FormatException('سجل التجربة المحلية غير صالح للتسجيل المركزي.');
+    }
+
+    final localStartedAt = DateTime.tryParse(decoded['started_at'] as String);
+    final lastSeenAt = DateTime.tryParse(decoded['last_seen_at'] as String);
+    if (localStartedAt == null || lastSeenAt == null) {
+      throw const FormatException('تاريخ التجربة المحلية غير صالح.');
+    }
+    final identity = await _deviceIdentity.loadOrCreate();
+    if (identity.deviceKey != localTrial.deviceId) {
+      throw StateError('تغيرت هوية الجهاز قبل تسجيل التجربة.');
+    }
+    final rawPublicKey = base64Url.decode(
+      base64Url.normalize(identity.publicKeyRawBase64Url),
+    );
+    final fingerprint = crypto.sha256.convert(rawPublicKey).toString();
+    final startedAtText = localStartedAt.toUtc().toIso8601String();
+    final proofMessage = [
+      'HOMI_TRIAL_REGISTRATION_V1',
+      identity.deviceKey.toLowerCase(),
+      'homi-grocery',
+      identity.platform,
+      identity.architecture,
+      fingerprint,
+      startedAtText,
+    ].join('\n');
+    final signature = await _deviceIdentity.signMessage(proofMessage);
+    final response = await _api.postJson(
+      '/api/v1/public/trials/register',
+      body: {
+        'product_key': 'homi-grocery',
+        'device_id': identity.deviceKey,
+        'platform_key': identity.platform,
+        'architecture_key': identity.architecture,
+        'public_key': identity.publicKeyRawBase64Url,
+        'key_fingerprint': fingerprint,
+        'trial_started_at': startedAtText,
+        'signature': signature,
+      },
+    );
+
+    final registrationStatus = response['registration_status'];
+    final serverStartedText = response['trial_started_at'];
+    final serverEndsText = response['trial_ends_at'];
+    final serverStartedAt = serverStartedText is String
+        ? DateTime.tryParse(serverStartedText)?.toUtc()
+        : null;
+    final serverEndsAt = serverEndsText is String
+        ? DateTime.tryParse(serverEndsText)?.toUtc()
+        : null;
+    if (!const {'registered', 'already_registered'}.contains(registrationStatus) ||
+        serverStartedAt == null ||
+        serverEndsAt == null ||
+        serverEndsAt != serverStartedAt.add(const Duration(days: 14))) {
+      throw const FormatException('استجابة تسجيل التجربة من المنصة غير صالحة.');
+    }
+
+    // لا يسمح رد الخادم بتمديد المدة المحلية؛ يمكنه فقط كشف بداية أقدم لنفس الهوية.
+    if (serverStartedAt.isBefore(localStartedAt.toUtc())) {
+      await _store.write(_localTrialKey, jsonEncode({
+        'version': 1,
+        'license_id': decoded['license_id'],
+        'device_id': identity.deviceKey,
+        'started_at': serverStartedAt.toIso8601String(),
+        'last_seen_at': lastSeenAt.toUtc().toIso8601String(),
+      }));
+    }
+  }
+
   @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
     throw PlatformApiConfigurationException(reason);
@@ -702,7 +780,14 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
     }
     final license = await readLinkedLicense();
     if (license == null) return null;
-    if (license.isLocalTrial) return license;
+    if (license.isLocalTrial) {
+      try {
+        await _registerLocalTrial(license);
+      } on Object {
+        // فشل الشبكة أو التسجيل لا يمنع التجربة المحلية ولا يمدد مدتها.
+      }
+      return await readLinkedLicense() ?? license;
+    }
 
     try {
       final challenge = await _api.postJson(
