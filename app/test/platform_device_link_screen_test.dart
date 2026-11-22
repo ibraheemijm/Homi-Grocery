@@ -90,6 +90,7 @@ void main() {
     expect(find.text('بصمة الجهاز'), findsOneWidget);
     expect(find.text('نسخ بيانات طلب التفعيل'), findsOneWidget);
     expect(find.text('مشاركة ملخص الطلب'), findsOneWidget);
+    expect(find.text('إرسال عبر WhatsApp'), findsOneWidget);
     expect(find.text('+249 090 469 7455'), findsOneWidget);
     expect(find.text('إثبات ملكية الجهاز والتحقق'), findsOneWidget);
   });
