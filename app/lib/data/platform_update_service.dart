@@ -1,9 +1,103 @@
 // فحص إصدارات OTA والتحقق من manifest قبل السماح بتنزيل ملف التحديث.
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart' as crypto;
 
 import 'package:cryptography/cryptography.dart';
 
 import 'platform_api_client.dart';
+import 'platform_signing_trust.dart';
+
+abstract interface class PlatformUpdateDownloader {
+  Future<File> download({
+    required Uri uri,
+    required String accessToken,
+    required File destination,
+    required int expectedSizeBytes,
+  });
+}
+
+class IoPlatformUpdateDownloader implements PlatformUpdateDownloader {
+  IoPlatformUpdateDownloader({HttpClient? client})
+      : _client = client ?? HttpClient();
+
+  final HttpClient _client;
+
+  @override
+  Future<File> download({
+    required Uri uri,
+    required String accessToken,
+    required File destination,
+    required int expectedSizeBytes,
+  }) async {
+    if (uri.scheme != 'https' ||
+        accessToken.isEmpty ||
+        expectedSizeBytes < 1 ||
+        expectedSizeBytes > 1024 * 1024 * 1024) {
+      throw const FormatException('إعدادات تنزيل تحديث Homi غير صالحة.');
+    }
+
+    IOSink? sink;
+    try {
+      final request = await _client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 20));
+      request.followRedirects = false;
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $accessToken',
+      );
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/octet-stream',
+      );
+      final response = await request
+          .close()
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != HttpStatus.ok ||
+          (response.contentLength >= 0 &&
+              response.contentLength != expectedSizeBytes)) {
+        throw HttpException(
+          'رفض الخادم ملف التحديث أو أعاد حجمًا غير متوقع.',
+          uri: uri,
+        );
+      }
+
+      await destination.parent.create(recursive: true);
+      sink = destination.openWrite(mode: FileMode.writeOnly);
+      var received = 0;
+      await for (final chunk
+          in response.timeout(const Duration(seconds: 60))) {
+        received += chunk.length;
+        if (received > expectedSizeBytes) {
+          throw const FormatException(
+            'حجم ملف التحديث أكبر من الحجم المعلن.',
+          );
+        }
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      if (received != expectedSizeBytes) {
+        throw const FormatException(
+          'اكتمل التنزيل بحجم لا يطابق بيانات الإصدار.',
+        );
+      }
+      return destination;
+    } catch (_) {
+      await sink?.close();
+      if (await destination.exists()) {
+        await destination.delete();
+      }
+      rethrow;
+    } finally {
+      _client.close(force: true);
+    }
+  }
+}
 
 class PlatformUpdateInfo {
   const PlatformUpdateInfo({
@@ -54,9 +148,11 @@ class VerifiedPlatformUpdateManifest {
 }
 
 class PlatformUpdateService {
-  PlatformUpdateService(this._api);
+  PlatformUpdateService(this._api, {required PlatformSigningTrust signingTrust})
+      : _signingTrust = signingTrust;
 
   final PlatformApiClient _api;
+  final PlatformSigningTrust _signingTrust;
   final Ed25519 _ed25519 = Ed25519();
 
   Future<PlatformUpdateInfo?> checkForUpdate({
@@ -98,9 +194,15 @@ class PlatformUpdateService {
         version is! String ||
         versionCode is! num ||
         !versionCode.isFinite ||
+        versionCode < 1 ||
+        versionCode > 0x7fffffff ||
+        versionCode.toInt() != versionCode ||
         fileName is! String ||
         sizeBytes is! num ||
         !sizeBytes.isFinite ||
+        sizeBytes < 1 ||
+        sizeBytes > 1024 * 1024 * 1024 ||
+        sizeBytes.toInt() != sizeBytes ||
         sha256 is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) ||
         signingKeyId is! String) {
@@ -146,13 +248,42 @@ class PlatformUpdateService {
       throw const FormatException('بيانات manifest لا تطابق الإصدار المطلوب.');
     }
 
-    final payload = base64Decode(payloadText);
-    final signature = base64Decode(signatureText);
-    final claims = jsonDecode(utf8.decode(payload));
-    if (claims is! Map<String, dynamic>) {
-      throw const FormatException('محتوى manifest غير صالح.');
+    late final List<int> payload;
+    late final List<int> signature;
+    try {
+      payload = base64Decode(payloadText);
+      signature = base64Decode(signatureText);
+      if (base64Encode(payload) != payloadText ||
+          base64Encode(signature) != signatureText ||
+          payload.isEmpty ||
+          payload.length > 64 * 1024 ||
+          signature.length != 64) {
+        throw const FormatException();
+      }
+    } on FormatException {
+      throw const FormatException('ترميز manifest أو توقيعه غير صالح.');
     }
 
+    // لا نفك JSON ولا نستخدم أي مطالبة قبل التحقق من التوقيع التشغيلي.
+    final keyset = await _signingTrust.fetchAndAccept(_api);
+    final trustedKey = keyset.keyForVerification(
+      keyId: keyId as String,
+      purpose: 'update_manifest',
+      at: DateTime.now().toUtc(),
+    );
+    final verified = await _ed25519.verify(
+      payload,
+      signature: Signature(signature, publicKey: trustedKey.publicKey),
+    );
+    if (!verified) {
+      throw const FormatException('فشل التحقق من توقيع تحديث Homi.');
+    }
+
+    final claimsValue = jsonDecode(utf8.decode(payload));
+    if (claimsValue is! Map<String, dynamic>) {
+      throw const FormatException('محتوى manifest غير صالح.');
+    }
+    final claims = claimsValue;
     _validateClaims(
       claims,
       update: update,
@@ -161,44 +292,16 @@ class PlatformUpdateService {
       architecture: architecture,
       channel: channel,
     );
-
-    final keysResponse = await _api.getJson('/api/v1/update-signing-keys');
-    final items = keysResponse['items'];
-    if (items is! List) {
-      throw const FormatException('تعذر قراءة مفاتيح توقيع تحديثات Homi.');
-    }
-    final matching = items.cast<Object?>().whereType<Map>().where(
-          (item) => item['key_id'] == keyId &&
-              (item['status'] == 'active' || item['status'] == 'verify_only'),
-        );
-    if (matching.isEmpty || matching.first['public_key'] is! String) {
-      throw const FormatException('مفتاح توقيع تحديث Homi غير معروف.');
-    }
-
-    final publicDer = base64Decode(matching.first['public_key'] as String);
-    const spkiPrefix = <int>[
-      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
-      0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
-    ];
-    if (publicDer.length != 44 ||
-        !_sameBytes(publicDer.take(12).toList(), spkiPrefix)) {
-      throw const FormatException('صيغة مفتاح OTA العام غير مدعومة.');
-    }
-    final publicKey = SimplePublicKey(
-      publicDer.sublist(12),
-      type: KeyPairType.ed25519,
+    final publishedAt = _parseManifestTimestamp(claims['published_at']);
+    keyset.validateSignatureTime(
+      key: trustedKey,
+      signedAt: publishedAt,
+      now: DateTime.now().toUtc(),
     );
-    final verified = await _ed25519.verify(
-      payload,
-      signature: Signature(signature, publicKey: publicKey),
-    );
-    if (!verified) {
-      throw const FormatException('فشل التحقق من توقيع تحديث Homi.');
-    }
 
     return VerifiedPlatformUpdateManifest(
       publicationId: update.publicationId,
-      keyId: keyId as String,
+      keyId: update.signingKeyId,
       payload: payload,
       signature: signature,
       downloadPath: claims['download_url'] as String,
@@ -210,6 +313,55 @@ class PlatformUpdateService {
       releaseNotes: claims['release_notes'] as String?,
     );
   }
+
+  /// ينزل الحزمة إلى مجلد مؤقت ويتحقق من الحجم وSHA-256 قبل إتاحتها للتثبيت.
+  Future<File> downloadVerifiedPackage({
+    required String accessToken,
+    required VerifiedPlatformUpdateManifest manifest,
+    PlatformUpdateDownloader? downloader,
+  }) async {
+    if (manifest.sizeBytes < 1 ||
+        manifest.sizeBytes > 1024 * 1024 * 1024 ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$')
+            .hasMatch(manifest.fileName) ||
+        manifest.fileName.contains('..') ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(manifest.sha256)) {
+      throw const FormatException('بيانات ملف تحديث Homi غير آمنة.');
+    }
+
+    final uri = _api.resolveApiUri(manifest.downloadPath);
+    final directory = await Directory.systemTemp.createTemp('homi-ota-');
+    final file = File('${directory.path}/${manifest.fileName}');
+    try {
+      final transfer = downloader ?? IoPlatformUpdateDownloader();
+      await transfer.download(
+        uri: uri,
+        accessToken: accessToken,
+        destination: file,
+        expectedSizeBytes: manifest.sizeBytes,
+      );
+      final actualLength = await file.length();
+      if (actualLength != manifest.sizeBytes) {
+        throw const FormatException(
+          'حجم حزمة تحديث Homi لا يطابق manifest.',
+        );
+      }
+
+      final digest = await crypto.sha256.bind(file.openRead()).first;
+      if (digest.toString() != manifest.sha256) {
+        throw const FormatException(
+          'فشل التحقق من SHA-256 لحزمة تحديث Homi.',
+        );
+      }
+      return file;
+    } catch (_) {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+      rethrow;
+    }
+  }
+
 
   void _validateClaims(
     Map<String, dynamic> claims, {
@@ -243,12 +395,44 @@ class PlatformUpdateService {
     }
   }
 
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
+  DateTime _parseManifestTimestamp(Object? value) {
+    final pattern = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))',
+    );
+    final match = value is String ? pattern.firstMatch(value) : null;
+    if (match == null || match.group(0) != value) {
+      throw const FormatException(
+        'تاريخ manifest يجب أن يتضمن منطقة زمنية بصيغة ISO-8601.',
+      );
     }
-    return difference == 0;
+
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final hour = int.parse(match.group(4)!);
+    final minute = int.parse(match.group(5)!);
+    final second = int.parse(match.group(6)!);
+    final offsetHour = int.tryParse(match.group(9) ?? '0') ?? 0;
+    final offsetMinute = int.tryParse(match.group(10) ?? '0') ?? 0;
+
+    // نرفض القيم التقويمية غير الصحيحة قبل تحويل التاريخ.
+    if (month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > DateTime.utc(year, month + 1, 0).day ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59 ||
+        offsetHour > 23 ||
+        offsetMinute > 59) {
+      throw const FormatException('تاريخ manifest يحتوي قيمًا تقويمية غير صالحة.');
+    }
+
+    final parsed = DateTime.tryParse(value as String);
+    if (parsed == null) {
+      throw const FormatException('تاريخ manifest غير صالح.');
+    }
+    return parsed.toUtc();
   }
+
 }

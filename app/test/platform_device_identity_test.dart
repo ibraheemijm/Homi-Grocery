@@ -75,10 +75,21 @@ void main() {
     expect(signatureText, isNot(contains('=')));
   });
 
+  test('ينشئ هوية Windows مستقرة بمعمارية الجهاز', () async {
+    final identity = PlatformDeviceIdentity(
+      MemorySecretStore(),
+      platformOverride: () => 'windows',
+    );
+    final data = await identity.loadOrCreate();
+    expect(data.platform, 'windows');
+    expect(data.architecture, isNotEmpty);
+    expect(data.publicKeyDer, hasLength(44));
+  });
+
   test('يرفض nonce غير صحيح قبل إجراء التوقيع', () async {
     final identity = PlatformDeviceIdentity(
       MemorySecretStore(),
-      isAndroid: () => true,
+      platformOverride: () => 'android',
     );
     await identity.loadOrCreate();
 

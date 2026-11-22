@@ -69,6 +69,27 @@ void main() {
     await database.close();
   });
 
+  testWidgets('يعلن جاهزية بوابة الدخول بعد فتح قاعدة البيانات وفحص الحسابات', (tester) async {
+    var initialized = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          onInitialized: () async {
+            initialized = true;
+          },
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('authenticated'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    expect(initialized, isTrue);
+    expect(find.text('تسجيل الدخول'), findsOneWidget);
+  });
+
   testWidgets('يمسح جلسة الكاشير ويفتح جلسة المدير دون نقل حالة الحساب السابق',
       (tester) async {
     await tester.pumpWidget(

@@ -1,7 +1,7 @@
 // النسخ الاحتياطي والاستعادة: لا يستبدل قاعدة البيانات قبل فحص النسخة.
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'app_data_location.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'grocery_database.dart';
 
@@ -42,8 +42,8 @@ class BackupRepository {
       await directory.create(recursive: true);
       return directory;
     }
-    final support = await getApplicationSupportDirectory();
-    final directory = Directory(p.join(support.path, 'backups'));
+    final dataDirectory = await AppDataLocation.resolveDataDirectory();
+    final directory = Directory(p.join(dataDirectory.path, 'backups'));
     await directory.create(recursive: true);
     return directory;
   }

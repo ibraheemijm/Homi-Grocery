@@ -23,6 +23,7 @@ class AuthenticationGate extends StatefulWidget {
     this.databaseProvider,
     this.authRepositoryProvider,
     this.useBiometrics = true,
+    this.onInitialized,
     super.key,
   });
 
@@ -31,6 +32,7 @@ class AuthenticationGate extends StatefulWidget {
   final AuthRepositoryProvider? authRepositoryProvider;
   // يتيح تعطيل تكامل الجهاز في الاختبارات التي لا تختبر الدخول الحيوي.
   final bool useBiometrics;
+  final Future<void> Function()? onInitialized;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -74,6 +76,8 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
         _loading = false;
         _error = null;
       });
+      // إعلان جاهزية قاعدة البيانات والحسابات بعد نجاح التهيئة فقط.
+      await widget.onInitialized?.call();
     } catch (error) {
       if (!mounted) return;
       setState(() {

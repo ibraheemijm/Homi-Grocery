@@ -67,6 +67,8 @@ class IoPlatformHttpTransport implements PlatformHttpTransport {
     final request = await _client.openUrl(method, uri).timeout(
           const Duration(seconds: 15),
         );
+    // لا نتبع التحويلات حتى لا نعيد إرسال Authorization إلى وجهة غير متوقعة.
+    request.followRedirects = false;
     headers.forEach(request.headers.set);
     if (body != null) {
       final bytes = utf8.encode(body);
@@ -77,12 +79,17 @@ class IoPlatformHttpTransport implements PlatformHttpTransport {
     final response = await request.close().timeout(
           const Duration(seconds: 30),
         );
-    final responseBody = await utf8.decoder.bind(response).join().timeout(
-          const Duration(seconds: 30),
-        );
+    final responseBytes = <int>[];
+    await for (final chunk in response.timeout(const Duration(seconds: 30))) {
+      if (responseBytes.length + chunk.length >
+          PlatformApiClient.maxResponseBytes) {
+        throw const FormatException('استجابة المنصة تجاوزت الحد المسموح.');
+      }
+      responseBytes.addAll(chunk);
+    }
     return PlatformHttpResponse(
       statusCode: response.statusCode,
-      body: responseBody,
+      body: utf8.decode(responseBytes),
     );
   }
 
@@ -91,14 +98,26 @@ class IoPlatformHttpTransport implements PlatformHttpTransport {
 }
 
 class PlatformApiClient {
+  static const String apiPrefix = '/api/v1';
+  static const int maxResponseBytes = 2 * 1024 * 1024;
+  static const Set<String> _allowedMethods = {
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+  };
+  static final RegExp _apiPathPattern =
+      RegExp(r'^/api/v1(?:/[A-Za-z0-9_-]+)*$');
+
+  static bool _isValidApiPath(String path) => _apiPathPattern.hasMatch(path);
+
   PlatformApiClient({
     required Uri baseUri,
     PlatformHttpTransport? transport,
     this.timeout = const Duration(seconds: 30),
   })  : _baseUri = _validateBaseUri(baseUri),
         _transport = transport ?? IoPlatformHttpTransport();
-
-  static const String apiPrefix = '/api/v1';
 
   final Uri _baseUri;
   final PlatformHttpTransport _transport;
@@ -140,6 +159,16 @@ class PlatformApiClient {
     return uri.replace(path: '/');
   }
 
+  /// يحول مسار API داخليًا إلى URI دون السماح بمضيف خارجي أو مسار خارج v1.
+  Uri resolveApiUri(String path) {
+    if (!_isValidApiPath(path)) {
+      throw const PlatformApiConfigurationException(
+        'مسار API غير صالح أو خارج الإصدار v1.',
+      );
+    }
+    return _baseUri.resolve(path.substring(1));
+  }
+
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
@@ -176,11 +205,11 @@ class PlatformApiClient {
     String? accessToken,
     String? idempotencyKey,
   }) async {
-    if (!path.startsWith(apiPrefix) ||
-        path.contains('..') ||
-        path.contains('\\')) {
+    final normalizedMethod = method.toUpperCase();
+    if (!_allowedMethods.contains(normalizedMethod) ||
+        !_isValidApiPath(path)) {
       throw const PlatformApiConfigurationException(
-        'مسار API غير صالح أو خارج الإصدار v1.',
+        'طريقة HTTP أو مسار API غير صالح.',
       );
     }
     final uri = _baseUri.resolve(path.substring(1)).replace(
@@ -203,7 +232,7 @@ class PlatformApiClient {
 
     final response = await _transport
         .send(
-          method: method,
+          method: normalizedMethod,
           uri: uri,
           headers: headers,
           body: body == null ? null : jsonEncode(body),

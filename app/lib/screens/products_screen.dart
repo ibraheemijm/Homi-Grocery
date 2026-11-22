@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../widgets/dialog_lifecycle.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import '../data/app_data_location.dart';
 import '../data/grocery_database.dart';
 import '../data/product_repository.dart';
 import 'barcode_scanner_screen.dart';
@@ -609,8 +609,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final result = await FilePicker.platform.pickFiles(type: FileType.image);
     final sourcePath = result?.files.single.path;
     if (sourcePath == null) return null;
-    final support = await getApplicationSupportDirectory();
-    final directory = Directory(p.join(support.path, 'product-images'));
+    final dataDirectory = await AppDataLocation.resolveDataDirectory();
+    final directory = Directory(p.join(dataDirectory.path, 'product-images'));
     await directory.create(recursive: true);
     final extension = p.extension(sourcePath);
     final target = p.join(

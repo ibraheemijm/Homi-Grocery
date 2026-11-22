@@ -1,9 +1,13 @@
 // إعدادات اسم البقالة والتحية والساعة، محفوظة محليًا في بيانات التطبيق.
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/grocery_database.dart';
+import '../data/app_data_location.dart';
 import '../data/font_preferences.dart';
 import '../data/android_diagnostic_log.dart';
 
@@ -33,6 +37,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   bool _saving = false;
   bool _sharingDiagnostics = false;
+  String? _dataLocationPath;
+  bool _movingData = false;
   String? _message;
 
   @override
@@ -54,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await FontPreferences.load();
       final db = await GroceryDatabase.open();
+      final dataLocationPath = await AppDataLocation.currentPath();
       final rows = await db.query(
         'app_metadata',
         columns: ['key', 'value'],
@@ -88,6 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       setState(() {
+        _dataLocationPath = dataLocationPath;
         _storeName.text = values['store_name'] ?? '';
         _uiFont = FontPreferences.uiFont;
         _documentFont = FontPreferences.documentFont;
@@ -107,6 +115,160 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _loading = false;
           _message = 'تعذر تحميل الإعدادات: $error';
+        });
+      }
+    }
+  }
+
+  Future<void> _connectExistingData() async {
+    if (!widget.canManageSystemSettings ||
+        (defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux)) {
+      return;
+    }
+    final selected = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'اختر المجلد الأب الذي يحتوي مجلد Homi Grocery Data',
+    );
+    if (selected == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ربط بيانات متجر موجودة'),
+        content: Text(
+          'سيبحث التطبيق عن قاعدة بيانات Homi داخل مجلد Homi Grocery Data في:\n\n$selected\n\nلن ينسخ أو يستبدل الملفات. سيجري فحص قاعدة البيانات قبل ربطها.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('فحص وربط البيانات'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _movingData = true;
+      _message = 'جارٍ فحص قاعدة البيانات الموجودة...';
+    });
+    try {
+      final database = await GroceryDatabase.open();
+      final target = await AppDataLocation.connectExisting(
+        currentDatabase: database,
+        closeDatabase: GroceryDatabase.closeForMaintenance,
+        reopenDatabase: GroceryDatabase.open,
+        selectedParentPath: selected,
+      );
+      if (!mounted) return;
+      setState(() {
+        _dataLocationPath = target.path;
+        _movingData = false;
+      });
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('تم ربط بيانات المتجر'),
+            content: Text('تم فحص قاعدة البيانات وربطها بنجاح.\n\nالموقع:\n${target.path}\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل.'),
+            actions: [
+              FilledButton(
+                onPressed: () => exit(0),
+                child: const Text('إغلاق التطبيق'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _movingData = false;
+          _message = 'تعذر ربط مجلد البيانات: $error';
+        });
+      }
+    }
+  }
+
+  Future<void> _changeDataLocation() async {
+    if (!widget.canManageSystemSettings ||
+        (defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux)) {
+      return;
+    }
+    final selected = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'اختر مجلدًا في القسم الذي تريد حفظ بيانات Homi فيه',
+    );
+    if (selected == null || !mounted) return;
+
+    final currentPath = _dataLocationPath ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('نقل بيانات المتجر'),
+        content: Text(
+          'سينقل التطبيق قاعدة البيانات وصور الأصناف والخطوط المستوردة والنسخ الاحتياطية إلى مجلد Homi Grocery Data داخل:\n\n$selected\n\nسيحتفظ بالمجلد القديم دون حذفه. بعد نجاح النقل سيُغلق التطبيق لإعادة فتحه باستخدام الموقع الجديد.\n\nالموقع الحالي:\n$currentPath',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('نقل البيانات'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _movingData = true;
+      _message = 'جارٍ فحص المجلد ونقل بيانات المتجر. لا تغلق التطبيق...';
+    });
+    try {
+      final database = await GroceryDatabase.open();
+      final target = await AppDataLocation.migrate(
+        currentDatabase: database,
+        closeDatabase: GroceryDatabase.closeForMaintenance,
+        reopenDatabase: GroceryDatabase.open,
+        selectedParentPath: selected,
+      );
+      if (!mounted) return;
+      setState(() {
+        _dataLocationPath = target.path;
+        _movingData = false;
+        _message = 'نجح نقل البيانات والتحقق من قاعدة البيانات.';
+      });
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('اكتمل نقل البيانات'),
+            content: Text(
+              'تم نقل البيانات والتحقق منها.\n\nالموقع الجديد:\n${target.path}\n\nسيُغلق التطبيق الآن. افتحه مجددًا لمتابعة العمل من الموقع الجديد.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => exit(0),
+                child: const Text('إغلاق التطبيق'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _movingData = false;
+          _message = 'تعذر نقل البيانات، وتم الإبقاء على الموقع السابق: $error';
         });
       }
     }
@@ -416,6 +578,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  if (widget.canManageSystemSettings &&
+                      (defaultTargetPlatform == TargetPlatform.windows ||
+                          defaultTargetPlatform == TargetPlatform.linux)) ...[
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text('مكان حفظ بيانات المتجر',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'انقل قاعدة البيانات وصور الأصناف والخطوط المستوردة والنسخ الاحتياطية إلى قسم مختلف عن قسم النظام. سيبقى المجلد القديم نسخة قبل النقل فقط ولن يستقبل العمليات الجديدة. لحماية أقوى، استخدم قرصًا ماديًا آخر للنسخ الاحتياطية.',
+                            ),
+                            const SizedBox(height: 10),
+                            SelectableText(_dataLocationPath ?? 'جارٍ تحديد الموقع...'),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _movingData ? null : _changeDataLocation,
+                              icon: _movingData
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.drive_file_move_outline),
+                              label: Text(_movingData ? 'جارٍ نقل البيانات...' : 'اختيار قسم أو مجلد آخر'),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _movingData ? null : _connectExistingData,
+                              icon: const Icon(Icons.folder_open_outlined),
+                              label: const Text('ربط مجلد بيانات موجود'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(18),

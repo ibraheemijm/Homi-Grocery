@@ -1,5 +1,6 @@
 // هوية جهاز مستقرة ومفتاح Ed25519 محفوظان في سجل واحد داخل التخزين الآمن.
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
@@ -52,11 +53,17 @@ class _StoredDeviceIdentity {
 }
 
 class PlatformDeviceIdentity {
-  PlatformDeviceIdentity(this._store, {bool Function()? isAndroid})
-      : _isAndroid = isAndroid ?? (() => Platform.isAndroid);
+  PlatformDeviceIdentity(
+    this._store, {
+    bool Function()? isAndroid,
+    String Function()? platformOverride,
+  }) : _platform = platformOverride ??
+            (isAndroid == null
+                ? () => Platform.operatingSystem
+                : () => isAndroid() ? 'android' : 'unsupported');
 
   final PlatformSecretStore _store;
-  final bool Function() _isAndroid;
+  final String Function() _platform;
   static const _identityRecordName = 'homi_platform_device_identity_v1';
   static const _spkiPrefix = <int>[
     0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
@@ -68,9 +75,7 @@ class PlatformDeviceIdentity {
   Future<_StoredDeviceIdentity>? _openingIdentity;
 
   Future<PlatformDeviceIdentityData> loadOrCreate() async {
-    if (!_isAndroid()) {
-      throw UnsupportedError('ربط الترخيص متاح على Android في هذه المرحلة فقط.');
-    }
+    final platform = _supportedPlatform();
     final stored = await _readOrCreate();
     final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
     final publicKey = await keyPair.extractPublicKey();
@@ -81,16 +86,13 @@ class PlatformDeviceIdentity {
     return PlatformDeviceIdentityData(
       deviceKey: stored.deviceKey,
       publicKeyDer: <int>[..._spkiPrefix, ...publicKey.bytes],
-      platform: 'android',
-      // كتالوج Homi Grocery يسجل Android بمعمارية universal حاليًا.
-      architecture: 'universal',
+      platform: platform,
+      architecture: _architectureFor(platform),
     );
   }
 
   Future<String> signNonce(String nonceBase64Url) async {
-    if (!_isAndroid()) {
-      throw UnsupportedError('توقيع تحديات الترخيص متاح على Android فقط.');
-    }
+    _supportedPlatform();
     final nonce = base64Url.decode(base64Url.normalize(nonceBase64Url));
     if (nonce.length != 32 ||
         base64UrlEncode(nonce).replaceAll('=', '') != nonceBase64Url) {
@@ -101,6 +103,25 @@ class PlatformDeviceIdentity {
     final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
     final signature = await _algorithm.sign(nonce, keyPair: keyPair);
     return base64UrlEncode(signature.bytes).replaceAll('=', '');
+  }
+
+  String _supportedPlatform() {
+    final platform = _platform().toLowerCase();
+    if (!const {'android', 'windows', 'linux'}.contains(platform)) {
+      throw UnsupportedError(
+        'ربط ترخيص Homi متاح حاليًا على Android وWindows وLinux فقط.',
+      );
+    }
+    return platform;
+  }
+
+  String _architectureFor(String platform) {
+    if (platform == 'android') return 'universal';
+    final abi = Abi.current().toString().toLowerCase();
+    if (abi.contains('x64')) return 'x64';
+    if (abi.contains('arm64')) return 'arm64';
+    if (abi.contains('ia32')) return 'x86';
+    return 'universal';
   }
 
   Future<_StoredDeviceIdentity> _readOrCreate() async {

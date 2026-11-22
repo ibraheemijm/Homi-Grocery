@@ -1,0 +1,388 @@
+// التحقق من سلسلة الثقة لمفاتيح توقيع Homi وحفظ آخر Keyset موثوق.
+import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
+
+import 'platform_api_client.dart';
+import 'platform_device_identity.dart';
+
+class TrustedPlatformSigningKey {
+  const TrustedPlatformSigningKey({
+    required this.keyId,
+    required this.purpose,
+    required this.publicKey,
+    required this.status,
+    required this.notBefore,
+    required this.notAfter,
+    required this.signingNotAfter,
+  });
+
+  final String keyId;
+  final String purpose;
+  final SimplePublicKey publicKey;
+  final String status;
+  final DateTime notBefore;
+  final DateTime notAfter;
+  /// آخر وقت مسموح لإنشاء توقيع جديد بهذا المفتاح؛ null للمفتاح النشط.
+  final DateTime? signingNotAfter;
+}
+
+class VerifiedPlatformKeyset {
+  const VerifiedPlatformKeyset({
+    required this.version,
+    required this.issuedAt,
+    required this.expiresAt,
+    required this.keys,
+    required this.signedEnvelope,
+  });
+
+  final int version;
+  final DateTime issuedAt;
+  final DateTime expiresAt;
+  final List<TrustedPlatformSigningKey> keys;
+
+  /// الغلاف الأصلي بعد نجاح التحقق، لحفظه واستعادته دون إعادة تشكيل payload.
+  final Map<String, Object?> signedEnvelope;
+
+  TrustedPlatformSigningKey keyForVerification({
+    required String keyId,
+    required String purpose,
+    required DateTime at,
+  }) {
+    final matches = keys.where((key) =>
+        key.keyId == keyId &&
+        key.purpose == purpose &&
+        key.status != 'revoked' &&
+        !at.isBefore(key.notBefore) &&
+        !at.isAfter(key.notAfter));
+    if (matches.length != 1) {
+      throw const FormatException(
+        'لا يوجد مفتاح توقيع موثوق وصالح لهذا الغرض.',
+      );
+    }
+    return matches.single;
+  }
+
+  /// يُستدعى بعد نجاح التحقق الرياضي من التوقيع وتحليل تاريخ الإصدار الموقّع.
+  /// مفتاح verify_only يتحقق من التواقيع السابقة لوقت إيقاف التوقيع فقط.
+  void validateSignatureTime({
+    required TrustedPlatformSigningKey key,
+    required DateTime signedAt,
+    required DateTime now,
+  }) {
+    final timestamp = signedAt.toUtc();
+    final current = now.toUtc();
+    if (timestamp.isBefore(key.notBefore) ||
+        timestamp.isAfter(key.notAfter) ||
+        timestamp.isAfter(current.add(PlatformSigningTrust.clockSkew)) ||
+        (key.signingNotAfter != null &&
+            timestamp.isAfter(key.signingNotAfter!))) {
+      throw const FormatException(
+        'تاريخ التوقيع خارج الفترة المسموح بها لهذا المفتاح.',
+      );
+    }
+  }
+}
+
+/// Root key بصيغة Ed25519 raw (32 bytes) وBase64.
+/// لا تضع المفتاح الخاص المقابل في التطبيق أو المستودع.
+class PlatformSigningTrust {
+  PlatformSigningTrust({
+    required PlatformSecretStore store,
+    required this.rootKeyId,
+    required String rootPublicKeyBase64,
+    DateTime Function()? clock,
+  })  : _store = store,
+        _clock = clock ?? DateTime.now,
+        _rootPublicKey = _decodeRootKey(rootPublicKeyBase64) {
+    if (!_validIdentifier(rootKeyId)) {
+      throw const FormatException('معرّف جذر الثقة غير صالح.');
+    }
+  }
+
+  /// يحمّل الجذر العام من dart-define؛ لا توجد قيمة افتراضية أو مفتاح اختبار.
+  factory PlatformSigningTrust.fromEnvironment({
+    required PlatformSecretStore store,
+    DateTime Function()? clock,
+  }) {
+    const configuredKeyId = String.fromEnvironment('HOMI_PLATFORM_ROOT_KEY_ID');
+    const configuredPublicKey =
+        String.fromEnvironment('HOMI_PLATFORM_ROOT_PUBLIC_KEY');
+    if (configuredKeyId.trim().isEmpty ||
+        configuredPublicKey.trim().isEmpty) {
+      throw const FormatException(
+        'لم يتم إعداد جذر ثقة Homi Platform لهذا الإصدار.',
+      );
+    }
+    return PlatformSigningTrust(
+      store: store,
+      rootKeyId: configuredKeyId,
+      rootPublicKeyBase64: configuredPublicKey,
+      clock: clock,
+    );
+  }
+
+  static const Duration maxKeysetLifetime = Duration(days: 30);
+  static const Duration clockSkew = Duration(minutes: 5);
+  static const String _storageKey = 'homi_platform_trusted_keyset_v1';
+  static const List<int> _spkiPrefix = [
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03,
+    0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+  ];
+
+  final PlatformSecretStore _store;
+  final String rootKeyId;
+  final DateTime Function() _clock;
+  final SimplePublicKey _rootPublicKey;
+  final Ed25519 _ed25519 = Ed25519();
+
+  static SimplePublicKey _decodeRootKey(String value) {
+    try {
+      final bytes = base64Decode(value);
+      if (bytes.length != 32 || base64Encode(bytes) != value) {
+        throw const FormatException();
+      }
+      return SimplePublicKey(bytes, type: KeyPairType.ed25519);
+    } on FormatException {
+      throw const FormatException(
+        'مفتاح جذر الثقة يجب أن يكون Ed25519 raw بطول 32 بايت بصيغة Base64.',
+      );
+    }
+  }
+
+  static bool _validIdentifier(String value) =>
+      RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$').hasMatch(value);
+
+  /// يتحقق من التوقيع أولًا، ثم المحتوى والتواريخ، ثم يمنع downgrade.
+  /// يُحفظ الغلاف كاملًا في كتابة واحدة بعد اجتياز جميع الفحوص.
+  Future<VerifiedPlatformKeyset> acceptSignedEnvelope(
+    Map<String, Object?> envelope,
+  ) async {
+    final verified = await _verifyEnvelope(envelope);
+    final storedText = await _store.read(_storageKey);
+    if (storedText != null) {
+      final storedDecoded = jsonDecode(storedText);
+      if (storedDecoded is! Map<String, dynamic>) {
+        throw StateError('سجل Keyset المحفوظ تالف؛ أوقف التحديث الآمن.');
+      }
+      final previous = await _verifyEnvelope(
+        Map<String, Object?>.from(storedDecoded),
+        enforceCurrentValidity: false,
+      );
+      if (verified.version < previous.version) {
+        throw const FormatException('رُفض Keyset أقدم من النسخة الموثوقة.');
+      }
+      if (verified.version == previous.version &&
+          !_sameBytes(
+            base64Decode(verified.signedEnvelope['payload']! as String),
+            base64Decode(previous.signedEnvelope['payload']! as String),
+          )) {
+        throw const FormatException(
+          'إصدار Keyset نفسه لا يجوز أن يحمل محتوى مختلفًا.',
+        );
+      }
+    }
+
+    await _store.write(_storageKey, jsonEncode(verified.signedEnvelope));
+    return verified;
+  }
+
+  /// يجلب الغلاف الموقّع من المنصة ولا يقبله إلا بعد تحقق الجذر المضمّن.
+  Future<VerifiedPlatformKeyset> fetchAndAccept(PlatformApiClient api) async {
+    final envelope = await api.getJson('/api/v1/signing-keyset');
+    return acceptSignedEnvelope(envelope);
+  }
+
+  /// يستعيد النسخة المخبأة مع إعادة التحقق من التوقيع والصلاحية الحالية.
+  Future<VerifiedPlatformKeyset?> loadCached() async {
+    final text = await _store.read(_storageKey);
+    if (text == null) return null;
+    final decoded = jsonDecode(text);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('سجل Keyset المحفوظ تالف؛ أوقف التحقق.');
+    }
+    return _verifyEnvelope(Map<String, Object?>.from(decoded));
+  }
+
+  Future<VerifiedPlatformKeyset> _verifyEnvelope(
+    Map<String, Object?> envelope, {
+    bool enforceCurrentValidity = true,
+  }) async {
+    if (envelope['root_key_id'] != rootKeyId ||
+        envelope['payload'] is! String ||
+        envelope['signature'] is! String) {
+      throw const FormatException('غلاف Keyset لا يطابق جذر الثقة المثبت.');
+    }
+
+    final payloadText = envelope['payload'] as String;
+    final signatureText = envelope['signature'] as String;
+    late final List<int> payload;
+    late final List<int> signature;
+    try {
+      payload = base64Decode(payloadText);
+      signature = base64Decode(signatureText);
+      if (base64Encode(payload) != payloadText ||
+          base64Encode(signature) != signatureText ||
+          signature.length != 64) {
+        throw const FormatException();
+      }
+    } on FormatException {
+      throw const FormatException('ترميز payload أو توقيع Keyset غير صالح.');
+    }
+
+    final signatureValid = await _ed25519.verify(
+      payload,
+      signature: Signature(signature, publicKey: _rootPublicKey),
+    );
+    if (!signatureValid) {
+      throw const FormatException('فشل توقيع جذر الثقة لمجموعة المفاتيح.');
+    }
+
+    final decoded = jsonDecode(utf8.decode(payload));
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('محتوى Keyset ليس كائن JSON صالحًا.');
+    }
+    final schemaVersion = decoded['schema_version'];
+    final version = decoded['keyset_version'];
+    if (schemaVersion != 1 || version is! int || version < 1) {
+      throw const FormatException('إصدار مخطط أو رقم Keyset غير صالح.');
+    }
+
+    final issuedAt = _parseTimestamp(decoded['issued_at']);
+    final expiresAt = _parseTimestamp(decoded['expires_at']);
+    final now = _clock().toUtc();
+    if (!expiresAt.isAfter(issuedAt) ||
+        expiresAt.difference(issuedAt) > maxKeysetLifetime ||
+        (enforceCurrentValidity &&
+            (issuedAt.isAfter(now.add(clockSkew)) ||
+                now.isAfter(expiresAt.add(clockSkew))))) {
+      throw const FormatException(
+        'Keyset منتهي الصلاحية أو بتواريخ خارج السياسة المعتمدة.',
+      );
+    }
+
+    final rawKeys = decoded['keys'];
+    if (rawKeys is! List || rawKeys.isEmpty || rawKeys.length > 100) {
+      throw const FormatException('قائمة مفاتيح Keyset غير صالحة.');
+    }
+    final ids = <String>{};
+    final keys = <TrustedPlatformSigningKey>[];
+    for (final raw in rawKeys) {
+      if (raw is! Map<String, dynamic>) {
+        throw const FormatException('عنصر مفتاح داخل Keyset غير صالح.');
+      }
+      final keyId = raw['key_id'];
+      final purpose = raw['purpose'];
+      final algorithm = raw['algorithm'];
+      final publicText = raw['public_key'];
+      final status = raw['status'];
+      if (keyId is! String ||
+          !_validIdentifier(keyId) ||
+          !ids.add(keyId) ||
+          !const {'update_manifest', 'offline_license_grant'}
+              .contains(purpose) ||
+          algorithm != 'Ed25519' ||
+          publicText is! String ||
+          !const {'active', 'verify_only', 'revoked'}.contains(status)) {
+        throw const FormatException(
+          'معرف أو غرض أو خوارزمية أو حالة مفتاح غير صالحة أو مكررة.',
+        );
+      }
+
+      final notBefore = _parseTimestamp(raw['not_before']);
+      final notAfter = _parseTimestamp(raw['not_after']);
+      final signingNotAfterValue = raw['signing_not_after'];
+      final signingNotAfter = signingNotAfterValue == null
+          ? null
+          : _parseTimestamp(signingNotAfterValue);
+      if ((status == 'verify_only' && signingNotAfter == null) ||
+          (signingNotAfter != null &&
+              (signingNotAfter.isBefore(notBefore) ||
+                  signingNotAfter.isAfter(notAfter))) ||
+          !notAfter.isAfter(notBefore)) {
+        throw const FormatException('فترة صلاحية المفتاح غير صحيحة.');
+      }
+
+      late final List<int> der;
+      try {
+        der = base64Decode(publicText);
+      } on FormatException {
+        throw const FormatException('ترميز المفتاح العام غير صالح.');
+      }
+      if (base64Encode(der) != publicText ||
+          der.length != 44 ||
+          !_sameBytes(der.sublist(0, 12), _spkiPrefix)) {
+        throw const FormatException('صيغة مفتاح Ed25519 العام غير مدعومة.');
+      }
+      keys.add(TrustedPlatformSigningKey(
+        keyId: keyId,
+        purpose: purpose as String,
+        publicKey: SimplePublicKey(
+          der.sublist(12),
+          type: KeyPairType.ed25519,
+        ),
+        status: status as String,
+        notBefore: notBefore,
+        notAfter: notAfter,
+        signingNotAfter: signingNotAfter,
+      ));
+    }
+
+    return VerifiedPlatformKeyset(
+      version: version,
+      issuedAt: issuedAt,
+      expiresAt: expiresAt,
+      keys: List.unmodifiable(keys),
+      signedEnvelope: Map.unmodifiable(envelope),
+    );
+  }
+
+  DateTime _parseTimestamp(Object? value) {
+    final pattern = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))',
+    );
+    final match = value is String ? pattern.firstMatch(value) : null;
+    if (match == null || match.group(0) != value) {
+      throw const FormatException(
+        'تاريخ Keyset يجب أن يتضمن منطقة زمنية بصيغة ISO-8601.',
+      );
+    }
+
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final hour = int.parse(match.group(4)!);
+    final minute = int.parse(match.group(5)!);
+    final second = int.parse(match.group(6)!);
+    final offsetHour = int.tryParse(match.group(9) ?? '0') ?? 0;
+    final offsetMinute = int.tryParse(match.group(10) ?? '0') ?? 0;
+
+    // نرفض القيم التقويمية غير الصحيحة قبل تحويل التاريخ.
+    if (month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > DateTime.utc(year, month + 1, 0).day ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59 ||
+        offsetHour > 23 ||
+        offsetMinute > 59) {
+      throw const FormatException('تاريخ Keyset يحتوي قيمًا تقويمية غير صالحة.');
+    }
+
+    final parsed = DateTime.tryParse(value as String);
+    if (parsed == null) {
+      throw const FormatException('تاريخ Keyset غير صالح.');
+    }
+    return parsed.toUtc();
+  }
+
+  bool _sameBytes(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    var difference = 0;
+    for (var i = 0; i < left.length; i++) {
+      difference |= left[i] ^ right[i];
+    }
+    return difference == 0;
+  }
+}

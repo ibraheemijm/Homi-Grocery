@@ -1,10 +1,11 @@
-// ربط جهاز Android بالترخيص وإصدار تصريح offline بعد التحقق من توقيع الخادم.
+// ربط أجهزة Homi بالترخيص وإصدار تصريح offline بعد التحقق من توقيع الخادم.
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 
 import 'platform_api_client.dart';
 import 'platform_device_identity.dart';
+import 'platform_signing_trust.dart';
 
 class VerifiedOfflineGrant {
   const VerifiedOfflineGrant({
@@ -34,11 +35,14 @@ class PlatformLicensingService {
   PlatformLicensingService({
     required PlatformApiClient api,
     required PlatformDeviceIdentity deviceIdentity,
+    required PlatformSigningTrust signingTrust,
   })  : _api = api,
-        _deviceIdentity = deviceIdentity;
+        _deviceIdentity = deviceIdentity,
+        _signingTrust = signingTrust;
 
   final PlatformApiClient _api;
   final PlatformDeviceIdentity _deviceIdentity;
+  final PlatformSigningTrust _signingTrust;
   final Ed25519 _ed25519 = Ed25519();
 
   /// يسجل الجهاز بمفتاحه العام؛ لا يغادر المفتاح الخاص التخزين الآمن.
@@ -120,68 +124,65 @@ class PlatformLicensingService {
       throw const FormatException('بيانات تصريح offline غير مكتملة.');
     }
 
-    final payload = base64Decode(payloadText);
-    final signature = base64Decode(signatureText);
-    final claims = jsonDecode(utf8.decode(payload));
-    if (claims is! Map<String, dynamic> ||
-        claims['grant_id'] != grantId ||
-        claims['license_id'] != licenseId ||
-        claims['device_id'] != deviceId ||
-        claims['key_id'] != keyId) {
-      throw const FormatException('بيانات التصريح لا تطابق الجهاز أو الترخيص.');
+    late final List<int> payload;
+    late final List<int> signature;
+    try {
+      payload = base64Decode(payloadText);
+      signature = base64Decode(signatureText);
+      if (base64Encode(payload) != payloadText ||
+          base64Encode(signature) != signatureText ||
+          payload.isEmpty ||
+          payload.length > 64 * 1024 ||
+          signature.length != 64) {
+        throw const FormatException();
+      }
+    } on FormatException {
+      throw const FormatException('ترميز payload أو توقيع تصريح offline غير صالح.');
     }
 
-    final keysResponse = await _api.getJson('/api/v1/license-signing-keys');
-    final keys = keysResponse['items'];
-    if (keys is! List) {
-      throw const FormatException('تعذر قراءة مفاتيح التحقق من التراخيص.');
-    }
-    final matchingKey = keys.cast<Object?>().whereType<Map>().where(
-          (item) => item['key_id'] == keyId &&
-              (item['status'] == 'active' || item['status'] == 'verify_only'),
-        );
-    if (matchingKey.isEmpty) {
-      throw const FormatException('مفتاح توقيع التصريح غير معروف لهذا التطبيق.');
-    }
-
-    final publicDerText = matchingKey.first['public_key'];
-    if (publicDerText is! String) {
-      throw const FormatException('المفتاح العام للتصريح غير صالح.');
-    }
-    final publicDer = base64Decode(publicDerText);
-    const spkiPrefix = <int>[
-      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
-      0x70, 0x03, 0x21, 0x00,
-    ];
-    if (publicDer.length != 44 ||
-        !_sameBytes(publicDer.take(12).toList(), spkiPrefix)) {
-      throw const FormatException('صيغة مفتاح Ed25519 العام غير مدعومة.');
-    }
-
-    final publicKey = SimplePublicKey(
-      publicDer.sublist(12),
-      type: KeyPairType.ed25519,
+    // لا نحلل المطالبات ولا نستخدمها قبل إثبات التوقيع بمفتاح موثوق.
+    final keyset = await _signingTrust.fetchAndAccept(_api);
+    final trustedKey = keyset.keyForVerification(
+      keyId: keyId,
+      purpose: 'offline_license_grant',
+      at: DateTime.now().toUtc(),
     );
     final isValid = await _ed25519.verify(
       payload,
-      signature: Signature(signature, publicKey: publicKey),
+      signature: Signature(signature, publicKey: trustedKey.publicKey),
     );
     if (!isValid) {
       throw const FormatException('فشل التحقق من توقيع تصريح offline.');
     }
 
-    final issuedAt = DateTime.tryParse(claims['issued_at'] as String? ?? '');
-    final expiresAtText = claims['expires_at'];
+    final decodedClaims = jsonDecode(utf8.decode(payload));
+    if (decodedClaims is! Map<String, dynamic> ||
+        decodedClaims['schema_version'] != 1 ||
+        decodedClaims['grant_id'] != grantId ||
+        decodedClaims['license_id'] != licenseId ||
+        decodedClaims['device_id'] != deviceId ||
+        decodedClaims['key_id'] != keyId) {
+      throw const FormatException('بيانات التصريح لا تطابق الجهاز أو الترخيص.');
+    }
+
+    final issuedAt = _parseGrantTimestamp(decodedClaims['issued_at']);
+    final expiresAtText = decodedClaims['expires_at'];
     final expiresAt = expiresAtText == null
         ? null
-        : DateTime.tryParse(expiresAtText as String);
-    final entitlementVersion = claims['entitlement_version'];
+        : _parseGrantTimestamp(expiresAtText);
+    final entitlementVersion = decodedClaims['entitlement_version'];
     if (issuedAt == null ||
         (expiresAtText != null && expiresAt == null) ||
-        entitlementVersion is! num ||
-        !entitlementVersion.isFinite) {
+        (expiresAt != null && !expiresAt.isAfter(issuedAt)) ||
+        entitlementVersion is! int ||
+        entitlementVersion < 1) {
       throw const FormatException('حقول صلاحية التصريح غير صالحة.');
     }
+    keyset.validateSignatureTime(
+      key: trustedKey,
+      signedAt: issuedAt,
+      now: DateTime.now().toUtc(),
+    );
 
     return VerifiedOfflineGrant(
       id: grantId,
@@ -192,16 +193,16 @@ class PlatformLicensingService {
       signature: signature,
       issuedAt: issuedAt.toUtc(),
       expiresAt: expiresAt?.toUtc(),
-      entitlementVersion: entitlementVersion.toInt(),
+      entitlementVersion: entitlementVersion,
     );
   }
-
-  bool _sameBytes(List<int> left, List<int> right) {
-    if (left.length != right.length) return false;
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
+  
+  DateTime? _parseGrantTimestamp(Object? value) {
+    if (value is! String ||
+        !RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$')
+            .hasMatch(value)) {
+      return null;
     }
-    return difference == 0;
+    return DateTime.tryParse(value)?.toUtc();
   }
 }

@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'app_data_location.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'grocery_database.dart';
@@ -113,7 +113,7 @@ class FontPreferences {
       throw const FormatException('الملف ليس خط TTF/OTF معروفًا.');
     }
 
-    final directory = await getApplicationSupportDirectory();
+    final directory = await AppDataLocation.resolveDataDirectory();
     final fontDirectory = Directory(p.join(directory.path, 'fonts'));
     await fontDirectory.create(recursive: true);
     final extension = p.extension(picked.name).toLowerCase() == '.otf'
