@@ -73,7 +73,10 @@ void main() {
     expect(transport.requests.first.uri.path, '/api/v1/devices/challenges');
     expect(transport.requests.last.uri.path, '/api/v1/licenses/$licenseId/devices');
     expect(transport.requests.every(
-      (request) => request.headers['Authorization'] == 'Bearer user-token',
+      (request) => request.headers.entries.any(
+        (entry) => entry.key.toLowerCase() == 'authorization' &&
+            entry.value == 'Bearer user-token',
+      ),
     ), isTrue);
 
     final firstBody = jsonDecode(transport.requests.first.body!) as Map<String, dynamic>;
