@@ -543,7 +543,14 @@ void main() {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'linux');
     var now = DateTime.utc(2026, 11, 21, 10);
-    final transport = QueueTransport([]);
+    final trialStartedAt = now.toIso8601String();
+    final transport = QueueTransport([
+      success({
+        'registration_status': 'registered',
+        'trial_started_at': trialStartedAt,
+        'trial_ends_at': now.add(const Duration(days: 14)).toIso8601String(),
+      }),
+    ]);
     final service = PlatformDeviceLinkService(
       api: PlatformApiClient(
         baseUri: Uri.parse('https://platform.example.test'),
@@ -574,7 +581,12 @@ void main() {
     expect(continuedTrial.startsAt, trial.startsAt);
     expect(continuedTrial.trialEndsAt, trial.trialEndsAt);
     expect(await service.refreshOfflineGrant(), isNotNull);
-    expect(transport.requests, isEmpty);
+    expect(transport.requests, hasLength(1));
+    expect(transport.requests.single.uri.path, '/api/v1/public/trials/register');
+    final registrationBody = jsonDecode(transport.requests.single.body!) as Map<String, dynamic>;
+    expect(registrationBody['device_id'], trial.deviceId);
+    expect(registrationBody['trial_started_at'], trialStartedAt);
+    expect(registrationBody['signature'], isA<String>());
 
     now = now.subtract(const Duration(days: 6));
     final rollback = await service.readLinkedLicense();
@@ -583,5 +595,39 @@ void main() {
     expect(rolledBackTrial.offlineExpiresAt, now);
     expect(rolledBackTrial.trialEndsAt, trial.trialEndsAt);
   });
+
+
+  test('يقصر التجربة المحلية إذا أعادت المنصة تاريخًا أقدم لنفس هوية الجهاز', () async {
+    final store = MemorySecretStore();
+    final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
+    final now = DateTime.utc(2026, 11, 21, 10);
+    final serverStart = now.subtract(const Duration(days: 6));
+    final transport = QueueTransport([
+      success({
+        'registration_status': 'already_registered',
+        'trial_started_at': serverStart.toIso8601String(),
+        'trial_ends_at': serverStart.add(const Duration(days: 14)).toIso8601String(),
+      }),
+    ]);
+    final service = PlatformDeviceLinkService(
+      api: PlatformApiClient(
+        baseUri: Uri.parse('https://platform.example.test'),
+        transport: transport,
+      ),
+      deviceIdentity: identity,
+      store: store,
+      trustedPublicKeys: {},
+      clock: () => now,
+    );
+
+    final local = await service.startLocalTrial();
+    expect(local, isNotNull);
+    expect(local!.startsAt, now);
+    final synced = await service.refreshOfflineGrant();
+    expect(synced, isNotNull);
+    expect(synced!.startsAt, serverStart);
+    expect(synced.trialEndsAt, serverStart.add(const Duration(days: 14)));
+  });
+
 
 }
