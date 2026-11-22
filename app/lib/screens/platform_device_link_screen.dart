@@ -278,6 +278,17 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
     }
   }
 
+  Future<void> _openWhatsApp() async {
+    if (_supportMessage.isEmpty) return;
+    final uri = Uri.https('wa.me', '/2490904697455', {
+      'text': _supportMessage,
+    });
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      setState(() => _message = 'تعذر فتح WhatsApp. يمكنك نسخ بيانات الطلب أو مشاركتها يدويًا.');
+    }
+  }
+
   Future<void> _callSupport() async {
     await launchUrl(
       Uri(scheme: 'tel', path: '+2490904697455'),
@@ -464,6 +475,11 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
                             onPressed: _working ? null : _shareRequest,
                             icon: const Icon(Icons.chat),
                             label: const Text('مشاركة ملخص الطلب'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _working ? null : _openWhatsApp,
+                            icon: const Icon(Icons.message_outlined),
+                            label: const Text('إرسال عبر WhatsApp'),
                           ),
                           const SizedBox(height: 8),
                           FilledButton.icon(
