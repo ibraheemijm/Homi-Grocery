@@ -3,9 +3,9 @@ name: Flutter Windows checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/windows-ota-foundation]
+    branches: [feature/windows-ota-foundation, feature/device-link-onboarding]
   pull_request:
-    branches: [main, feature/flutter-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation]
 
 concurrency:
   group: flutter-windows-${{ github.workflow }}-${{ github.ref }}
@@ -51,7 +51,7 @@ jobs:
       - name: Run tests
         run: flutter test
       - name: Build Windows desktop
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=${{ vars.HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64 }}
       - name: Build standalone Windows updater
         shell: pwsh
         run: |
