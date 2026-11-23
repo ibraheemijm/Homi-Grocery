@@ -17,6 +17,7 @@ import '../data/platform_signing_trust.dart';
 import '../data/platform_update_service.dart';
 import '../data/android_apk_installer.dart';
 import '../data/windows_update_launcher.dart';
+import 'platform_device_link_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -683,9 +684,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'استورد ملف الترخيص الذي أرسلته إدارة Homi. يتحقق التطبيق من توقيعه وبصمة هذا الجهاز قبل استبدال الترخيص الحالي.',
+                              'يمكنك طلب اشتراك جديد أو إنشاء ملف طلب تفعيل .hreq وإرساله إلى إدارة Homi، كما يمكنك استيراد ملف الترخيص .hlic بعد إصداره.',
                             ),
                             const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => PlatformDeviceLinkScreen(
+                                      service: widget.platformDeviceLinkService!,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.request_quote_outlined),
+                              label: const Text('طلب اشتراك أو إنشاء ملف الطلب (.hreq)'),
+                            ),
+                            const SizedBox(height: 8),
                             OutlinedButton.icon(
                               onPressed: _importingLicense ? null : _importLicenseFile,
                               icon: _importingLicense
