@@ -327,6 +327,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   DashboardStats? _stats;
+  PlatformLinkedLicense? _subscriptionLicense;
   String? _statsError;
   List<RecentInvoice> _recentInvoices = const [];
   bool _recentInvoicesLoading = true;
@@ -344,6 +345,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    _loadSubscriptionLicense();
     _loadCashierPermissions();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _clockNow = DateTime.now());
@@ -384,6 +386,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (confirmed == true) widget.onLogout();
   }
 
+
+  // قراءة حالة الترخيص لعرض الفترة التجريبية أو الاشتراك في لوحة المتجر.
+  Future<void> _loadSubscriptionLicense() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null) return;
+    try {
+      final license = await service.readLinkedLicense();
+      if (!mounted) return;
+      setState(() => _subscriptionLicense = license);
+    } catch (_) {
+      if (mounted) setState(() => _subscriptionLicense = null);
+    }
+  }
+
+  // فتح شاشة طلب الاشتراك وإنشاء ملف HREQ من أي وقت أثناء استخدام التطبيق.
+  Future<void> _openSubscriptionScreen() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PlatformDeviceLinkScreen(
+          service: service,
+          onLinked: () => unawaited(_loadSubscriptionLicense()),
+        ),
+      ),
+    );
+    await _loadSubscriptionLicense();
+  }
+
+  // شريط حالة الاشتراك ظاهر للمدير على Android والحاسوب.
+  Widget _buildSubscriptionBanner(BuildContext context) {
+    if (widget.platformDeviceLinkService == null) return const SizedBox.shrink();
+    final license = _subscriptionLicense;
+    if (license == null) return const SizedBox.shrink();
+    final isTrial = license.planKey == 'trial' || license.isLocalTrial;
+    final endDate = isTrial
+        ? (license.trialEndsAt ?? license.offlineExpiresAt)
+        : (license.endsAt ?? license.subscriptionEndsAt);
+    final remaining = endDate?.difference(DateTime.now());
+    final remainingDays = remaining == null
+        ? null
+        : remaining.isNegative
+            ? 0
+            : remaining.inDays + (remaining.inHours.remainder(24) > 0 ? 1 : 0);
+    final status = isTrial
+        ? 'الفترة التجريبية'
+        : license.planKey == 'lifetime'
+            ? 'اشتراك دائم'
+            : license.planKey == 'annual'
+                ? 'اشتراك سنوي'
+                : 'اشتراك شهري';
+    final detail = isTrial
+        ? (remainingDays == null
+            ? status
+            : remainingDays == 0
+                ? 'انتهت الفترة التجريبية'
+                : '${status} — متبقي ${remainingDays} ${remainingDays == 1 ? 'يوم' : 'أيام'}')
+        : endDate == null
+            ? status
+            : '${status} — ينتهي في ${endDate.toLocal().toString().split(' ').first}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_user_outlined, color: brandGreen),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('حالة ترخيص Homi Grocery',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: _openSubscriptionScreen,
+              child: const Text('طلب اشتراك'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _loadHomePreferences() async {
     try {
@@ -812,6 +902,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 22),
               _buildStatusBanner(context),
+              const SizedBox(height: 12),
+              _buildSubscriptionBanner(context),
               const SizedBox(height: 18),
               LayoutBuilder(
                 builder: (context, box) {
@@ -970,6 +1062,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverToBoxAdapter(child: _buildSubscriptionBanner(context)),
         ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
