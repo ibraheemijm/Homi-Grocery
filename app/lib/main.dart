@@ -442,10 +442,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? status
             : remainingDays == 0
                 ? 'انتهت الفترة التجريبية'
-                : '${status} — متبقي ${remainingDays} ${remainingDays == 1 ? 'يوم' : 'أيام'}')
+                : '$status — متبقي $remainingDays ${remainingDays == 1 ? 'يوم' : 'أيام'}')
         : endDate == null
             ? status
-            : '${status} — ينتهي في ${endDate.toLocal().toString().split(' ').first}';
+            : '$status — ينتهي في ${endDate.toLocal().toString().split(' ').first}';
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
