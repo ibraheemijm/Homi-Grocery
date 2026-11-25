@@ -5,7 +5,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:homi_grocery/data/auth_repository.dart';
 import 'package:homi_grocery/data/grocery_database.dart';
+import 'package:homi_grocery/data/platform_device_link_service.dart';
 import 'package:homi_grocery/screens/authentication_gate.dart';
+import 'package:homi_grocery/screens/platform_device_link_screen.dart';
 
 // ينتظر عمليات قاعدة البيانات والانتقالات دون انتظار مؤشر التحميل الدوار.
 Future<void> _pumpGate(WidgetTester tester) async {
@@ -18,6 +20,60 @@ Future<void> _pumpGate(WidgetTester tester) async {
 }
 
 // يعزل اختبار تبديل الجلسات عن كلفة PBKDF2؛ تحقق كلمة المرور مغطى باختبارات المستودع.
+class _GateTestDeviceLinkService implements PlatformDeviceLinkOperations {
+  PlatformLinkedLicense? license;
+  PlatformLinkedLicense? grant;
+
+  @override
+  Future<PlatformActivationRequest> requestActivation({
+    String? customerName,
+    String? customerPhone,
+    String? requestedPlan,
+    String? customerNotes,
+  }) async =>
+      PlatformActivationRequest(
+        requestId: '123e4567-e89b-42d3-a456-426614174000',
+        keyFingerprint: List.filled(64, 'a').join(),
+        platform: 'android',
+        architecture: 'arm64-v8a',
+        challengeExpiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      );
+
+  @override
+  Future<PlatformActivationRequestFile> createActivationRequestFile({
+    required String customerName,
+    required String customerPhone,
+    required String requestedPlan,
+    String? customerNotes,
+  }) async => const PlatformActivationRequestFile(
+    requestId: '123e4567-e89b-42d3-a456-426614174000',
+    bytes: [],
+  );
+
+  @override
+  Future<PlatformActivationRequest?> readPendingActivationRequest() async => null;
+
+  @override
+  Future<PlatformDeviceLinkStatus> completePendingActivation() async =>
+      PlatformDeviceLinkStatus.linked;
+
+  @override
+  Future<PlatformLinkedLicense> importLicenseFile(List<int> fileBytes) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PlatformLinkedLicense?> readLinkedLicense() async => license;
+
+  @override
+  Future<PlatformLinkedLicense?> startLocalTrial() async => null;
+
+  @override
+  Future<PlatformLinkedLicense?> refreshOfflineGrant() async => grant ?? license;
+
+  @override
+  Future<PlatformLinkedLicense?> readOfflineGrant() async => grant ?? license;
+}
+
 class _GateTestAuthRepository extends AuthRepository {
   _GateTestAuthRepository(super._database, {required this.users});
 
@@ -88,6 +144,271 @@ void main() {
     await _pumpGate(tester);
     expect(initialized, isTrue);
     expect(find.text('تسجيل الدخول'), findsOneWidget);
+  });
+
+  testWidgets('يطلب ربط الجهاز من المدير قبل فتح مساحة المتجر', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: _GateTestDeviceLinkService(),
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('authenticated'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.byType(PlatformDeviceLinkScreen), findsOneWidget);
+    expect(find.text('تفعيل Homi Grocery'), findsOneWidget);
+    expect(find.text('authenticated'), findsNothing);
+  });
+
+  testWidgets('يعرض مساحة القراءة فقط عند انتهاء الترخيص', (tester) async {
+    final now = DateTime.now().toUtc();
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174030',
+        deviceId: '123e4567-e89b-42d3-a456-426614174032',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 15)),
+        endsAt: now.subtract(const Duration(days: 1)),
+        trialEndsAt: now.subtract(const Duration(days: 1)),
+        subscriptionEndsAt: null,
+        offlineExpiresAt: now.subtract(const Duration(days: 8)),
+        graceEndsAt: null,
+        accessPolicy: 'full_until_offline_expiry_or_trial_end_then_read_export',
+        planKey: 'trial',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('operational workspace'), findsNothing);
+    expect(find.text('فتح الوردية'), findsNothing);
+  });
+
+  testWidgets('يحوّل التجربة إلى القراءة فقط بعد سبعة أيام دون اتصال', (tester) async {
+    final now = DateTime.now().toUtc();
+    final trialEndsAt = now.add(const Duration(days: 7));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174031',
+        deviceId: '123e4567-e89b-42d3-a456-426614174033',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 1)),
+        endsAt: now.add(const Duration(days: 7)),
+        trialEndsAt: trialEndsAt,
+        subscriptionEndsAt: null,
+        offlineExpiresAt: now.subtract(const Duration(minutes: 1)),
+        graceEndsAt: null,
+        accessPolicy: 'full_until_offline_expiry_or_trial_end_then_read_export',
+        planKey: 'trial',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('operational workspace'), findsNothing);
+    expect(find.text('فتح الوردية'), findsNothing);
+  });
+
+  testWidgets('يبقي الاشتراك المدفوع في القراءة فقط خلال مهلة السماح', (tester) async {
+    final now = DateTime.now().toUtc();
+    final endsAt = now.subtract(const Duration(days: 1));
+    final graceEndsAt = now.add(const Duration(days: 6));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174034',
+        deviceId: '123e4567-e89b-42d3-a456-426614174035',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 31)),
+        endsAt: endsAt,
+        trialEndsAt: null,
+        subscriptionEndsAt: endsAt,
+        offlineExpiresAt: graceEndsAt,
+        graceEndsAt: graceEndsAt,
+        accessPolicy: 'full_until_subscription_end_then_read_export_until_grace_end',
+        planKey: 'monthly',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('read-only store_admin'), findsOneWidget);
+    expect(find.text('انتهت مهلة الترخيص'), findsNothing);
+    expect(find.text('operational workspace'), findsNothing);
+  });
+
+  testWidgets('يمنع استخدام التطبيق بعد انتهاء مهلة الاشتراك المدفوع', (tester) async {
+    final now = DateTime.now().toUtc();
+    final endsAt = now.subtract(const Duration(days: 8));
+    final graceEndsAt = now.subtract(const Duration(minutes: 1));
+    final deviceLink = _GateTestDeviceLinkService()
+      ..license = PlatformLinkedLicense(
+        licenseId: '123e4567-e89b-42d3-a456-426614174036',
+        deviceId: '123e4567-e89b-42d3-a456-426614174037',
+        keyId: 'homi-test-key',
+        startsAt: now.subtract(const Duration(days: 38)),
+        endsAt: endsAt,
+        trialEndsAt: null,
+        subscriptionEndsAt: endsAt,
+        offlineExpiresAt: graceEndsAt,
+        graceEndsAt: graceEndsAt,
+        accessPolicy: 'full_until_subscription_end_then_read_export_until_grace_end',
+        planKey: 'monthly',
+        entitlementVersion: 1,
+        signedPayload: const [1],
+        signature: const [2],
+        publicKeyDer: const [3],
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: deviceLink,
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => Scaffold(
+            body: Text('read-only ${user.username}'),
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('operational workspace'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, manager.username);
+    await tester.enterText(find.byType(TextField).last, 'StrongPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('انتهت مهلة الترخيص'), findsOneWidget);
+    expect(find.text('read-only store_admin'), findsNothing);
+    expect(find.text('operational workspace'), findsNothing);
+  });
+
+  testWidgets('لا يسمح للكاشير ببدء ربط الجهاز بدل المدير', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthenticationGate(
+          databaseProvider: () async => database,
+          useBiometrics: false,
+          platformDeviceLinkService: _GateTestDeviceLinkService(),
+          authRepositoryProvider: (database) => _GateTestAuthRepository(
+            database,
+            users: {manager.username: manager, cashier.username: cashier},
+          ),
+          authenticatedBuilder: (user, shiftId, onLogout) => const Scaffold(
+            body: Text('authenticated'),
+          ),
+        ),
+      ),
+    );
+    await _pumpGate(tester);
+    await tester.enterText(find.byType(TextField).first, cashier.username);
+    await tester.enterText(find.byType(TextField).last, 'CashierPass!2026');
+    await tester.tap(find.text('دخول'));
+    await _pumpGate(tester);
+
+    expect(find.text('يجب ربط الجهاز بحساب المدير أولًا'), findsOneWidget);
+    expect(find.byType(PlatformDeviceLinkScreen), findsNothing);
+    expect(find.text('authenticated'), findsNothing);
   });
 
   testWidgets('يمسح جلسة الكاشير ويفتح جلسة المدير دون نقل حالة الحساب السابق',

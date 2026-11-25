@@ -3,9 +3,9 @@ name: Flutter Linux checks
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/windows-ota-foundation]
+    branches: [main, feature/windows-ota-foundation, feature/device-link-onboarding, feature/manual-activation-no-account]
   pull_request:
-    branches: [main, feature/flutter-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding]
 
 # إلغاء الفحوصات الأقدم عند وصول تعديل أحدث إلى الفرع نفسه.
 concurrency:
@@ -43,7 +43,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
           flutter config --enable-linux-desktop
-          CXXFLAGS="-Wno-error=deprecated-literal-operator" flutter build linux
+          CXXFLAGS="-Wno-error=deprecated-literal-operator" flutter build linux --dart-define=HOMI_WEBSITE_BASE_URL=https://foundation-public-site-v1.homi-public-preview.pages.dev --dart-define=HOMI_PLATFORM_BASE_URL=${{ vars.HOMI_PLATFORM_BASE_URL }} --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=eyJob21pLWxpY2Vuc2UtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQThhUUZsV1hlYUR1RS9SUS9xeENzWHpobmpGdGM5NDlheGk3eWVFdEZ0aDg9IiwiaG9taS11cGRhdGUtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQTdiSEZSTStxSjd0MEdwRGZVSk1mMHhnb1dBZFh3bXlDZlNtenJkWjBhM009In0= --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=homi-root-preview-2026-11-v2 --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=hO98zNWHIOzgpz7b9aDKQrtKhIubFdpDB8gLYfokUdw=
 
       - name: Package Linux release bundle
         run: |

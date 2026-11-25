@@ -3,9 +3,9 @@ name: Flutter Android checks
 on:
   workflow_dispatch:
   push:
-    branches: [feature/flutter-foundation, feature/windows-ota-foundation]
+    branches: [feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding, feature/manual-activation-no-account]
   pull_request:
-    branches: [main, feature/flutter-foundation]
+    branches: [main, feature/flutter-foundation, feature/windows-ota-foundation, feature/device-link-onboarding]
 
 concurrency:
   group: flutter-android-${{ github.workflow }}-${{ github.ref }}
@@ -155,7 +155,7 @@ jobs:
       - name: Run tests
         run: flutter test
       - name: Build Android debug APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --dart-define=HOMI_WEBSITE_BASE_URL=https://foundation-public-site-v1.homi-public-preview.pages.dev --dart-define=HOMI_PLATFORM_BASE_URL=https://foundation-platform-api-v1.homi-platform-api-test.pages.dev --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=eyJob21pLWxpY2Vuc2UtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQThhUUZsV1hlYUR1RS9SUS9xeENzWHpobmpGdGM5NDlheGk3eWVFdEZ0aDg9IiwiaG9taS11cGRhdGUtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQTdiSEZSTStxSjd0MEdwRGZVSk1mMHhnb1dBZFh3bXlDZlNtenJkWjBhM009In0= --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=homi-root-preview-2026-11-v2 --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=hO98zNWHIOzgpz7b9aDKQrtKhIubFdpDB8gLYfokUdw=
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
@@ -164,7 +164,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Build Android release candidate APK
-        run: flutter build apk --release --build-name=1.0.0-rc.1 --build-number=1
+        run: flutter build apk --release --build-name=1.0.0-rc.2 --build-number=2 --dart-define=HOMI_WEBSITE_BASE_URL=https://foundation-public-site-v1.homi-public-preview.pages.dev --dart-define=HOMI_PLATFORM_BASE_URL=https://foundation-platform-api-v1.homi-platform-api-test.pages.dev --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=eyJob21pLWxpY2Vuc2UtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQThhUUZsV1hlYUR1RS9SUS9xeENzWHpobmpGdGM5NDlheGk3eWVFdEZ0aDg9IiwiaG9taS11cGRhdGUtcHJldmlldy0yMDI2LTExLXYyIjoiTUNvd0JRWURLMlZ3QXlFQTdiSEZSTStxSjd0MEdwRGZVSk1mMHhnb1dBZFh3bXlDZlNtenJkWjBhM009In0= --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=homi-root-preview-2026-11-v2 --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=hO98zNWHIOzgpz7b9aDKQrtKhIubFdpDB8gLYfokUdw=
       - name: Upload Android release candidate
         uses: actions/upload-artifact@v4
         with:

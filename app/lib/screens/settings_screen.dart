@@ -10,11 +10,24 @@ import '../data/grocery_database.dart';
 import '../data/app_data_location.dart';
 import '../data/font_preferences.dart';
 import '../data/android_diagnostic_log.dart';
+import '../data/platform_device_link_service.dart';
+import '../data/platform_api_client.dart';
+import '../data/platform_device_identity.dart';
+import '../data/platform_signing_trust.dart';
+import '../data/platform_update_service.dart';
+import '../data/android_apk_installer.dart';
+import '../data/windows_update_launcher.dart';
+import 'platform_device_link_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.canManageSystemSettings = false});
+  const SettingsScreen({
+    super.key,
+    this.canManageSystemSettings = false,
+    this.platformDeviceLinkService,
+  });
 
   final bool canManageSystemSettings;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -31,6 +44,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _salesViewMode = 'grid';
   String _pdfFilenameLanguage = 'both';
   bool _importingFont = false;
+  bool _importingLicense = false;
+  bool _checkingUpdate = false;
+  File? _pendingUpdatePackage;
+  VerifiedPlatformUpdateManifest? _pendingUpdateManifest;
+  String? _updateMessage;
   bool _occasionEnabled = false;
   DateTime _systemStartDate = DateTime(DateTime.now().year, 1, 1);
   DateTime _savedSystemStartDate = DateTime(DateTime.now().year, 1, 1);
@@ -117,6 +135,226 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _message = 'تعذر تحميل الإعدادات: $error';
         });
       }
+    }
+  }
+
+  Future<void> _importLicenseFile() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null || _importingLicense) return;
+    setState(() => _importingLicense = true);
+    try {
+      final selection = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['hlic'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (selection == null) return;
+      final bytes = selection.files.single.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw const FormatException('تعذر قراءة محتوى ملف الترخيص المحدد.');
+      }
+      final license = await service.importLicenseFile(bytes);
+      if (!mounted) return;
+      final expiry = license.endsAt == null
+          ? 'دائم'
+          : 'حتى ${license.endsAt!.toLocal().toString().split(' ').first}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم استيراد الترخيص والتحقق منه بنجاح — ${license.planKey}، $expiry.'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر استيراد ملف الترخيص: $error'),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _importingLicense = false);
+    }
+  }
+
+
+  Future<void> _checkForPlatformUpdate() async {
+    if (_checkingUpdate) return;
+    setState(() {
+      _checkingUpdate = true;
+      _updateMessage = 'جارٍ فحص إصدار Homi والتحقق من مفاتيح التوقيع...';
+      _pendingUpdatePackage = null;
+      _pendingUpdateManifest = null;
+    });
+    PlatformApiClient? api;
+    try {
+      final linkService = widget.platformDeviceLinkService;
+      if (linkService == null) {
+        throw const FormatException('خدمة ربط جهاز Homi غير متاحة.');
+      }
+      final linkedLicense = await linkService.readLinkedLicense();
+      final store = FlutterPlatformSecretStore();
+      final identity = await PlatformDeviceIdentity(store).loadOrCreate();
+      final platform = identity.platform;
+      if (platform != 'android' && platform != 'windows') {
+        throw UnsupportedError('فحص التحديث متاح حاليًا على Android وWindows.');
+      }
+      final currentVersionCode = platform == 'android'
+          ? await AndroidApkInstaller().installedVersionCode()
+          : const int.fromEnvironment('HOMI_BUILD_NUMBER', defaultValue: 1);
+
+      api = PlatformApiClient.fromEnvironment();
+      final updates = PlatformUpdateService(
+        api,
+        signingTrust: PlatformSigningTrust.fromEnvironment(store: store),
+      );
+      const productKey = 'homi-grocery';
+      const channel = 'stable';
+      final licenseId = linkedLicense?.licenseId ?? '';
+      final deviceId = linkedLicense?.deviceId ?? identity.deviceKey;
+      final update = await updates.checkForUpdate(
+        accessToken: '',
+        productKey: productKey,
+        platform: platform,
+        architecture: identity.architecture,
+        channel: channel,
+        currentVersionCode: currentVersionCode,
+        licenseId: licenseId,
+        deviceId: deviceId,
+      );
+      if (update == null) {
+        if (mounted) setState(() => _updateMessage = 'أنت تستخدم أحدث إصدار متاح.');
+        return;
+      }
+
+      final manifest = await updates.fetchVerifiedManifest(
+        accessToken: '',
+        update: update,
+        licenseId: licenseId,
+        deviceId: deviceId,
+        productKey: productKey,
+        platform: platform,
+        architecture: identity.architecture,
+        channel: channel,
+      );
+      if (!mounted) return;
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('تحديث Homi ${manifest.version}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('رقم البناء: ${manifest.versionCode}'),
+                Text('حجم الملف: ${(manifest.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB'),
+                const SizedBox(height: 12),
+                Text(manifest.releaseNotes?.trim().isNotEmpty == true
+                    ? manifest.releaseNotes!
+                    : 'لا توجد ملاحظات لهذا الإصدار.'),
+                const SizedBox(height: 12),
+                const Text('سيتم التحقق من توقيع الحزمة وبصمة SHA-256 قبل عرض خيار التثبيت. لن يبدأ التثبيت دون موافقتك.'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('لاحقًا'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('تنزيل التحديث'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true) {
+        if (mounted) setState(() => _updateMessage = 'تم إلغاء تنزيل التحديث.');
+        return;
+      }
+
+      if (mounted) setState(() => _updateMessage = 'جارٍ تنزيل الحزمة والتحقق من حجمها وبصمتها...');
+      final file = await updates.downloadVerifiedPackage(
+        accessToken: '',
+        manifest: manifest,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pendingUpdatePackage = file;
+        _pendingUpdateManifest = manifest;
+        _updateMessage = 'تم تنزيل التحديث والتحقق من توقيعه وبصمته. اضغط تثبيت التحديث للمتابعة.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _updateMessage = 'تعذر فحص أو تنزيل التحديث: $error');
+      }
+    } finally {
+      api?.close();
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
+  Future<void> _installPendingUpdate() async {
+    final file = _pendingUpdatePackage;
+    if (file == null || _checkingUpdate) return;
+    final manifest = _pendingUpdateManifest;
+    if (manifest == null) return;
+    try {
+      if (Platform.isWindows) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تثبيت تحديث Windows'),
+            content: const Text('سيغلق Homi Grocery مؤقتًا، وقد يطلب Windows تأكيد UAC. بعد التحديث سيختبر التطبيق تشغيل النسخة الجديدة ويسترجع النسخة السابقة تلقائيًا إذا فشل الفحص.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('متابعة التحديث'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
+        await WindowsUpdateLauncher().launch(package: file, sha256: manifest.sha256);
+        exit(0);
+      }
+      final installer = AndroidApkInstaller();
+      final canInstall = await installer.canRequestPackageInstalls();
+      if (!mounted) return;
+      if (!canInstall) {
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('السماح بتثبيت تحديث Homi'),
+            content: const Text('يتطلب Android السماح لهذا التطبيق بتثبيت ملف APK. افتح إعدادات السماح، ثم ارجع إلى Homi واضغط تثبيت التحديث مرة أخرى.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('فتح الإعدادات'),
+              ),
+            ],
+          ),
+        );
+        if (openSettings == true) await installer.openInstallPermissionSettings();
+        return;
+      }
+      await installer.installVerifiedApk(file);
+      if (mounted) {
+        setState(() => _updateMessage = 'تم فتح مثبت Android الرسمي. أكمل التثبيت من شاشة النظام؛ لا يثبت Homi التحديث بصمت.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _updateMessage = 'تعذر فتح مثبت Android: $error');
     }
   }
 
@@ -432,6 +670,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  if (widget.canManageSystemSettings &&
+                      widget.platformDeviceLinkService != null) ...[
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'ترخيص Homi Grocery',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'يمكنك طلب اشتراك جديد أو إنشاء ملف طلب تفعيل .hreq وإرساله إلى إدارة Homi، كما يمكنك استيراد ملف الترخيص .hlic بعد إصداره.',
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => PlatformDeviceLinkScreen(
+                                      service: widget.platformDeviceLinkService!,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.request_quote_outlined),
+                              label: const Text('طلب اشتراك أو إنشاء ملف الطلب (.hreq)'),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _importingLicense ? null : _importLicenseFile,
+                              icon: _importingLicense
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.file_open_outlined),
+                              label: Text(
+                                _importingLicense
+                                    ? 'جارٍ التحقق من ملف الترخيص…'
+                                    : 'استيراد ملف الترخيص (.hlic)',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.windows) ...[
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'تحديث Homi Grocery',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'يفحص التطبيق الإصدارات المنشورة، ويتحقق من توقيع manifest وحجم الحزمة وبصمة SHA-256. على Android يفتح مثبت النظام، وعلى Windows يستخدم منسق التحديث الرسمي مع فحص صحة التشغيل والاسترجاع عند الفشل.',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _checkingUpdate ? null : _checkForPlatformUpdate,
+                              icon: _checkingUpdate
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.system_update_alt_rounded),
+                              label: Text(_checkingUpdate ? 'جارٍ فحص التحديث...' : 'فحص التحديثات'),
+                            ),
+                            if (_pendingUpdatePackage != null) ...[
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                onPressed: _checkingUpdate ? null : _installPendingUpdate,
+                                icon: const Icon(Icons.install_mobile_rounded),
+                                label: const Text('تثبيت التحديث الجاهز'),
+                              ),
+                            ],
+                            if (_updateMessage != null) ...[
+                              const SizedBox(height: 10),
+                              Text(_updateMessage!),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ],
+                  ],
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(18),

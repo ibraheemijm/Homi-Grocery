@@ -252,9 +252,10 @@ class PlatformApiClient {
       );
     }
 
+    final isEnvelope = decoded.containsKey('success') || decoded.containsKey('data');
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
-        decoded['success'] != true) {
+        (isEnvelope && decoded['success'] != true)) {
       final error = decoded['error'];
       final details = error is Map<String, dynamic> ? error : const {};
       throw PlatformApiException(
@@ -271,6 +272,9 @@ class PlatformApiClient {
       );
     }
 
+    // يدعم Worker الحالي الذي يعيد JSON مباشرًا، وكذلك الغلاف success/data
+    // الذي تستخدمه بعض البيئات السابقة أو الوسيطة.
+    if (!isEnvelope) return Map<String, Object?>.from(decoded);
     final data = decoded['data'];
     if (data is! Map<String, dynamic>) {
       throw PlatformApiException(

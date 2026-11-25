@@ -10,6 +10,9 @@ import 'data/android_diagnostic_log.dart';
 import 'data/grocery_database.dart';
 import 'data/font_preferences.dart';
 import 'data/auth_repository.dart';
+import 'data/platform_api_client.dart';
+import 'data/platform_device_identity.dart';
+import 'data/platform_device_link_service.dart';
 import 'screens/authentication_gate.dart';
 import 'screens/cashier_management_screen.dart';
 
@@ -23,6 +26,7 @@ import 'screens/stock_movements_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/suppliers_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/platform_device_link_screen.dart';
 import 'screens/backup_screen.dart';
 
 // نقطة تشغيل التطبيق: تُنشئ واجهة Homi Grocery وتعرضها للمستخدم.
@@ -69,6 +73,39 @@ const Color brandCream = Color(0xFFF7F4EA);
 const Color brandGold = Color(0xFFC7A35A);
 const Color brandMint = Color(0xFFDCE9DF);
 
+PlatformDeviceLinkOperations _createPlatformDeviceLinkService() {
+  final store = FlutterPlatformSecretStore();
+  final identity = PlatformDeviceIdentity(store);
+  try {
+    final api = PlatformApiClient.fromEnvironment();
+    return PlatformDeviceLinkService(
+      api: api,
+      deviceIdentity: identity,
+      store: store,
+    );
+  } on PlatformApiConfigurationException catch (error) {
+    // يظل استيراد ملف الترخيص المحلي متاحًا حتى دون إعداد عنوان API.
+    // لا تستخدم هذه الوجهة لأي طلب شبكة؛ يمنعها apiUnavailableReason داخل الخدمة.
+    try {
+      return PlatformDeviceLinkService(
+        api: PlatformApiClient(baseUri: Uri.parse('https://offline.invalid')),
+        deviceIdentity: identity,
+        store: store,
+        apiUnavailableReason: error.message,
+      );
+    } on FormatException catch (trustError) {
+      return UnavailablePlatformDeviceLinkService(
+        'إعداد مفاتيح الثقة للترخيص غير صالح: ${trustError.message}',
+      );
+    }
+  } on FormatException catch (error) {
+    // لا نسمح لإعداد مفتاح ثقة تالف بإسقاط التطبيق عند بدء التشغيل.
+    return UnavailablePlatformDeviceLinkService(
+      'إعداد مفاتيح الثقة للترخيص غير صالح: ${error.message}',
+    );
+  }
+}
+
 // الجذر الرئيسي للتطبيق؛ يحتفظ بحالة المظهر الفاتح أو الداكن.
 class HomiGroceryApp extends StatefulWidget {
   const HomiGroceryApp({this.healthMarkerPath, this.healthNonce, super.key});
@@ -81,6 +118,8 @@ class HomiGroceryApp extends StatefulWidget {
 
 class _HomiGroceryAppState extends State<HomiGroceryApp> {
   ThemeMode _themeMode = ThemeMode.light;
+  late final PlatformDeviceLinkOperations _platformDeviceLinkService =
+      _createPlatformDeviceLinkService();
 
   // تبديل المظهر مع إعادة بناء الواجهة لتطبيق الألوان الجديدة.
   void _toggleTheme() {
@@ -101,6 +140,13 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: AuthenticationGate(
+          platformDeviceLinkService: _platformDeviceLinkService,
+          readOnlyBuilder: (user, onLogout, onLicenseImported) => ReadOnlyWorkspaceScreen(
+            user: user,
+            onLogout: onLogout,
+            platformDeviceLinkService: _platformDeviceLinkService,
+            onLicenseImported: onLicenseImported,
+          ),
           onInitialized: widget.healthMarkerPath == null || widget.healthNonce == null
               ? null
               : () async {
@@ -116,6 +162,7 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
                   user: user,
                   shiftId: shiftId,
                   onLogout: onLogout,
+                  platformDeviceLinkService: _platformDeviceLinkService,
                 )
               : CashierWorkspaceScreen(
                   cashier: user,
@@ -170,6 +217,102 @@ class _HomiGroceryAppState extends State<HomiGroceryApp> {
   }
 }
 
+// مساحة آمنة بعد انتهاء الترخيص: تقارير وتصدير ونسخ احتياطي فقط.
+class ReadOnlyWorkspaceScreen extends StatelessWidget {
+  const ReadOnlyWorkspaceScreen({
+    required this.user,
+    required this.onLogout,
+    required this.platformDeviceLinkService,
+    required this.onLicenseImported,
+    super.key,
+  });
+
+  final AuthUser user;
+  final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations platformDeviceLinkService;
+  final VoidCallback onLicenseImported;
+
+  @override
+  Widget build(BuildContext context) {
+    final isManager = user.isManager;
+    return DefaultTabController(
+      length: isManager ? 2 : 1,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Homi Grocery'),
+                Text(
+                  'وضع القراءة فقط',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'طلب اشتراك أو إنشاء ملف طلب التفعيل',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (routeContext) => PlatformDeviceLinkScreen(
+                        service: platformDeviceLinkService,
+                        onLinked: () {
+                          Navigator.of(routeContext).pop();
+                          onLicenseImported();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.request_quote_outlined),
+              ),
+              IconButton(
+                tooltip: 'استيراد ملف الترخيص أو تجديده',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (routeContext) => PlatformDeviceLinkScreen(
+                        service: platformDeviceLinkService,
+                        onLinked: () {
+                          Navigator.of(routeContext).pop();
+                          onLicenseImported();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.file_open_outlined),
+              ),
+              IconButton(
+                tooltip: 'تسجيل الخروج',
+                onPressed: onLogout,
+                icon: const Icon(Icons.logout_rounded),
+              ),
+            ],
+            bottom: TabBar(
+              tabs: [
+                const Tab(icon: Icon(Icons.analytics_outlined), text: 'التقارير'),
+                if (isManager)
+                  const Tab(icon: Icon(Icons.backup_outlined), text: 'النسخ الاحتياطي'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              ReportsScreen(userId: user.id),
+              if (isManager)
+                BackupScreen(managerUserId: user.id, readOnly: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // الشاشة الرئيسية التي تتكيف مع عرض الكمبيوتر أو الهاتف.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -178,6 +321,7 @@ class DashboardScreen extends StatefulWidget {
     required this.user,
     required this.shiftId,
     required this.onLogout,
+    this.platformDeviceLinkService,
     this.reportsScreenBuilder,
     this.backupScreenBuilder,
     super.key,
@@ -188,6 +332,7 @@ class DashboardScreen extends StatefulWidget {
   final AuthUser user;
   final int shiftId;
   final VoidCallback onLogout;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
   // تسمح ببناء شاشات بديلة في اختبارات التنقل دون تشغيل قواعد بياناتها.
   final Widget Function(int userId)? reportsScreenBuilder;
   final Widget Function(int managerUserId)? backupScreenBuilder;
@@ -199,6 +344,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   DashboardStats? _stats;
+  PlatformLinkedLicense? _subscriptionLicense;
   String? _statsError;
   List<RecentInvoice> _recentInvoices = const [];
   bool _recentInvoicesLoading = true;
@@ -216,6 +362,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    _loadSubscriptionLicense();
     _loadCashierPermissions();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _clockNow = DateTime.now());
@@ -256,6 +403,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (confirmed == true) widget.onLogout();
   }
 
+
+  // قراءة حالة الترخيص لعرض الفترة التجريبية أو الاشتراك في لوحة المتجر.
+  Future<void> _loadSubscriptionLicense() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null) return;
+    try {
+      final license = await service.readLinkedLicense();
+      if (!mounted) return;
+      setState(() => _subscriptionLicense = license);
+    } catch (_) {
+      if (mounted) setState(() => _subscriptionLicense = null);
+    }
+  }
+
+  // فتح شاشة طلب الاشتراك وإنشاء ملف HREQ من أي وقت أثناء استخدام التطبيق.
+  Future<void> _openSubscriptionScreen() async {
+    final service = widget.platformDeviceLinkService;
+    if (service == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PlatformDeviceLinkScreen(
+          service: service,
+          onLinked: () => unawaited(_loadSubscriptionLicense()),
+        ),
+      ),
+    );
+    await _loadSubscriptionLicense();
+  }
+
+  // شريط حالة الاشتراك ظاهر للمدير على Android والحاسوب.
+  Widget _buildSubscriptionBanner(BuildContext context) {
+    if (widget.platformDeviceLinkService == null) return const SizedBox.shrink();
+    final license = _subscriptionLicense;
+    if (license == null) return const SizedBox.shrink();
+    final isTrial = license.planKey == 'trial' || license.isLocalTrial;
+    final endDate = isTrial
+        ? (license.trialEndsAt ?? license.offlineExpiresAt)
+        : (license.endsAt ?? license.subscriptionEndsAt);
+    final remaining = endDate?.difference(DateTime.now());
+    final remainingDays = remaining == null
+        ? null
+        : remaining.isNegative
+            ? 0
+            : remaining.inDays + (remaining.inHours.remainder(24) > 0 ? 1 : 0);
+    final status = isTrial
+        ? 'الفترة التجريبية'
+        : license.planKey == 'lifetime'
+            ? 'اشتراك دائم'
+            : license.planKey == 'annual'
+                ? 'اشتراك سنوي'
+                : 'اشتراك شهري';
+    final detail = isTrial
+        ? (remainingDays == null
+            ? status
+            : remainingDays == 0
+                ? 'انتهت الفترة التجريبية'
+                : '$status — متبقي $remainingDays ${remainingDays == 1 ? 'يوم' : 'أيام'}')
+        : endDate == null
+            ? status
+            : '$status — ينتهي في ${endDate.toLocal().toString().split(' ').first}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_user_outlined, color: brandGreen),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('حالة ترخيص Homi Grocery',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: _openSubscriptionScreen,
+              child: const Text('طلب اشتراك'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _loadHomePreferences() async {
     try {
@@ -414,7 +649,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             : _selectedIndex == 7
                                                 ? (widget.reportsScreenBuilder?.call(widget.user.id) ?? ReportsScreen(userId: widget.user.id))
                                                 : _selectedIndex == 8
-                                                    ? SettingsScreen(canManageSystemSettings: widget.user.isManager)
+                                                    ? SettingsScreen(
+                                                        canManageSystemSettings: widget.user.isManager,
+                                                        platformDeviceLinkService: widget.platformDeviceLinkService,
+                                                      )
                                                     : _selectedIndex == 9
                                         ? StockMovementsScreen(userId: widget.user.id)
                                         : _selectedIndex == 10
@@ -681,6 +919,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 22),
               _buildStatusBanner(context),
+              const SizedBox(height: 12),
+              _buildSubscriptionBanner(context),
               const SizedBox(height: 18),
               LayoutBuilder(
                 builder: (context, box) {
@@ -839,6 +1079,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          sliver: SliverToBoxAdapter(child: _buildSubscriptionBanner(context)),
         ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 18),

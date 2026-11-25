@@ -40,6 +40,8 @@ class PlatformDeviceIdentityData {
   final String architecture;
 
   String get publicKeyBase64 => base64Encode(publicKeyDer);
+  String get publicKeyRawBase64Url =>
+      base64UrlEncode(publicKeyDer.sublist(12)).replaceAll("=", "");
 }
 
 class _StoredDeviceIdentity {
@@ -74,6 +76,8 @@ class PlatformDeviceIdentity {
   _StoredDeviceIdentity? _cachedIdentity;
   Future<_StoredDeviceIdentity>? _openingIdentity;
 
+  String createRequestId() => _createUuid();
+
   Future<PlatformDeviceIdentityData> loadOrCreate() async {
     final platform = _supportedPlatform();
     final stored = await _readOrCreate();
@@ -102,6 +106,20 @@ class PlatformDeviceIdentity {
     final stored = await _readOrCreate();
     final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
     final signature = await _algorithm.sign(nonce, keyPair: keyPair);
+    return base64UrlEncode(signature.bytes).replaceAll('=', '');
+  }
+
+  Future<String> signMessage(String message) async {
+    _supportedPlatform();
+    if (message.isEmpty || message.length > 2048) {
+      throw const FormatException('Device proof message is invalid.');
+    }
+    final stored = await _readOrCreate();
+    final keyPair = await _algorithm.newKeyPairFromSeed(stored.privateSeed);
+    final signature = await _algorithm.sign(
+      utf8.encode(message),
+      keyPair: keyPair,
+    );
     return base64UrlEncode(signature.bytes).replaceAll('=', '');
   }
 

@@ -7,6 +7,8 @@ import '../data/auth_repository.dart';
 import '../data/android_biometric_login.dart';
 import '../data/cash_shift_repository.dart';
 import '../data/grocery_database.dart';
+import '../data/platform_device_link_service.dart';
+import 'platform_device_link_screen.dart';
 
 typedef GroceryDatabaseProvider = Future<Database> Function();
 typedef AuthRepositoryProvider = AuthRepository Function(Database database);
@@ -16,6 +18,11 @@ typedef AuthenticatedBuilder = Widget Function(
   int shiftId,
   VoidCallback onLogout,
 );
+typedef ReadOnlyBuilder = Widget Function(
+  AuthUser user,
+  VoidCallback onLogout,
+  VoidCallback onLicenseImported,
+);
 
 class AuthenticationGate extends StatefulWidget {
   const AuthenticationGate({
@@ -24,6 +31,8 @@ class AuthenticationGate extends StatefulWidget {
     this.authRepositoryProvider,
     this.useBiometrics = true,
     this.onInitialized,
+    this.platformDeviceLinkService,
+    this.readOnlyBuilder,
     super.key,
   });
 
@@ -33,6 +42,8 @@ class AuthenticationGate extends StatefulWidget {
   // يتيح تعطيل تكامل الجهاز في الاختبارات التي لا تختبر الدخول الحيوي.
   final bool useBiometrics;
   final Future<void> Function()? onInitialized;
+  final PlatformDeviceLinkOperations? platformDeviceLinkService;
+  final ReadOnlyBuilder? readOnlyBuilder;
 
   Future<Database> _openDatabase() =>
       databaseProvider?.call() ?? GroceryDatabase.open();
@@ -49,6 +60,10 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   bool _loading = true;
   bool _biometricReady = false;
   String? _error;
+  AuthUser? _pendingDeviceLinkUser;
+  AuthUser? _readOnlyUser;
+  AuthUser? _licenseBlockedUser;
+  bool _cashierNeedsManagerLink = false;
 
   @override
   void initState() {
@@ -88,6 +103,91 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
   }
 
   Future<void> _activateUser(AuthUser user) async {
+    final deviceLink = widget.platformDeviceLinkService;
+    if (deviceLink != null) {
+      var license = await deviceLink.readLinkedLicense();
+      if (license == null && !user.isManager) {
+        if (mounted) {
+          setState(() {
+            _cashierNeedsManagerLink = true;
+            _pendingDeviceLinkUser = null;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      // لا تبدأ مدة التجربة عند محاولة دخول كاشير قبل إعداد المدير؛
+      // يبدأ العد عند أول دخول فعلي للمدير إلى مساحة العمل.
+      license ??= await deviceLink.startLocalTrial();
+      if (license == null) {
+        if (mounted) {
+          setState(() {
+            _pendingDeviceLinkUser = user;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      // يجدد التصريح الموقّع عند توفر الشبكة، ويستخدم آخر تصريح محفوظ عند انقطاعها.
+      final accessGrant = await deviceLink.refreshOfflineGrant();
+      if (accessGrant == null) {
+        if (mounted) {
+          setState(() {
+            // لا نمنح القراءة والتصدير عند غياب تصريح موقع يمكن التحقق منه.
+            _licenseBlockedUser = user;
+            _pendingDeviceLinkUser = null;
+            _readOnlyUser = null;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      final now = DateTime.now().toUtc();
+      // بعد انتهاء تصريح العمل دون اتصال الموقّع للتجربة، أو عند انتهاء الاشتراك المدفوع،
+      // لا تُفتح عمليات البيع والتحرير وتبقى مساحة القراءة والتصدير متاحة.
+      // بعد نهاية مهلة الاشتراك المدفوع لا يُسمح حتى بوضع القراءة فقط.
+      final isPaidPlan = accessGrant.planKey == 'monthly' ||
+          accessGrant.planKey == 'annual';
+      if (isPaidPlan &&
+          accessGrant.graceEndsAt != null &&
+          !accessGrant.graceEndsAt!.isAfter(now)) {
+        if (mounted) {
+          setState(() {
+            _licenseBlockedUser = user;
+            _readOnlyUser = null;
+            _pendingDeviceLinkUser = null;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+      // التجربة تنتهي إلى القراءة فقط عند انتهاء التصريح أو التجربة.
+      // الاشتراك المدفوع يسمح بالقراءة والتصدير حتى نهاية مهلة السماح الموقعة.
+      final fullAccessUntil = accessGrant.planKey == 'trial'
+          ? accessGrant.offlineExpiresAt
+          : accessGrant.endsAt;
+      if (accessGrant.startsAt.isAfter(now) ||
+          (fullAccessUntil != null && !fullAccessUntil.isAfter(now))) {
+        if (mounted) {
+          setState(() {
+            _readOnlyUser = user;
+            _licenseBlockedUser = null;
+            _pendingDeviceLinkUser = null;
+            _cashierNeedsManagerLink = false;
+            _user = null;
+            _shift = null;
+          });
+        }
+        return;
+      }
+    }
     final database = await widget._openDatabase();
     final shifts = CashShiftRepository(database);
     final openShift = await shifts.getOpenShift(userId: user.id);
@@ -357,6 +457,109 @@ class _AuthenticationGateState extends State<AuthenticationGate> {
     if (_error != null) {
       return _GateError(message: _error!, onRetry: _initialize);
     }
+    final blockedUser = _licenseBlockedUser;
+    if (blockedUser != null) {
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_clock_rounded, size: 56),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'انتهت مهلة الترخيص',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'انتهت فترة الاشتراك ومهلة القراءة والتصدير. أوقف التطبيق العمليات حتى تجديد الاشتراك وتحديث الترخيص.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: () => setState(() {
+                        _pendingDeviceLinkUser = blockedUser;
+                        _licenseBlockedUser = null;
+                      }),
+                      icon: const Icon(Icons.file_open_outlined),
+                      label: const Text('استيراد ملف ترخيص أو تجديده'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => setState(() => _licenseBlockedUser = null),
+                      child: const Text('العودة إلى تسجيل الدخول'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    final readOnlyUser = _readOnlyUser;
+    if (readOnlyUser != null) {
+      final builder = widget.readOnlyBuilder;
+      if (builder == null) {
+        return const _GateError(
+          message: 'انتهت صلاحية الترخيص. يلزم تفعيل وضع القراءة فقط قبل متابعة الاستخدام.',
+          onRetry: _noop,
+        );
+      }
+      return builder(
+        readOnlyUser,
+        () {
+          if (mounted) setState(() => _readOnlyUser = null);
+        },
+        () async {
+          if (!mounted) return;
+          setState(() => _readOnlyUser = null);
+          try {
+            await _activateUser(readOnlyUser);
+          } catch (error) {
+            if (mounted) {
+              setState(() => _error = 'تم استيراد ملف الترخيص، لكن تعذر إعادة التحقق من الاستحقاق: $error');
+            }
+          }
+        },
+      );
+    }
+    final pendingDeviceLinkUser = _pendingDeviceLinkUser;
+    if (pendingDeviceLinkUser != null) {
+      final service = widget.platformDeviceLinkService;
+      if (service == null) {
+        return const _GateError(
+          message: 'خدمة ربط Homi Platform غير متاحة في هذا الإصدار.',
+          onRetry: _noop,
+        );
+      }
+      return PlatformDeviceLinkScreen(
+        service: service,
+        onLinked: () async {
+          if (!mounted) return;
+          setState(() => _pendingDeviceLinkUser = null);
+          try {
+            await _activateUser(pendingDeviceLinkUser);
+          } catch (error) {
+            if (mounted) {
+              setState(() => _error = 'اكتمل ربط الجهاز، لكن تعذر فتح المتجر: $error');
+            }
+          }
+        },
+      );
+    }
+    if (_cashierNeedsManagerLink) {
+      return _GateManagerLinkRequired(
+        onBack: () => setState(() => _cashierNeedsManagerLink = false),
+      );
+    }
     final repository = _repository!;
     if (_needsSetup) {
       return _CreateManagerScreen(
@@ -451,6 +654,51 @@ class AndroidStartupScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+void _noop() {}
+
+class _GateManagerLinkRequired extends StatelessWidget {
+  const _GateManagerLinkRequired({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.admin_panel_settings_outlined, size: 52),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'يجب ربط الجهاز بحساب المدير أولًا',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'اطلب من مدير المتجر تسجيل الدخول وربط هذا الجهاز بحساب Homi Platform. لن تُطلب كلمة مرور المنصة من الكاشير.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: onBack,
+                      child: const Text('العودة إلى تسجيل الدخول'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

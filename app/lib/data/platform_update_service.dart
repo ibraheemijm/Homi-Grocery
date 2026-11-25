@@ -32,7 +32,6 @@ class IoPlatformUpdateDownloader implements PlatformUpdateDownloader {
     required int expectedSizeBytes,
   }) async {
     if (uri.scheme != 'https' ||
-        accessToken.isEmpty ||
         expectedSizeBytes < 1 ||
         expectedSizeBytes > 1024 * 1024 * 1024) {
       throw const FormatException('إعدادات تنزيل تحديث Homi غير صالحة.');
@@ -44,10 +43,12 @@ class IoPlatformUpdateDownloader implements PlatformUpdateDownloader {
           .getUrl(uri)
           .timeout(const Duration(seconds: 20));
       request.followRedirects = false;
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer $accessToken',
-      );
+      if (accessToken.isNotEmpty) {
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer $accessToken',
+        );
+      }
       request.headers.set(
         HttpHeaders.acceptHeader,
         'application/octet-stream',
