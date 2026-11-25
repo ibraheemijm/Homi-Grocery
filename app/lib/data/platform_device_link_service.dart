@@ -699,89 +699,11 @@ class PlatformDeviceLinkService implements PlatformDeviceLinkOperations {
 
   @override
   Future<PlatformLinkedLicense?> refreshOfflineGrant() async {
-    if (apiUnavailableReason != null) {
-      // ملف الترخيص الموقع نفسه يمنح صلاحية Offline محددة المدة؛ لا نشترط وجود
-      // تصريح تجديد منفصل قبل أول تشغيل بعد الاستيراد اليدوي.
-      return await readOfflineGrant() ?? await readLinkedLicense();
-    }
+    // التفعيل في المرحلة الحالية يعتمد على ملفات موقعة فقط؛ لا نطلب تحديات
+    // أو تصاريح من الخادم، ونستخدم الترخيص المحلي بعد التحقق من توقيعه.
     final license = await readLinkedLicense();
     if (license == null) return null;
-    if (license.isLocalTrial) {
-      try {
-        await _registerLocalTrial(license);
-      } on Object {
-        // فشل الشبكة أو التسجيل لا يمنع التجربة المحلية ولا يمدد مدتها.
-      }
-      return await readLinkedLicense() ?? license;
-    }
-
-    try {
-      final challenge = await _api.postJson(
-        '/api/v1/public/devices/${license.deviceId}/challenges',
-        body: {
-          'license_id': license.licenseId,
-          'purpose': 'offline_grant',
-        },
-      );
-      final challengeId = challenge['challenge_id'];
-      final nonce = challenge['nonce'];
-      final expiresAt = DateTime.tryParse(challenge['expires_at'] as String? ?? '');
-      if (challengeId is! String ||
-          !_isUuid(challengeId) ||
-          nonce is! String ||
-          !_isValidNonce(nonce) ||
-          expiresAt == null ||
-          !expiresAt.isAfter(_clock().toUtc())) {
-        throw const FormatException('تحدي تجديد تصريح العمل دون اتصال غير صالح.');
-      }
-
-      final deviceSignature = await _deviceIdentity.signNonce(nonce);
-      final response = await _api.postJson(
-        '/api/v1/public/licenses/${license.licenseId}/devices/${license.deviceId}/offline-grants',
-        body: {
-          'challenge_id': challengeId,
-          'nonce': nonce,
-          'signature': deviceSignature,
-        },
-      );
-      final keyId = response['key_id'];
-      final payloadText = response['payload'];
-      final signatureText = response['signature'];
-      if (keyId is! String ||
-          payloadText is! String ||
-          signatureText is! String) {
-        throw const FormatException('استجابة تصريح العمل دون اتصال غير مكتملة.');
-      }
-      final verified = await _verifyLicenseMaterial(
-        licenseId: license.licenseId,
-        deviceId: license.deviceId,
-        keyId: keyId,
-        payload: _decodeCanonicalBase64(payloadText),
-        signature: _decodeCanonicalBase64(signatureText),
-      );
-      await _store.write(_offlineGrantKey, jsonEncode({
-        'license_id': verified.licenseId,
-        'device_id': verified.deviceId,
-        'key_id': verified.keyId,
-        'payload': base64Encode(verified.signedPayload),
-        'signature': base64Encode(verified.signature),
-      }));
-      return verified;
-    } on PlatformApiException catch (error) {
-      if (error.code == 'DEVICE_NOT_LINKED' ||
-          error.code == 'DEVICE_PROOF_INVALID' ||
-          error.code == 'LICENSE_REVOKED' ||
-          error.code == 'LICENSE_SUSPENDED' ||
-          error.code == 'ACCOUNT_INACTIVE') {
-        await _store.write(_offlineGrantKey, '');
-        return null;
-      }
-      return await readOfflineGrant() ?? license;
-    } on Object {
-      // عند انقطاع الشبكة نستخدم آخر تصريح محفوظ، أو الترخيص الموقع المستورد
-      // بصلاحيته الأصلية؛ لا نمدد أي تاريخ صلاحية محليًا.
-      return await readOfflineGrant() ?? license;
-    }
+    return await readOfflineGrant() ?? license;
   }
 
   @override
