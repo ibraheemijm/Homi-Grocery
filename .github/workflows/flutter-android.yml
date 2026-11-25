@@ -164,7 +164,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Build Android release candidate APK
-        run: flutter build apk --release --build-name=1.0.0-rc.1 --build-number=1 --dart-define=HOMI_WEBSITE_BASE_URL=https://foundation-public-site-v1.homi-public-preview.pages.dev --dart-define=HOMI_PLATFORM_BASE_URL=https://foundation-platform-api-v1.homi-platform-api-test.pages.dev --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=eyJob21pLXByZXZpZXctbGljZW5zZS0yMDI2LTExIjoiTUNvd0JRWURLMlZ3QXlFQUlWL3FsVVkwRHBFYTl0NHFpajFqWkc2NzRyWlpsaWlDWnZ1RGFWOHdXTEU9IiwiaG9taS1wcmV2aWV3LXVwZGF0ZS0yMDI2LTExIjoiTUNvd0JRWURLMlZ3QXlFQXNJTGZwd0JsQ2lvb0JwcXRWRnZIZXd2UnFFdGd1S0lFUjZVdjhMZ1BSSTA9In0= --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=homi-preview-root-2026-11 --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=DgBeAJJ68ncYODJTf/GzEnlkfESLehbD3ywZwYJstvw=
+        run: flutter build apk --release --build-name=1.0.0-rc.2 --build-number=2 --dart-define=HOMI_WEBSITE_BASE_URL=https://foundation-public-site-v1.homi-public-preview.pages.dev --dart-define=HOMI_PLATFORM_BASE_URL=https://foundation-platform-api-v1.homi-platform-api-test.pages.dev --dart-define=HOMI_LICENSE_TRUSTED_PUBLIC_KEYS_B64=eyJob21pLXByZXZpZXctbGljZW5zZS0yMDI2LTExIjoiTUNvd0JRWURLMlZ3QXlFQUlWL3FsVVkwRHBFYTl0NHFpajFqWkc2NzRyWlpsaWlDWnZ1RGFWOHdXTEU9IiwiaG9taS1wcmV2aWV3LXVwZGF0ZS0yMDI2LTExIjoiTUNvd0JRWURLMlZ3QXlFQXNJTGZwd0JsQ2lvb0JwcXRWRnZIZXd2UnFFdGd1S0lFUjZVdjhMZ1BSSTA9In0= --dart-define=HOMI_PLATFORM_ROOT_KEY_ID=homi-preview-root-2026-11 --dart-define=HOMI_PLATFORM_ROOT_PUBLIC_KEY=DgBeAJJ68ncYODJTf/GzEnlkfESLehbD3ywZwYJstvw=
       - name: Upload Android release candidate
         uses: actions/upload-artifact@v4
         with:
