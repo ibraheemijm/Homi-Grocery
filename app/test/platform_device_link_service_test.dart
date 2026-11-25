@@ -433,6 +433,39 @@ void main() {
     const licenseId = '123e4567-e89b-42d3-a456-426614174031';
     const deviceId = '123e4567-e89b-42d3-a456-426614174032';
     const keyId = 'homi-license-offline-key';
+    final activationChallenge = _b64url(List<int>.generate(32, (i) => i + 3));
+    final keyPair = await Ed25519().newKeyPair();
+    final signingPublicKey = await keyPair.extractPublicKey();
+    final signingPublicDer = <int>[...spkiPrefix, ...signingPublicKey.bytes];
+    final issuedAt = DateTime.now().toUtc();
+    final startsAt = issuedAt.subtract(const Duration(minutes: 1));
+    final trialEndsAt = issuedAt.add(const Duration(days: 14));
+    final offlineExpiresAt = issuedAt.add(const Duration(days: 7));
+    final licensePayload = utf8.encode(jsonEncode({
+      'schema_version': 1,
+      'license_id': licenseId,
+      'organization_id': '123e4567-e89b-42d3-a456-426614174035',
+      'user_id': '123e4567-e89b-42d3-a456-426614174036',
+      'product_id': '123e4567-e89b-42d3-a456-426614174037',
+      'product_key': 'homi-grocery',
+      'origin_trial_id': '123e4567-e89b-42d3-a456-426614174038',
+      'subscription_id': null,
+      'trial_id': '123e4567-e89b-42d3-a456-426614174038',
+      'plan_key': 'trial',
+      'starts_at': startsAt.toIso8601String(),
+      'ends_at': trialEndsAt.toIso8601String(),
+      'trial_ends_at': trialEndsAt.toIso8601String(),
+      'subscription_ends_at': null,
+      'offline_expires_at': offlineExpiresAt.toIso8601String(),
+      'grace_ends_at': null,
+      'access_policy': 'full_until_offline_expiry_or_trial_end_then_read_export',
+      'max_devices': 2,
+      'device_fingerprints': [_fingerprint(identityData)],
+      'entitlement_version': 1,
+      'issued_at': issuedAt.toIso8601String(),
+      'key_id': keyId,
+    }));
+    final licenseSignature = await Ed25519().sign(licensePayload, keyPair: keyPair);
     final transport = QueueTransport([
       success(_activationCreated(identityData, requestId, activationChallenge), statusCode: 201),
       success({'activation_request_id': requestId, 'proof_verified': true, 'status': 'proof_verified'}),
