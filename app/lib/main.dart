@@ -253,6 +253,23 @@ class ReadOnlyWorkspaceScreen extends StatelessWidget {
             ),
             actions: [
               IconButton(
+                tooltip: 'طلب اشتراك أو إنشاء ملف طلب التفعيل',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (routeContext) => PlatformDeviceLinkScreen(
+                        service: platformDeviceLinkService,
+                        onLinked: () {
+                          Navigator.of(routeContext).pop();
+                          onLicenseImported();
+                        },
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.request_quote_outlined),
+              ),
+              IconButton(
                 tooltip: 'استيراد ملف الترخيص أو تجديده',
                 onPressed: () {
                   Navigator.of(context).push(
