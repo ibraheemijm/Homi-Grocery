@@ -425,7 +425,7 @@ void main() {
     expect(store.values['homi_platform_signed_license_v1'], isNull);
   });
 
-  test('يجدد تصريح العمل دون اتصال عبر إثبات مفتاح الجهاز دون حساب عميل', () async {
+  test('لا يطلب تصريح عمل من الخادم بعد استيراد الترخيص في وضع الملفات فقط', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
     final identityData = await identity.loadOrCreate();
@@ -532,11 +532,8 @@ void main() {
     expect(grant!.isLocalTrial, isFalse);
     expect(grant.licenseId, licenseId);
     expect(grant.deviceId, deviceId);
-    expect(transport.requests[3].uri.path, '/api/v1/public/devices/$deviceId/challenges');
-    expect(transport.requests[4].uri.path, '/api/v1/public/licenses/$licenseId/devices/$deviceId/offline-grants');
-    expect(transport.requests[3].headers.containsKey('authorization'), isFalse);
-    expect(transport.requests[4].headers.containsKey('authorization'), isFalse);
-    expect(await service.readOfflineGrant(), isNotNull);
+    expect(transport.requests, hasLength(3));
+    expect(await service.readOfflineGrant(), isNull);
   });
 
   test('يبدأ تجربة محلية لمدة 14 يومًا عند أول استخدام وتعمل دون اتصال', () async {
@@ -581,12 +578,7 @@ void main() {
     expect(continuedTrial.startsAt, trial.startsAt);
     expect(continuedTrial.trialEndsAt, trial.trialEndsAt);
     expect(await service.refreshOfflineGrant(), isNotNull);
-    expect(transport.requests, hasLength(1));
-    expect(transport.requests.single.uri.path, '/api/v1/public/trials/register');
-    final registrationBody = jsonDecode(transport.requests.single.body!) as Map<String, dynamic>;
-    expect(registrationBody['device_id'], trial.deviceId);
-    expect(registrationBody['trial_started_at'], trialStartedAt);
-    expect(registrationBody['signature'], isA<String>());
+    expect(transport.requests, isEmpty);
 
     now = now.subtract(const Duration(days: 6));
     final rollback = await service.readLinkedLicense();
@@ -597,18 +589,11 @@ void main() {
   });
 
 
-  test('يقصر التجربة المحلية إذا أعادت المنصة تاريخًا أقدم لنفس هوية الجهاز', () async {
+  test('لا يسجل التجربة المحلية عبر الإنترنت في وضع التفعيل بالملفات فقط', () async {
     final store = MemorySecretStore();
     final identity = PlatformDeviceIdentity(store, platformOverride: () => 'android');
     final now = DateTime.utc(2026, 11, 21, 10);
-    final serverStart = now.subtract(const Duration(days: 6));
-    final transport = QueueTransport([
-      success({
-        'registration_status': 'already_registered',
-        'trial_started_at': serverStart.toIso8601String(),
-        'trial_ends_at': serverStart.add(const Duration(days: 14)).toIso8601String(),
-      }),
-    ]);
+    final transport = QueueTransport([]);
     final service = PlatformDeviceLinkService(
       api: PlatformApiClient(
         baseUri: Uri.parse('https://platform.example.test'),
@@ -623,10 +608,11 @@ void main() {
     final local = await service.startLocalTrial();
     expect(local, isNotNull);
     expect(local!.startsAt, now);
-    final synced = await service.refreshOfflineGrant();
-    expect(synced, isNotNull);
-    expect(synced!.startsAt, serverStart);
-    expect(synced.trialEndsAt, serverStart.add(const Duration(days: 14)));
+    final offline = await service.refreshOfflineGrant();
+    expect(offline, isNotNull);
+    expect(offline!.startsAt, now);
+    expect(offline.trialEndsAt, now.add(const Duration(days: 14)));
+    expect(transport.requests, isEmpty);
   });
 
 
