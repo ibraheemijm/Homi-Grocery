@@ -336,7 +336,7 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('تفعيل Homi Grocery'),
+          title: const Text('طلب التفعيل والاشتراك'),
           leading: IconButton(
             tooltip: 'رجوع أو خروج',
             icon: const BackButtonIcon(),
