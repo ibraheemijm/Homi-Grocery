@@ -335,6 +335,20 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        appBar: AppBar(
+          title: const Text('تفعيل Homi Grocery'),
+          leading: BackButton(
+            tooltip: 'رجوع أو خروج',
+            onPressed: () {
+              final navigator = Navigator.of(context);
+              if (navigator.canPop()) {
+                navigator.pop();
+              } else {
+                SystemNavigator.pop();
+              }
+            },
+          ),
+        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
