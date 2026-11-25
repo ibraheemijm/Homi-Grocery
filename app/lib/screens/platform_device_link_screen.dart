@@ -337,8 +337,9 @@ class _PlatformDeviceLinkScreenState extends State<PlatformDeviceLinkScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('تفعيل Homi Grocery'),
-          leading: BackButton(
+          leading: IconButton(
             tooltip: 'رجوع أو خروج',
+            icon: const BackButtonIcon(),
             onPressed: () {
               final navigator = Navigator.of(context);
               if (navigator.canPop()) {
